@@ -1,0 +1,8 @@
+# auto normalize text files (always CRLF on windows and LF in repository)
+* text=auto
+# delphi files must have CRLF everywhere
+*.pas eol=crlf
+*.dpr eol=crlf
+*.dpk eol=crlf
+*.inc eol=crlf
+*.dfm eol=crlf

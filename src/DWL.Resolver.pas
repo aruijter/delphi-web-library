@@ -1,0 +1,153 @@
+unit DWL.Resolver;
+
+interface
+
+uses
+  System.Classes;
+
+type
+  TResolveKeyFunc = function(const Params: string): string;
+
+  TdwlResolver = class abstract
+  strict private
+  class var
+    FResolvableReferences: TStringList;
+    FKeyLead: string;
+    FKeyTrail: string;
+    FL_KeyLead: integer;
+    FL_KeyTrail: integer;
+  public
+    /// <summary>
+    ///   registerd a function that replaces the key with the resolved value
+    /// </summary>
+    /// <param name="Key">
+    ///   Key this function will resolve
+    /// </param>
+    /// <param name="ResolverFunc">
+    ///   Callback function to be called when resolving
+    /// </param>
+    class procedure Register(const Key: string; ResolverFunc: TResolveKeyFunc);
+    /// <summary>
+    ///   resolve the text to be resolved using all the registered resolvers
+    /// </summary>
+    /// <param name="TextToBeResolved">
+    ///   Text that will be replaced by its resolved value
+    /// </param>
+    class procedure Resolve(var TextToBeResolved: string);
+    /// <summary>
+    ///   Defines the global lead/trail combination to be used when enclosing
+    ///   keys for resolving
+    /// </summary>
+    /// <param name="KeyLead">
+    ///   the leading characters indicating a key to be resolved
+    /// </param>
+    /// <param name="KeyTrail">
+    ///   the trailing characters indicating a key to be resolved <br />
+    /// </param>
+    /// <remarks>
+    ///   The default lead is $( and the trail ) <br />For example: $(key)
+    /// </remarks>
+    class procedure SetKeyEnvelope(const KeyLead, KeyTrail: string);
+    class function KeyLead: string;
+    class function KeyTrail: string;
+    class constructor Create;
+    class destructor Destroy;
+  end;
+
+implementation
+
+uses
+  System.SysUtils;
+
+{ TdwlResolver }
+
+class constructor TdwlResolver.Create;
+begin
+  inherited;
+  FResolvableReferences := TStringList.Create;
+  FResolvableReferences.Duplicates := dupIgnore;
+  FResolvableReferences.Sorted := true;
+  SetKeyEnvelope('$(', ')');
+end;
+
+class destructor TdwlResolver.Destroy;
+begin
+  FResolvableReferences.Free;
+  inherited;
+end;
+
+class function TdwlResolver.KeyLead: string;
+begin
+  Result := FKeyLead;
+end;
+
+class function TdwlResolver.KeyTrail: string;
+begin
+  Result := FKeyTrail;
+end;
+
+class procedure TdwlResolver.Register(const Key: string; ResolverFunc: TResolveKeyFunc);
+begin
+  Assert(FResolvableReferences.IndexOf(LowerCase(Key))<0, 'Duplicate registration of '+Key);
+  FResolvableReferences.AddObject(LowerCase(Key), pointer(@Resolverfunc));
+end;
+
+class procedure TdwlResolver.Resolve(var TextToBeResolved: string);
+begin
+  var Walker := 1;
+  var L_S := length(TextToBeResolved);
+  while Walker<L_S do
+  begin
+    if (TextToBeResolved[Walker]=FKeyLead[1]) and (Copy(TextToBeResolved, Walker, FL_KeyLead)=FKeyLead) then
+    begin  // KeyLead found
+      var ReferenceStart := Walker;
+      var Param_Semicolon := 0;
+      inc(Walker, FL_KeyLead);
+      while (Walker<L_S) and ((TextToBeResolved[Walker]<>FKeyTrail[1]) or (Copy(TextToBeResolved, Walker, FL_KeyTrail)<>FKeyTrail)) do
+      begin
+        if (Param_Semicolon=0) and (TextToBeResolved[Walker]=';') then
+          Param_Semicolon := Walker;
+        inc(Walker);
+      end;
+      if Walker<=L_S then //KeyTrail found
+      begin
+        var Reference: string;
+        var Params: string;
+        if Param_Semicolon>0 then
+        begin
+          Reference := Copy(TextToBeResolved, ReferenceStart+FL_KeyLead, Param_Semicolon-ReferenceStart-FL_KeyLead);
+          Params := Copy(TextToBeResolved, Param_Semicolon+1, Walker-Param_Semicolon-1);
+        end
+        else
+        begin
+          Reference := Copy(TextToBeResolved, ReferenceStart+FL_KeyLead, Walker-ReferenceStart-FL_KeyLead);
+          Params := '';
+        end;
+        var RefIndex := FResolvableReferences.IndexOf(LowerCase(Reference));
+        if RefIndex>=0 then //resolvable found
+        begin
+          var ReplaceStr := TResolveKeyFunc(FResolvableReferences.Objects[RefIndex])(Params);
+          TextToBeResolved := Copy(TextToBeResolved, 1, ReferenceStart-1)+ReplaceStr+Copy(TextToBeResolved, Walker+FL_KeyTrail, MaxInt);
+          L_S := length(TextToBeResolved);
+          Walker := ReferenceStart-1; // evaluate ReplaceStr again
+        end
+        else
+          inc(Walker, FL_KeyTrail-1);
+      end;
+    end;
+    inc(Walker);
+  end;
+end;
+
+class procedure TdwlResolver.SetKeyEnvelope(const KeyLead, KeyTrail: string);
+begin
+  FKeyLead := KeyLead;
+  FKeyTrail := KeyTrail;
+  FL_KeyLead := length(FKeyLead);
+  FL_KeyTrail := length(FKeyTrail);
+end;
+
+end.
+
+
+

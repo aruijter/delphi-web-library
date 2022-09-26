@@ -1,0 +1,16 @@
+*.local
+*.exe
+*.identcache
+*.dres
+*.rsm
+__history
+*.log
+*.dll
+versioninfo.inc
+versioninfo.rc
+versioninfo.res
+*.dcu
+*.drc
+*.dsk
+*.map
+*.~dsk
