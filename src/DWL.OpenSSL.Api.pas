@@ -49,20 +49,7 @@ type
     dummy : integer;
   end;
   PPRSA = ^PRSA;
-  PRSA = pointer;
-// don't use this structure, it is internal to open SSL,  there are support functions (f.e. RSA_get0_n) to get what you want
-//  PRSA = ^rsa_st;
-//  rsa_st = record
-//    // The first parameter is used to pickup errors where
-//    // this is passed instead of aEVP_PKEY, it is set to 0
-//    pad : integer;
-//    version : LongInt;
-//    meth : PRSA_METHOD; // const RSA_METHOD *meth;
-//    // functional reference if 'meth' is ENGINE-provided
-//    engine : PENGINE;
-//    n : PBIGNUM;
-//    // and more we want to forget about
-//  end;
+  PRSA = pointer; // do not try to use this structure directly by defining the layout, but use the support functions for this
 
   PX509_REQ = pointer;
   PX509_NAME = pointer;
