@@ -5,7 +5,6 @@
 *.rsm
 __history
 *.log
-*.dll
 versioninfo.inc
 versioninfo.rc
 versioninfo.res
