@@ -2,6 +2,9 @@ unit DWL.SysUtils;
 
 interface
 
+uses
+  System.SysUtils;
+
 /// <summary>
 ///   A string to float conversion function that always uses a decimal point
 ///   for fraction separation.
@@ -20,11 +23,11 @@ interface
 ///   technical setting. fe. xml, json, locale independent configurations, etc
 /// </remarks>
 function TryDotStrToFloat(const TextToConvert: string; out Value: double): boolean;
+function BytestoLowerHex(Bytes: TBytes): string;
+function LowerHexToBytes(const Hex: string): TBytes;
+function ExtractBareFileName(const FileName: string): string;
 
 implementation
-
-uses
-  System.SysUtils;
 
 var
   _DotFormatSettings: TFormatSettings;
@@ -51,6 +54,54 @@ begin
   except
     Result := false;
   end;
+end;
+
+function BytestoLowerHex(Bytes: TBytes): string;
+const
+  Convert: array[0..15] of WideChar = '0123456789abcdef';
+var
+  I: integer;
+  L: integer;
+begin
+  if Bytes=nil then
+  begin
+    Result := '';
+    Exit;
+  end;
+  L := Length(Bytes);
+  SetLength(Result, L*2);
+  for I := 0 to L-1 do
+  begin
+    Result[I*2+1] := Convert[Bytes[I] shr 4];
+    Result[I*2+2] := Convert[Bytes[I] and $F];
+  end;
+end;
+
+function LowerHexToBytes(const Hex: string): TBytes;
+const
+  H2BConvert: array['0'..'f'] of SmallInt =
+    ( 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,-1,-1,-1,-1,-1,-1,
+     -1,10,11,12,13,14,15,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+     -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+     -1,10,11,12,13,14,15);
+var
+  I: integer;
+  Count: integer;
+begin
+  Result := nil;
+  Count := Length(Hex);
+  if Count mod 2<>0 then
+    Exit;
+  SetLength(Result, Count div 2);
+  for I := 0 to High(Result) do
+    Result[I] :=
+      (H2BConvert[Hex[I*2+1]] shl 4) or
+       H2BConvert[Hex[I*2+2]];
+end;
+
+function ExtractBareFileName(const FileName: string): string;
+begin
+  Result := ChangeFileExt(ExtractFileName(FileName),'');
 end;
 
 initialization
