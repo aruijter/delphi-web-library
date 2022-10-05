@@ -8,7 +8,7 @@ uses
 type
   TResolveKeyFunc = function(const Params: string): string;
 
-  TdwlResolver = class abstract
+  TdwlResolver = record
   strict private
   class var
     FResolvableReferences: TStringList;
@@ -26,14 +26,14 @@ type
     /// <param name="ResolverFunc">
     ///   Callback function to be called when resolving
     /// </param>
-    class procedure Register(const Key: string; ResolverFunc: TResolveKeyFunc);
+    class procedure Register(const Key: string; ResolverFunc: TResolveKeyFunc); static;
     /// <summary>
     ///   resolve the text to be resolved using all the registered resolvers
     /// </summary>
     /// <param name="TextToBeResolved">
     ///   Text that will be replaced by its resolved value
     /// </param>
-    class procedure Resolve(var TextToBeResolved: string);
+    class procedure Resolve(var TextToBeResolved: string); static;
     /// <summary>
     ///   Defines the global lead/trail combination to be used when enclosing
     ///   keys for resolving
@@ -47,9 +47,9 @@ type
     /// <remarks>
     ///   The default lead is $( and the trail ) <br />For example: $(key)
     /// </remarks>
-    class procedure SetKeyEnvelope(const KeyLead, KeyTrail: string);
-    class function KeyLead: string;
-    class function KeyTrail: string;
+    class procedure SetKeyEnvelope(const KeyLead, KeyTrail: string); static;
+    class function KeyLead: string; static;
+    class function KeyTrail: string; static;
     class constructor Create;
     class destructor Destroy;
   end;
@@ -63,7 +63,6 @@ uses
 
 class constructor TdwlResolver.Create;
 begin
-  inherited;
   FResolvableReferences := TStringList.Create;
   FResolvableReferences.Duplicates := dupIgnore;
   FResolvableReferences.Sorted := true;
@@ -73,7 +72,6 @@ end;
 class destructor TdwlResolver.Destroy;
 begin
   FResolvableReferences.Free;
-  inherited;
 end;
 
 class function TdwlResolver.KeyLead: string;

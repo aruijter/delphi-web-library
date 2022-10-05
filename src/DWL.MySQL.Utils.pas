@@ -6,14 +6,14 @@ uses
   System.SysUtils, System.StrUtils;
 
 type
-  TdwlMySQLUtils = class abstract
+  TdwlMySQLUtils = record
     /// <summary>
     ///   backtick an identifier for use in a SQL statement
     /// </summary>
     /// <param name="Identifier">
     ///   Identifier to backtick
     /// </param>
-    class function BackTickIdentifier(const Identifier: string): string;
+    class function BackTickIdentifier(const Identifier: string): string; static;
   end;
 
 implementation

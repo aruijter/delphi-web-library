@@ -9,7 +9,7 @@ type
   /// <summary>
   ///   a abstract class containing OS related utility functions
   /// </summary>
-  TdwlOSUtils = class abstract
+  TdwlOSUtils = record
     class var
       FServices: ISWbemServices;
     /// <summary>
@@ -31,7 +31,7 @@ type
     /// <returns>
     ///   indicating if the execution was successful
     /// </returns>
-    class function ExecuteFile(const FileName: string; const Params: string=''; const DefaultDir: string=''; ShowCmd: integer=SW_SHOW): TdwlResult;
+    class function ExecuteFile(const FileName: string; const Params: string=''; const DefaultDir: string=''; ShowCmd: integer=SW_SHOW): TdwlResult; static;
     /// <summary>
     ///   Executes a file within the windows environment and waits until it is
     ///   finished. Basically a nice wrapper around the Windows ShellExecute
@@ -52,7 +52,7 @@ type
     /// <returns>
     ///   indicating if the execution was successful
     /// </returns>
-    class function ExecuteFileAndWait(const FileName: string; const Params: string=''; const DefaultDir: string=''; ShowCmd: integer=SW_SHOW): TdwlResult;
+    class function ExecuteFileAndWait(const FileName: string; const Params: string=''; const DefaultDir: string=''; ShowCmd: integer=SW_SHOW): TdwlResult; static;
     /// <summary>
     ///   Launches an URI within the windows environment
     /// </summary>
@@ -62,7 +62,7 @@ type
     /// <returns>
     ///   indicating if the execution was successful
     /// </returns>
-    class function ExecuteURI(const URI: string): TdwlResult;
+    class function ExecuteURI(const URI: string): TdwlResult; static;
     /// <summary>
     ///   Find the filename of an executable by providing the extension. The
     ///   windows OS is consulted for the result
@@ -73,7 +73,7 @@ type
     /// <example>
     ///   FileName := TdwlOSUtils.FindExecutableByExtension('.doc');
     /// </example>
-    class function FindExecutableByExtension(const Extension: string): string;
+    class function FindExecutableByExtension(const Extension: string): string; static;
     /// <summary>
     ///   Find the filename of an executable by providing the ProgID. The
     ///   windows OS is consulted for the result
@@ -84,11 +84,11 @@ type
     /// <example>
     ///   FileName := TdwlOSUtils.FindExecutableByProgID('Word.Document.8');
     /// </example>
-    class function FindExecutableByProgID(const ProgID: string): string;
+    class function FindExecutableByProgID(const ProgID: string): string; static;
     /// <summary>
     ///   get the full SID of the currently logged in user
     /// </summary>
-    class function GetWindowsUserSid: string;
+    class function GetWindowsUserSid: string; static;
     /// <summary>
     ///   Query a value within the Windows WMI system
     /// </summary>
@@ -98,7 +98,7 @@ type
     /// <param name="Win32Property">
     ///   The WMI Property to use
     /// </param>
-    class function WMI_Value(const Win32Class, Win32Property: string): string;
+    class function WMI_Value(const Win32Class, Win32Property: string): string; static;
   end;
 
 implementation

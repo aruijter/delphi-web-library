@@ -629,7 +629,6 @@ end;
 
 class constructor TdwlParams.Create;
 begin
-  inherited;
   FMetaKeys := TObjectDictionary<string, TdwlMetaKey>.Create([doOwnsValues]);
 end;
 
@@ -643,7 +642,6 @@ end;
 class destructor TdwlParams.Destroy;
 begin
   FMetaKeys.Free;
-  inherited;
 end;
 
 destructor TdwlParams.Destroy;

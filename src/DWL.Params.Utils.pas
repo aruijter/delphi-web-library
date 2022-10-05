@@ -8,7 +8,7 @@ uses
   DWL.Params;
 
 type
-  TdwlParamsUtils = class abstract
+  TdwlParamsUtils = record
   public
     /// <summary>
     ///   Imports all parameters for the commandline into an existing
@@ -17,7 +17,7 @@ type
     /// <param name="Params">
     ///   Params to fill with the resulting pairs
     /// </param>
-    class procedure Import_CommandLine(const Params: IdwlParams);
+    class procedure Import_CommandLine(const Params: IdwlParams); static;
     /// <summary>
     ///   Imports all values from one section of an inifile into an existing
     ///   IdwlParams <br />
@@ -31,7 +31,7 @@ type
     /// <param name="Section">
     ///   Section in IniFile containing Name-value pairs to import
     /// </param>
-    class procedure Import_IniFile_Section(const Params: IdwlParams; const IniFileName, Section: string);
+    class procedure Import_IniFile_Section(const Params: IdwlParams; const IniFileName, Section: string); static;
   end;
 
 implementation
