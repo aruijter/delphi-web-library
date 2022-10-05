@@ -1,4 +1,4 @@
-unit DWL.Params.CommonKeys;
+unit DWL.Params.Consts;
 
 interface
 

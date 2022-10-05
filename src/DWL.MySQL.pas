@@ -4,7 +4,11 @@ interface
 
 uses
   DWL.MySQL.API, System.Generics.Collections, System.Classes, DWL.Types,
-  DWL.Params;
+  DWL.Params, DWL.Params.Consts;
+
+const
+  Params_SQLConnection: TArray<String> = [Param_Host, Param_Username, Param_Password,
+    Param_Db, Param_CreateDatabase, Param_Port, Param_TestConnection];
 
 type
   TdwlMySQLUseOutputBindingCallback = reference to procedure(const pBuffer: Pointer; const dwDataSize: cardinal; var MemoryOwnerShipTaken: boolean);
@@ -547,7 +551,7 @@ implementation
 
 uses
   Winapi.Windows, System.SyncObjs, DWL.MySQL.Utils, System.Math,
-  DWL.Params.CommonKeys, System.SysUtils;
+  System.SysUtils;
 
 const
   TIMEOUT_CONNECTION = 10000; //msecs = 10 sec;

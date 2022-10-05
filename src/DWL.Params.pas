@@ -46,7 +46,7 @@ type
     /// <param name="Keys">
     ///   The keys of the key/value pairs that will be copied to the Params
     /// </param>
-    procedure AssignValuesTo(Params: IdwlParams; Keys: TArray<string>);
+    procedure AssignTo(Params: IdwlParams; Keys: TArray<string>); overload;
     /// <summary>
     ///   With AddTrigger you can add a one-shot trigger to be fired. Once the
     ///   TriggerKey is changed (or cleared) the DependentKey will
@@ -65,7 +65,7 @@ type
     /// <param name="Params">
     ///   The Params that will receive the key/value pairs
     /// </param>
-    procedure AssignTo(Params: IdwlParams);
+    procedure AssignTo(Params: IdwlParams); overload;
     /// <summary>
     ///   Get the value of the pair, if needed converted to the boolean type
     /// </summary>
@@ -509,8 +509,8 @@ type
     procedure WriteValue(const Key: string; const Value: TValue);
     procedure ClearKey(const Key: string);
     function ContainsKey(const Key: string): boolean;
-    procedure AssignValuesTo(Params: IdwlParams; Keys: TArray<string>);
-    procedure AssignTo(Params: IdwlParams);
+    procedure AssignTo(Params: IdwlParams; Keys: TArray<string>); overload;
+    procedure AssignTo(Params: IdwlParams); overload;
     function GetAsNameValueText: string;
     function GetEnumerator: IdwlParamsEnumerator;
     procedure WriteNameValueText(const NameValueLines: string);
@@ -575,7 +575,7 @@ begin
   end;
 end;
 
-procedure TdwlParams.AssignValuesTo(Params: IdwlParams; Keys: TArray<string>);
+procedure TdwlParams.AssignTo(Params: IdwlParams; Keys: TArray<string>);
 begin
   var V: TValue;
   for var Key in Keys do
