@@ -1,0 +1,123 @@
+/// <summary>
+///   THESE STRUCTURES ARE SHARED BETWEEN SERVER AND DLL's <br />YOU CANNOT
+///   CHANGE THESE UNLESS YOU RECOMPILE THE SERVER AND ALL DLL's <br /><br />
+/// </summary>
+unit DWL.HTTP.Server.Types;
+
+interface
+
+const
+  // the flags we're using
+  HTTP_FLAG_NOLOGGING = 1;  // do not log this request on server level
+
+type
+  PdwlHTTPHandlingState = ^TdwlHTTPHandlingState;
+
+  THTTPWebSocket_OnData = procedure(State: PdwlHTTPHandlingState; const Data: pointer; DataSize: cardinal; DataIsText: boolean);
+
+  TdwlAllocateContentBufferProc =procedure(const State: PdwlHTTPHandlingState; var ContentBuffer: pointer; const ContentLength: cardinal); stdcall;
+  TdwlTryGetRequestParamProc = function(const State: PdwlHTTPHandlingState; const Key: string; var Value: string): boolean; stdcall;
+  TdwlTryGetHeaderValueProc = function(const State: PdwlHTTPHandlingState; const HeaderKey: string; var Value: string): boolean; stdcall;
+  TdwlTryGetPayloadPtrProc = function(State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean; stdcall;
+  TdwlSetHeaderValueProc = procedure(const State: PdwlHTTPHandlingState; const HeaderKey, Value: string); stdcall;
+  TdwlLogProc = procedure(const State: PdwlHTTPHandlingState; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: pointer; ContentSize: Int64);
+  TdwlActivateWebSocketProc = function(const State: PdwlHTTPHandlingState; ReceiveProc: THTTPWebSocket_OnData): THTTPWebSocket_OnData;
+
+  /// <summary>
+  ///   <para>
+  ///     internal structures, one for each side of the ''medal'
+  ///   </para>
+  ///   <para>
+  ///     WARNING: don't change this handling structure. All communication
+  ///     with the DLL's f.e. are using this structure. This structure only
+  ///     contains base type, so in theory DLL's can be written in other
+  ///     programming languages <br />
+  ///   </para>
+  /// </summary>
+  TdwlHTTPHandlingState = record
+    /// <summary>
+    ///   available serverside to keep track of internal server resources
+    /// </summary>
+    _InternalServerStructure: pointer;
+    /// <summary>
+    ///   available to keep track of specific internal handling resources
+    /// </summary>
+    _InternalHandlingStructure: pointer;
+    /// <summary>
+    ///   URI (part after endpoint), provided from server side, do not change <br />
+    /// </summary>
+    URI: string;
+    /// <summary>
+    ///   The HTTP Request Command, provided from server side, do not change <br />
+    /// </summary>
+    Command: string;
+    /// <summary>
+    ///   bi directional flags, for now only suppress logging <br />
+    /// </summary>
+    Flags: integer;
+    /// <summary>
+    ///   Statuscode can be changed by handler, but is default 200
+    ///   a server fault situation detected by the server (as f.e. result=false)
+    ///   will be assigned the right status code serverside
+    /// </summary>
+    StatusCode: word;
+  end;
+
+  PdwlCallBackProcs = ^TdwlCallBackProcs;
+  TdwlCallBackProcs = record
+    /// <summary>
+    ///   a callback function that must be used to define the ContentBuffer to be used
+    ///   if ContentBuffer=nil, the server will allocate ContentLength bytes and take care of disposing, the pointer to the buffer will be returned
+    ///   if the ContentBuffer is given, it is allocated handling side and
+    ///   must be disposed in a FinalizeProc that of course also must be assigend to the state
+    /// </summary>
+    AllocateContentBufferProc: TdwlAllocateContentBufferProc;
+    /// <summary>
+    ///   a callback function that can be used to get Request Params
+    /// </summary>
+    TryGetRequestParamProc: TdwlTryGetRequestParamProc;
+    /// <summary>
+    ///   a callback function that can be used to get a Header Value from
+    ///   request
+    /// </summary>
+    TryGetHeaderValueProc: TdwlTryGetHeaderValueProc;
+    /// <summary>
+    ///   a callback function tant can be use to get the pointer to the payload
+    ///   data memory location
+    /// </summary>
+    TryGetPayloadPtrProc: TdwlTryGetPayloadPtrProc;
+    /// <summary>
+    ///   a callback function to set a header in the response
+    /// </summary>
+    SetHeaderValueProc: TdwlSetHeaderValueProc;
+    /// <summary>
+    ///   a callback function to create a websocket, if nil returned request
+    ///   did not succeed
+    /// </summary>
+    ActivateWebSocketproc: TdwlActivateWebSocketProc;
+  end;
+
+
+  /// <summary>
+  ///   The authenticate proc is used to to give the DLL the possibility to authenticate the caller of a request
+  /// </summary>
+  TDLL_AuthenticateProc = function(const State: PdwlHTTPHandlingState): boolean; stdcall;
+  /// <summary>
+  ///   The configure proc is used to to give the DLL the possibility to configure itself
+  ///   parameters are provided a key/value pairs in TStringlist.Text layout.
+  /// </summary>
+  TDLL_ConfigureProc = function(const CallBackProcs: PdwlCallBackProcs; const Params: string): string; stdcall;
+  /// <summary>
+  ///   The wrapup proc is used to to give the DLL the possibility to clean up
+  ///   resources. if state is given, the request has finished and resources like contentbuffer can be cleared
+  ///   is state is nil, it is the final wrapup call for global resources
+  /// </summary>
+  TdwlWrapupProc = procedure(const State: PdwlHTTPHandlingState); stdcall;
+  /// <summary>
+  ///   The processrequest function implemented in the DLL processes the actual request
+  /// </summary>
+  TDLL_ProcessRequestProc = function(const State: PdwlHTTPHandlingState): boolean; stdcall;
+
+implementation
+
+end.

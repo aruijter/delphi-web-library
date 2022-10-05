@@ -1,0 +1,61 @@
+/// <summary>
+///   Utils to cnetralize common server functionality
+/// </summary>
+unit DWL.HTTP.Server.Utils;
+
+interface
+
+uses
+  DWL.HTTP.Server.Types, DWL.HTTP.Consts;
+
+type
+  /// <summary>
+  ///   State helpers for easy task when handling requests
+  /// </summary>
+  TdwlHTTPHandlingStateHelper = record helper for TdwlHTTPHandlingState
+    /// <summary>
+    ///   an easy way to set the contenttype when handling a request. This
+    ///   function uses the server callback function to set the contenttype of
+    ///   the request.
+    /// </summary>
+    procedure SetContentType(const ContentType: string; const CharSet: string='');
+    /// <summary>
+    ///   an easy way to set the contenttextwhen handling a request.
+    ///   Thisfunction uses the server callback function to set the
+    ///   contentbuffer/length and contenttype of the request. Note: the
+    ///   contenttext of the underlying IdHTTPServer is not used. <br />
+    /// </summary>
+    procedure SetContentText(const BodyStr: string; const ContentType: string=CONTENT_TYPE_HTML);
+  end;
+
+implementation
+
+uses
+  System.SysUtils, Winapi.Windows, DWL.HTTP.Server.Globals;
+
+{ TdwlHTTPServerUtils }
+
+procedure TdwlHTTPHandlingStateHelper.SetContentType(const ContentType: string; const CharSet: string='');
+begin
+  var CharsetToWrite := CharSet;
+  if CharsetToWrite='' then
+  begin
+    if SameText(ContentType, CONTENT_TYPE_X_WWW_FORM_URLENCODED) then
+      CharsetToWrite := CHARSET_UTF8; // always add charset=utf-8 TNetEncoding.Url does utf8, but default for content type is iso-8859-1
+  end;
+  var CombinedContentType := ContentType;
+  if CharSet<>'' then
+    CombinedContentType := CombinedContentType+'; charset='+CharsetToWrite;
+  serverProcs.SetHeaderValueProc(@Self, HTTP_HEADER_CONTENT_TYPE, CombinedContentType);
+end;
+
+procedure TdwlHTTPHandlingStateHelper.SetContentText(const BodyStr: string; const ContentType: string=CONTENT_TYPE_HTML);
+begin
+  Self.SetContentType(ContentType, CHARSET_UTF8);
+  var ContentLength := WideCharToMultiByte(CP_UTF8, 0, PWideChar(BodyStr), BodyStr.Length, nil, 0, nil, nil);
+  var ContentBuffer := nil;
+  serverProcs.AllocateContentBufferProc(@Self, ContentBuffer, ContentLength);
+  WideCharToMultiByte(CP_UTF8, 0, PWideChar(BodyStr), BodyStr.Length, ContentBuffer, ContentLength, nil, nil);
+end;
+
+end.
