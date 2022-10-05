@@ -3,7 +3,7 @@ unit DWL.OpenSSL;
 interface
 
 uses
-  System.SysUtils, DWL.OpenSSL.Api;
+  System.SysUtils, DWL.OpenSSL.API;
 
 type
   IdwlOpenSSLKey = interface
