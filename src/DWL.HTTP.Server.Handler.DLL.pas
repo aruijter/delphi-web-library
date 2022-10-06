@@ -17,7 +17,7 @@ type
     FEndPoint: string;
     FDLLHandle: HModule;
     FProcessProc: TDLL_ProcessRequestProc;
-    FAuthenticateProc: TDLL_AuthenticateProc;
+    FAuthorizeProc: TDLL_AuthorizeProc;
     FAllowOrigins: TStringList;
     FAllowAllOrigins: boolean;
     FDoAllowOrigins: boolean;
@@ -25,9 +25,9 @@ type
     function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
     function LogDescription: string; override;
   public
-    constructor Create(DLLHandle: HModule; ProcessProc: TDLL_ProcessRequestProc; AuthenticateProc: TDLL_AuthenticateProc; const Endpoint: string; Params: IdwlParams);
+    constructor Create(DLLHandle: HModule; ProcessProc: TDLL_ProcessRequestProc; AuthorizeProc: TDLL_AuthorizeProc; const Endpoint: string; Params: IdwlParams);
     destructor Destroy; override;
-    function Authenticate(const State: PdwlHTTPHandlingState): boolean; override;
+    function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
   end;
 
 implementation
@@ -41,19 +41,19 @@ const
 
 { TDLL_RestHandler }
 
-function TdwlHTTPHandler_DLL.Authenticate(const State: PdwlHTTPHandlingState): boolean;
+function TdwlHTTPHandler_DLL.Authorize(const State: PdwlHTTPHandlingState): boolean;
 begin
-  Result := Assigned(FAuthenticateProc) and FAuthenticateProc(State);
+  Result := Assigned(FAuthorizeProc) and FAuthorizeProc(State);
 end;
 
-constructor TdwlHTTPHandler_DLL.Create(DLLHandle: HModule; ProcessProc: TDLL_ProcessRequestProc; AuthenticateProc: TDLL_AuthenticateProc; const EndPoint: string; Params: IdwlParams);
+constructor TdwlHTTPHandler_DLL.Create(DLLHandle: HModule; ProcessProc: TDLL_ProcessRequestProc; AuthorizeProc: TDLL_AuthorizeProc; const EndPoint: string; Params: IdwlParams);
 var
   ConfigureProc: TDLL_ConfigureProc;
 begin
   inherited Create;
   FDLLHandle := DLLHandle;
   FProcessProc := ProcessProc;
-  FAuthenticateProc := AuthenticateProc;
+  FAuthorizeProc := AuthorizeProc;
   FEndPoint := Endpoint;
   FAllowOrigins := TStringList.Create;
   FAllowOrigins.CaseSensitive := false;

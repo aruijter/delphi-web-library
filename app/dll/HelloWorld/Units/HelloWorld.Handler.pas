@@ -10,7 +10,7 @@ type
   strict private
     class function Get_(const State: PdwlHTTPHandlingState): boolean;
   public
-    class function Authenticate(const State: PdwlHTTPHandlingState): boolean; override;
+    class function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
     class procedure Configure(const Params: string); override;
   end;
 
@@ -22,11 +22,11 @@ uses
 
 { THandler_HelloWorld }
 
-class function THandler_HelloWorld.Authenticate(const State: PdwlHTTPHandlingState): boolean;
+class function THandler_HelloWorld.Authorize(const State: PdwlHTTPHandlingState): boolean;
 begin
   // everyone may see my magnificent 'Hello World!' message
   Result := true;
-  // most of the time you want to call the inherited Authenticate (or not even override this function)
+  // most of the time you want to call the inherited Authorize (or not even override this function)
   // to rely on accesstoken authentication
 end;
 

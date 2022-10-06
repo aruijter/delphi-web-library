@@ -192,7 +192,7 @@ type
     ///   The provided plain text will converted to HTML and added as detail of
     ///   a logitem. Contecttype is taken care of
     /// </summary>
-    class procedure AddPlainTextAsHTMLLogDetail(const LogItem: PdwlLogItem; const Text: string; const FontFamiliy: string='Tahoma'; const FontSize: byte=10); static;
+    class procedure AddPlainTextAsHTMLLogDetail(const LogItem: PdwlLogItem; const Text: string; const FontFamily: string='Tahoma'; const FontSize: byte=10); static;
   end;
 
 
@@ -389,10 +389,10 @@ end;
 
 { TdwlLogHelper }
 
-class procedure TdwlLogHelper.AddPlainTextAsHTMLLogDetail(const LogItem: PdwlLogItem; const Text: string; const FontFamiliy: string='Tahoma'; const FontSize: byte=10);
+class procedure TdwlLogHelper.AddPlainTextAsHTMLLogDetail(const LogItem: PdwlLogItem; const Text: string; const FontFamily: string='Tahoma'; const FontSize: byte=10);
 begin
   AddPureHtmlAsLogDetail(LogItem,
-    '<!DOCTYPE html>'#13#10'<html><head><meta charset="utf-8"></head><body style="font-family: '+FontFamiliy+'; font-size: '+FontSize.ToString+';">'+
+    '<!DOCTYPE html>'#13#10'<html><head><meta charset="utf-8"></head><body style="font-family: '+FontFamily+'; font-size: '+FontSize.ToString+';">'+
     TNetEncoding.HTML.Encode(Text)+'</body></html>');
 end;
 

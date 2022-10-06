@@ -98,9 +98,9 @@ type
 
 
   /// <summary>
-  ///   The authenticate proc is used to to give the DLL the possibility to authenticate the caller of a request
+  ///   The Authorize proc is used to to give the DLL the possibility to authorize the caller of a request
   /// </summary>
-  TDLL_AuthenticateProc = function(const State: PdwlHTTPHandlingState): boolean; stdcall;
+  TDLL_AuthorizeProc = function(const State: PdwlHTTPHandlingState): boolean; stdcall;
   /// <summary>
   ///   The configure proc is used to to give the DLL the possibility to configure itself
   ///   parameters are provided a key/value pairs in TStringlist.Text layout.

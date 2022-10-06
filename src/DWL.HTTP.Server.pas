@@ -167,11 +167,11 @@ type
   public
     destructor Destroy; override;
     /// <summary>
-    ///   When authentication clients, the handler that will actual handle the
-    ///   request will first be asked to authenticate the user and allow this
+    ///   When authorizing clients, the handler that will actual handle the
+    ///   request will first be asked to authorize the user and allow this
     ///   user to execute the functions implemented in this handler
     /// </summary>
-    function Authenticate(const State: PdwlHTTPHandlingState): boolean; virtual;
+    function Authorize(const State: PdwlHTTPHandlingState): boolean; virtual;
   end;
 
 implementation
@@ -196,7 +196,7 @@ type
   public
     constructor Create(CheckAccess: boolean=true);
     destructor Destroy; override;
-    function Authenticate(const State: PdwlHTTPHandlingState): boolean; override;
+    function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
   end;
 
   PServerStructure = ^TServerStructure;
@@ -699,9 +699,9 @@ end;
 
 { TdwlHTTPHandler_PassThrough }
 
-function TdwlHTTPHandler_PassThrough.Authenticate(const State: PdwlHTTPHandlingState): boolean;
+function TdwlHTTPHandler_PassThrough.Authorize(const State: PdwlHTTPHandlingState): boolean;
 begin
-  // Authentication is always passed through, so for me its ok now!
+  // Authorization is always passed through, so for me its ok now!
   Result := true;
 end;
 
@@ -761,7 +761,7 @@ begin
     State.URI := PWideChar(PServerStructure(State._InternalServerStructure).State_URI);
     // Do a security check
     // Before passing request to the found handler
-    if Handler.Authenticate(State) then
+    if Handler.Authorize(State) then
     begin
       PServerStructure(State._InternalServerStructure).FinalHandler := Handler;
       Result := Handler.ProcessRequest(State)
@@ -834,7 +834,7 @@ end;
 
 { TdwlHTTPHandler }
 
-function TdwlHTTPHandler.Authenticate(const State: PdwlHTTPHandlingState): boolean;
+function TdwlHTTPHandler.Authorize(const State: PdwlHTTPHandlingState): boolean;
 begin
   Result := false;
 end;

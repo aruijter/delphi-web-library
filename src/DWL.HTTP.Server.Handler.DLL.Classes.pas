@@ -114,7 +114,7 @@ type
     /// </summary>
     class function TryGetPayloadPtr(const State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean;
   public
-    class function Authenticate(const State: PdwlHTTPHandlingState): boolean; virtual;
+    class function Authorize(const State: PdwlHTTPHandlingState): boolean; virtual;
     class procedure Configure(const Params: string); virtual;
     class procedure ProcessRequest(const State: PdwlHTTPHandlingState; var Success: boolean); virtual;
     class procedure WrapUp(const State: PdwlHTTPHandlingState); virtual;
@@ -124,7 +124,7 @@ type
   strict private
     class var FOIDC_Client: TdwlOIDC_Client;
   public
-    class function Authenticate(const State: PdwlHTTPHandlingState): boolean; override;
+    class function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
     class procedure Configure(const Params: string); override;
     class procedure WrapUp(const State: PdwlHTTPHandlingState); override;
   end;
@@ -148,7 +148,7 @@ type
 
 { THandler_Base_Internal }
 
-class function TdwlDLLHandling.Authenticate(const State: PdwlHTTPHandlingState): boolean;
+class function TdwlDLLHandling.Authorize(const State: PdwlHTTPHandlingState): boolean;
 begin
   Result := State.Command=dwlhttpOPTIONS;
 end;
@@ -474,9 +474,9 @@ end;
 
 { TdwlDLLHandling_OpenID }
 
-class function TdwlDLLHandling_OpenID.Authenticate(const State: PdwlHTTPHandlingState): boolean;
+class function TdwlDLLHandling_OpenID.Authorize(const State: PdwlHTTPHandlingState): boolean;
 begin
-  Result := inherited Authenticate(State);
+  Result := inherited Authorize(State);
   if Result then
     Exit;
   Result := false;

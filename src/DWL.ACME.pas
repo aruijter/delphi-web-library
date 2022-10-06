@@ -247,7 +247,7 @@ begin
     var JWS := New_JWS;
     JWS.SetPayloadString(PayLoad);
     // Payload is always provided as a JWS object if Account URL is not yet available
-    JWS.ProtectedHeader[joseheaderALGORITM] := joseheader_alg_RS256;
+    JWS.ProtectedHeader[joseheaderALGORITHM] := algorithm_RS256;
     if State.URLAccount='' then
       JWS.ProtectedHeader.AddJSONValue(joseheaderJSONWEBKEY, TJSONObject.ParseJSONValue(State.JSONWebKey))
     else

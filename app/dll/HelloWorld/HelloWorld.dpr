@@ -8,9 +8,9 @@ uses
 
 {$R *.res}
 
-function Authenticate(const State: PdwlHTTPHandlingState): boolean; stdcall;
+function Authorize(const State: PdwlHTTPHandlingState): boolean; stdcall;
 begin
-  Result := THandler_HelloWorld.Authenticate(State);
+  Result := THandler_HelloWorld.Authorize(State);
 end;
 
 function Configure(const CallBackProcs: PdwlCallBackProcs; const Params: PWideChar): string; stdcall;
@@ -37,7 +37,7 @@ begin
 end;
 
 exports
-  Authenticate,
+  Authorize,
   Configure,
   ProcessRequest,
   WrapUp;

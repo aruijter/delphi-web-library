@@ -12,7 +12,7 @@ uses
 
 const
   // header names from RFC7515
-  joseheaderALGORITM = 'alg';
+  joseheaderALGORITHM = 'alg';
   joseheaderJWKSETURL = 'jku';
   joseheaderJSONWEBKEY = 'jwk';
   joseheaderKEYID = 'kid';
@@ -35,13 +35,21 @@ const
   jwtclaimJWT_ID = 'jti';
   // my own defined header key names
   joseheader_type_JSONWEBTOKEN = 'jwt';
-  joseheader_alg_RS256 = 'RS256';
   // my own defined payload key names
   jwt_key_NONCE = 'nonce';
-  jwt_key_GRANT = 'grt';
-  jwt_key_ORDER = 'ord';
+  jwt_key_GRanT = 'grt';
+  jwt_key_ORDer = 'ord';
   jwt_key_SCOPE = 'scope';
   jwt_key_URL = 'url';
+  jwt_key_USagE = 'use';
+  jwt_Key_algoriTmfamilY = 'kty';
+
+  // known values for keys
+  algorithm_RS256 = 'RS256';
+  algorithmfamily_RSA = 'RSA';
+  usage_SIGnature = 'sig';
+  algoparam_modulusN ='n';
+  algoparam_exponentE ='e';
 
 type
   TdwlJWSSerializationKind= (jskCompact, jskFlattened);
