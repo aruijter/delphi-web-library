@@ -27,6 +27,19 @@ const
 
   EndpointURI_Log = '/log';
 
+  // HTTP Command consts
+  dwlhttpUNKNOWN = 0;
+  dwlhttpHEAD = 1;
+  dwlhttpGET = 2;
+  dwlhttpPOST = 3;
+  dwlhttpDELETE = 4;
+  dwlhttpPUT = 5;
+  dwlhttpTRACE = 6;
+  dwlhttpOPTIONS = 7;
+
+  dwlhttpCommandToString: array[dwlhttpUNKNOWN..dwlhttpOPTIONS] of string = (HTTP_COMMAND_UNKNOWN,
+    HTTP_COMMAND_HEAD,HTTP_COMMAND_GET, HTTP_COMMAND_POST, HTTP_COMMAND_DELETE, HTTP_COMMAND_PUT, HTTP_COMMAND_TRACE, HTTP_COMMAND_OPTIONS);
+
 implementation
 
 end.

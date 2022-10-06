@@ -34,7 +34,7 @@ class procedure THandler_HelloWorld.Configure(const Params: string);
 begin
   inherited Configure(Params);
   // register my sub uri on which to output my message
-  RegisterHandling(HTTP_COMMAND_GET, '', Get_, []);
+  RegisterHandling(dwlhttpGET, '', Get_, []);
 end;
 
 class function THandler_HelloWorld.Get_(const State: PdwlHTTPHandlingState): boolean;

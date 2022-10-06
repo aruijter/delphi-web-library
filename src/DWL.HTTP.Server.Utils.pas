@@ -13,6 +13,8 @@ type
   ///   State helpers for easy task when handling requests
   /// </summary>
   TdwlHTTPHandlingStateHelper = record helper for TdwlHTTPHandlingState
+    function TryGetRequestParamStr(const Key: string; var Value: string): boolean;
+    function TryGetHeaderValue(const Key: string; var Value: string): boolean;
     /// <summary>
     ///   an easy way to set the contenttype when handling a request. This
     ///   function uses the server callback function to set the contenttype of
@@ -26,6 +28,7 @@ type
     ///   contenttext of the underlying IdHTTPServer is not used. <br />
     /// </summary>
     procedure SetContentText(const BodyStr: string; const ContentType: string=CONTENT_TYPE_HTML);
+    procedure SetHeaderValue(const HeaderKey, Value: string);
   end;
 
 implementation
@@ -33,7 +36,7 @@ implementation
 uses
   System.SysUtils, Winapi.Windows, DWL.HTTP.Server.Globals;
 
-{ TdwlHTTPServerUtils }
+{ TdwlHTTPHandlingStateHelper }
 
 procedure TdwlHTTPHandlingStateHelper.SetContentType(const ContentType: string; const CharSet: string='');
 begin
@@ -46,7 +49,38 @@ begin
   var CombinedContentType := ContentType;
   if CharSet<>'' then
     CombinedContentType := CombinedContentType+'; charset='+CharsetToWrite;
-  serverProcs.SetHeaderValueProc(@Self, HTTP_HEADER_CONTENT_TYPE, CombinedContentType);
+  serverProcs.SetHeaderValueProc(@Self, HTTP_HEADER_CONTENT_TYPE, PWideChar(CombinedContentType));
+end;
+
+procedure TdwlHTTPHandlingStateHelper.SetHeaderValue(const HeaderKey,Value: string);
+begin
+  serverProcs.SetHeaderValueProc(@Self, PWideChar(HeaderKey), PWideChar(Value));
+end;
+
+function TdwlHTTPHandlingStateHelper.TryGetHeaderValue(const Key: string; var Value: string): boolean;
+begin
+  var CharCount := 0;
+  var Res := serverProcs.GetHeaderValueProc(@Self, PWideChar(Key), nil, CharCount);
+  Result := Res=-1;
+  if Result then
+  begin
+    SetLength(Value, CharCount);
+    Res := serverProcs.GetHeaderValueProc(@Self, PWideChar(Key), PWideChar(Value), CharCount);
+    Result := (Res=1) and (CharCount=Length(Value));
+  end;
+end;
+
+function TdwlHTTPHandlingStateHelper.TryGetRequestParamStr(const Key: string; var Value: string): boolean;
+begin
+  var CharCount := 0;
+  var Res := serverProcs.GetRequestParamProc(@Self, PWideChar(Key), nil, CharCount);
+  Result := Res=-1;
+  if Result then
+  begin
+    SetLength(Value, CharCount);
+    Res := serverProcs.GetRequestParamProc(@Self, PWideChar(Key), PWideChar(Value), CharCount);
+    Result := (Res=1) and (CharCount=Length(Value));
+  end;
 end;
 
 procedure TdwlHTTPHandlingStateHelper.SetContentText(const BodyStr: string; const ContentType: string=CONTENT_TYPE_HTML);

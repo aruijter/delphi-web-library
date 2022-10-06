@@ -13,15 +13,13 @@ const
 type
   PdwlHTTPHandlingState = ^TdwlHTTPHandlingState;
 
-  THTTPWebSocket_OnData = procedure(State: PdwlHTTPHandlingState; const Data: pointer; DataSize: cardinal; DataIsText: boolean);
-
+  TdwlHTTPWebSocket_OnData = procedure(State: PdwlHTTPHandlingState; const Data: pointer; DataSize: cardinal; DataIsText: boolean);
   TdwlAllocateContentBufferProc =procedure(const State: PdwlHTTPHandlingState; var ContentBuffer: pointer; const ContentLength: cardinal); stdcall;
-  TdwlTryGetRequestParamProc = function(const State: PdwlHTTPHandlingState; const Key: string; var Value: string): boolean; stdcall;
-  TdwlTryGetHeaderValueProc = function(const State: PdwlHTTPHandlingState; const HeaderKey: string; var Value: string): boolean; stdcall;
-  TdwlTryGetPayloadPtrProc = function(State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean; stdcall;
-  TdwlSetHeaderValueProc = procedure(const State: PdwlHTTPHandlingState; const HeaderKey, Value: string); stdcall;
-  TdwlLogProc = procedure(const State: PdwlHTTPHandlingState; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: pointer; ContentSize: Int64);
-  TdwlActivateWebSocketProc = function(const State: PdwlHTTPHandlingState; ReceiveProc: THTTPWebSocket_OnData): THTTPWebSocket_OnData;
+  TdwlGetRequestParamProc = function(const State: PdwlHTTPHandlingState; const Key: PWideChar; const Value: PWideChar; var ValueCharCnt: integer): integer; stdcall;
+  TdwlGetHeaderValueProc = function(const State: PdwlHTTPHandlingState; const Key: PWideChar; const Value: PWideChar; var ValueCharCnt: integer): integer; stdcall;
+  TdwlGetPayloadPtrProc = function(State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean; stdcall;
+  TdwlSetHeaderValueProc = procedure(const State: PdwlHTTPHandlingState; const HeaderKey, Value: PWideChar); stdcall;
+  TdwlActivateWebSocketProc = function(const State: PdwlHTTPHandlingState; ReceiveProc: TdwlHTTPWebSocket_OnData): TdwlHTTPWebSocket_OnData;
 
   /// <summary>
   ///   <para>
@@ -30,7 +28,7 @@ type
   ///   <para>
   ///     WARNING: don't change this handling structure. All communication
   ///     with the DLL's f.e. are using this structure. This structure only
-  ///     contains base type, so in theory DLL's can be written in other
+  ///     contains C compatible base types, so DLL's can be written in other
   ///     programming languages <br />
   ///   </para>
   /// </summary>
@@ -46,11 +44,12 @@ type
     /// <summary>
     ///   URI (part after endpoint), provided from server side, do not change <br />
     /// </summary>
-    URI: string;
+    URI: PWideChar;
     /// <summary>
     ///   The HTTP Request Command, provided from server side, do not change <br />
+    ///   This is a byte, definition of values can be found int DWL.HTTP.Consts f.e. 'GET'=dwlhttpGET=1
     /// </summary>
-    Command: string;
+    Command: byte;
     /// <summary>
     ///   bi directional flags, for now only suppress logging <br />
     /// </summary>
@@ -75,17 +74,17 @@ type
     /// <summary>
     ///   a callback function that can be used to get Request Params
     /// </summary>
-    TryGetRequestParamProc: TdwlTryGetRequestParamProc;
+    GetRequestParamProc: TdwlGetRequestParamProc;
     /// <summary>
     ///   a callback function that can be used to get a Header Value from
     ///   request
     /// </summary>
-    TryGetHeaderValueProc: TdwlTryGetHeaderValueProc;
+    GetHeaderValueProc: TdwlGetHeaderValueProc;
     /// <summary>
     ///   a callback function tant can be use to get the pointer to the payload
     ///   data memory location
     /// </summary>
-    TryGetPayloadPtrProc: TdwlTryGetPayloadPtrProc;
+    GetPayloadPtrProc: TdwlGetPayloadPtrProc;
     /// <summary>
     ///   a callback function to set a header in the response
     /// </summary>
@@ -106,7 +105,7 @@ type
   ///   The configure proc is used to to give the DLL the possibility to configure itself
   ///   parameters are provided a key/value pairs in TStringlist.Text layout.
   /// </summary>
-  TDLL_ConfigureProc = function(const CallBackProcs: PdwlCallBackProcs; const Params: string): string; stdcall;
+  TDLL_ConfigureProc = function(const CallBackProcs: PdwlCallBackProcs; const Params: PWideChar): string; stdcall;
   /// <summary>
   ///   The wrapup proc is used to to give the DLL the possibility to clean up
   ///   resources. if state is given, the request has finished and resources like contentbuffer can be cleared

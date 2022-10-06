@@ -181,7 +181,7 @@ uses
   IdGlobal, IdHashSHA,
   System.NetEncoding, IdSSLOpenSSL, DWL.Logging, DWL.HTTP.Consts,
   IdAssignedNumbers, System.StrUtils, DWL.HTTP.Server.Utils,
-  DWL.HTTP.Server.Globals;
+  DWL.HTTP.Server.Globals, DWL.HTTP.Utils;
 
 type
   TdwlHTTPHandler_PassThrough = class(TdwlHTTPHandler)
@@ -201,6 +201,7 @@ type
 
   PServerStructure = ^TServerStructure;
   TServerStructure = record
+    State_URI: string;
     ContentBuffer: pointer;
     ContentLength: cardinal;
     ContentOwned: boolean;
@@ -210,7 +211,7 @@ type
     ResponseInfo: TIdHTTPResponseInfo;
     Tick: UInt64;
     FinalHandler: TdwlHTTPHandler;
-    WebSocketsReceiveProc: THTTPWebSocket_OnData;
+    WebSocketsReceiveProc: TdwlHTTPWebSocket_OnData;
   end;
 
 { TdwlHTTPServer }
@@ -218,7 +219,7 @@ type
 procedure TdwlHTTPServer.HTTPServerDisconnect(AContext: TIdContext);
   function GetLogLine(State: PdwlHTTPHandlingState): string;
   begin
-    Result := 'Rq '+AContext.Binding.PeerIP+':'+AContext.Binding.Port.ToString+' '+State.Command+' '+State.URI+' '+State.StatusCode.ToString+' ('+(GetTickCount64-PServerStructure(State._InternalServerStructure).Tick).ToString+'ms)';
+    Result := 'Rq '+AContext.Binding.PeerIP+':'+AContext.Binding.Port.ToString+' '+dwlhttpCommandToString[State.Command]+' '+State.URI+' '+State.StatusCode.ToString+' ('+(GetTickCount64-PServerStructure(State._InternalServerStructure).Tick).ToString+'ms)';
   end;
 begin
   // remove request from FRequestsInProgress, to be able to track while ones are not yet served out
@@ -400,8 +401,10 @@ begin
   PServerStructure(State._InternalServerStructure).ContentBuffer := ContentBuffer;
 end;
 
-function State_GetRequestParam(const State: PdwlHTTPHandlingState; const Key: string; var Value: string): boolean; stdcall;
+function State_GetRequestParam(const State: PdwlHTTPHandlingState; const Key: PWideChar; const Value: PWideChar; var  ValueCharCnt: integer): integer; stdcall;
 begin
+  var ValueFound: boolean := false;;
+  var FoundStr: string;
   // Keep in mind do not change Value if Result is false
   var Params := PServerStructure(State._InternalServerStructure).RequestInfo.Params;
   if Copy(Key, Length(Key)-1, 2)='[]' then // handle as array!
@@ -412,41 +415,57 @@ begin
       if SameText(Params.Names[i], Key) then
         Vals := Vals+','+Params.ValueFromIndex[i];
     end;
-    Result := Vals<>'';
-    if Result then
-      Value := Copy(Vals, 2, MaxInt);
-    Exit;
+    ValueFound := Vals<>'';
+    if ValueFound then
+      FoundStr := Copy(Vals, 2, MaxInt);
   end;
-  Result := Params.IndexOfName(Key)>=0;
-  if Result then
+  if not ValueFound then
   begin
-    Value := Params.Values[Key];
-    Exit;
+    ValueFound := Params.IndexOfName(Key)>=0;
+    if ValueFound then
+      FoundStr := Params.Values[Key];
   end;
-  Result := SameText(Key, 'remoteip');
-  if Result then
+  if not ValueFound then
   begin
-    Value := PServerStructure(State._InternalServerStructure).RequestInfo.RemoteIP;
-    Exit;
+    ValueFound := SameText(Key, 'remoteip');
+    if ValueFound then
+      FoundStr := PServerStructure(State._InternalServerStructure).RequestInfo.RemoteIP;
   end;
-  Result := SameText(Key, 'authusername');
-  if Result then
+  if not ValueFound then
   begin
-    Value := PServerStructure(State._InternalServerStructure).RequestInfo.AuthUsername;
-    Exit;
+    ValueFound := SameText(Key, 'authusername');
+    if ValueFound then
+      FoundStr := PServerStructure(State._InternalServerStructure).RequestInfo.AuthUsername;
   end;
-  Result := SameText(Key, 'authpassword');
-  if Result then
+  if not ValueFound then
   begin
-    Value := PServerStructure(State._InternalServerStructure).RequestInfo.AuthPassword;
-    Exit;
+    ValueFound := SameText(Key, 'authpassword');
+    if ValueFound then
+      FoundStr := PServerStructure(State._InternalServerStructure).RequestInfo.AuthPassword;
   end;
-  Result := SameText(Key, 'host');
-  if Result then
+  if not ValueFound then
   begin
-    Value := PServerStructure(State._InternalServerStructure).RequestInfo.Host;
-    Exit;
+    ValueFound := SameText(Key, 'host');
+    if ValueFound then
+      FoundStr := PServerStructure(State._InternalServerStructure).RequestInfo.Host;
   end;
+  if ValueFound then
+  begin
+    var FoundStrCharCount := Length(FoundStr);
+    if ValueCharCnt>=FoundStrCharCount then
+    begin
+      if FoundStrCharCount>0 then
+      begin
+        Move(PWideChar(FoundStr)^, Value^, (FoundStrCharCount+1)*2);
+      end;
+      Result := 1;
+    end
+    else
+      Result := -1;
+    ValueCharCnt := FoundStrCharCount;
+  end
+  else
+    Result := 0;
 end;
 
 function State_GetPostDataPtr(State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean; stdcall;
@@ -459,13 +478,22 @@ begin
   DataSize := Stream.Size;
 end;
 
-function State_GetHeaderValue(const State: PdwlHTTPHandlingState; const HeaderKey: string; var Value: string): boolean; stdcall;
+function State_GetHeaderValue(const State: PdwlHTTPHandlingState; const Key: PWideChar; const Value: PWideChar; var  ValueCharCnt: integer): integer; stdcall;
 begin
-  Value := PServerStructure(State._InternalServerStructure).RequestInfo.RawHeaders.Values[HeaderKey];
-  Result := Value<>'';
+  var FoundStr := PServerStructure(State._InternalServerStructure).RequestInfo.RawHeaders.Values[Key];
+  if FoundStr='' then
+    Exit(0);
+  var FoundStrCharCount := Length(FoundStr);
+  if ValueCharCnt>=FoundStrCharCount then
+  begin
+    Result := 1;
+    Move(PWideChar(FoundStr)^, Value^, (FoundStrCharCount+1)*2);
+  end
+  else
+    Result := -1;
 end;
 
-procedure State_SetHeaderValue(const State: PdwlHTTPHandlingState; const HeaderKey, Value: string); stdcall;
+procedure State_SetHeaderValue(const State: PdwlHTTPHandlingState; const HeaderKey, Value: PWideChar); stdcall;
 begin
   // Indy writes the contenttype twice if you put it directly in the header,
   // so for contenttype use the ResponseInfo property
@@ -516,13 +544,13 @@ begin
   PServerStructure(State._InternalServerStructure).Context.Connection.IOHandler.Write(DataToSend);
 end;
 
-function State_ActivateWebSocket(const State: PdwlHTTPHandlingState; ReceiveProc: THTTPWebSocket_OnData): THTTPWebSocket_OnData;
+function State_ActivateWebSocket(const State: PdwlHTTPHandlingState; ReceiveProc: TdwlHTTPWebSocket_OnData): TdwlHTTPWebSocket_OnData;
 begin
   Result := nil;
   var Key: string;
   var Version: string;
-  if not (State_GetHeaderValue(State, 'Sec-WebSocket-Key', Key) and
-    State_GetHeaderValue(State, 'Sec-WebSocket-Version', Version) and
+  if not (State.TryGetHeaderValue('Sec-WebSocket-Key', Key) and
+    State.TryGetHeaderValue('Sec-WebSocket-Version', Version) and
     (Key<>'') and (Version='13')) then
     Exit;
   var Hash := TIdHashSHA1.Create;
@@ -541,7 +569,7 @@ begin
   PServerStructure(State._InternalServerStructure).WebSocketsReceiveProc := ReceiveProc;
   Result := WriteToWebSocket;
   var Binding := PServerStructure(State._InternalServerStructure).Context.Binding;
-  TdwlLogger.Log('Rq '+Binding.PeerIP+':'+Binding.Port.ToString+' '+State.Command+' '+State.URI+' '+State.StatusCode.ToString+' (websocket opened)', lsTrace);
+  TdwlLogger.Log('Rq '+Binding.PeerIP+':'+Binding.Port.ToString+' '+dwlhttpCommandToString[State.Command]+' '+State.URI+' '+State.StatusCode.ToString+' (websocket opened)', lsTrace);
 end;
 
 type
@@ -566,11 +594,16 @@ begin
     FRequestsInProgressAccess.Leave;
   end;
   try
-    State.Command := ARequestInfo.Command;
-    if (FURIAliases=nil) or not FURIAliases.TryGetValue(ARequestInfo.URI, State.URI) then
-      State.URI := ARequestInfo.URI;
-    State.Flags := 0;
+    // all strings that are put in State as PWiderChar should 'live'
+    // until State will be freed
+    // We arranged this by putting the strings that are referenced in the state
+    // are kept in the serverstructure
     State._InternalServerStructure := AllocMem(SizeOf(TServerStructure));
+    State.Command := TdwlHTTPUtils.StringTodwlhttpCommand(ARequestInfo.Command);
+    if (FURIAliases=nil) or not FURIAliases.TryGetValue(ARequestInfo.URI, PServerStructure(State._InternalServerStructure).State_URI) then
+      PServerStructure(State._InternalServerStructure).State_URI := ARequestInfo.URI;
+    State.URI := PWideChar(PServerStructure(State._InternalServerStructure).State_URI);
+    State.Flags := 0;
     PServerStructure(State._InternalServerStructure).HTTPServer := Self;
     PServerStructure(State._InternalServerStructure).RequestInfo := ARequestInfo;
     PServerStructure(State._InternalServerStructure).ResponseInfo := AResponseInfo;
@@ -709,11 +742,11 @@ end;
 
 function TdwlHTTPHandler_PassThrough.ProcessRequest(const State: PdwlHTTPHandlingState): boolean;
 begin
-  var URI := State.URI;
   Result := false;
-  if Copy(URI, 1, 1)<>'/' then
+  var New_URI := PServerStructure(State._InternalServerStructure).State_URI;
+  if Copy(New_URI, 1, 1)<>'/' then
     Exit;
-  var S := Copy(URI, 2, MaxInt);
+  var S := Copy(New_URI, 2, MaxInt);
   var P := Pos('/', S);
   var P2 := Pos('?' , S);
   if (P2>0) and (P2<P) then
@@ -723,7 +756,9 @@ begin
   var Handler: TdwlHTTPHandler;
   if FHandlers.TryGetValue(Copy(S, 1, P-1), Handler) then
   begin
-    State.URI := Copy(S, P, MaxInt);
+    New_URI := Copy(S, P, MaxInt);
+    PServerStructure(State._InternalServerStructure).State_URI := New_URI;
+    State.URI := PWideChar(PServerStructure(State._InternalServerStructure).State_URI);
     // Do a security check
     // Before passing request to the found handler
     if Handler.Authenticate(State) then
@@ -823,9 +858,9 @@ end;
 
 initialization
   serverProcs.AllocateContentBufferProc := State_AllocateContentBuffer;
-  serverProcs.TryGetRequestParamProc := State_GetRequestParam;
-  serverProcs.TryGetHeaderValueProc := State_GetHeaderValue;
-  serverProcs.TryGetPayloadPtrProc := State_GetPostDataPtr;
+  serverProcs.GetRequestParamProc := State_GetRequestParam;
+  serverProcs.GetHeaderValueProc := State_GetHeaderValue;
+  serverProcs.GetPayloadPtrProc := State_GetPostDataPtr;
   serverProcs.SetHeaderValueProc := State_SetHeaderValue;
   serverProcs.ActivateWebSocketproc := State_ActivateWebSocket;
 

@@ -33,7 +33,8 @@ type
 implementation
 
 uses
-  Winapi.Windows, DWL.Logging, System.SysUtils, DWL.HTTP.Server.Globals;
+  Winapi.Windows, DWL.Logging, System.SysUtils, DWL.HTTP.Server.Globals,
+  DWL.HTTP.Server.Utils;
 
 const
   Param_AllowOrigin = 'AllowOrigin';
@@ -63,7 +64,7 @@ begin
   ConfigureProc := GetProcAddress(FDLLHandle, 'Configure');
   if Assigned(ConfigureProc) then
   try
-    var Error := ConfigureProc(@serverProcs, Params.GetAsNameValueText);
+    var Error := ConfigureProc(@serverProcs, PWideChar(Params.GetAsNameValueText));
     if Error<>'' then
       raise Exception.Create(Error);
   except
@@ -95,10 +96,10 @@ begin
     if Result and FDoAllowOrigins then
     begin
       var Origin: string;
-      if serverProcs.TryGetHeaderValueProc(State, 'Origin', Origin) then
+      if State.TryGetHeaderValue('Origin', Origin) then
       begin
         if FAllowAllOrigins or (FAllowOrigins.IndexOf(Origin)>=0) then
-          serverProcs.TryGetHeaderValueProc(State, 'Access-Control-Allow-Origin', Origin);
+          State.TryGetHeaderValue('Access-Control-Allow-Origin', Origin);
       end;
     end;
   end

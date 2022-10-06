@@ -1,7 +1,6 @@
 library HelloWorld;
 
 uses
-  SimpleShareMem,
   DWL.HTTP.Server.Globals,
   DWL.HTTP.Server.Types,
   System.SysUtils,
@@ -14,7 +13,7 @@ begin
   Result := THandler_HelloWorld.Authenticate(State);
 end;
 
-function Configure(const CallBackProcs: PdwlCallBackProcs; const Params: string): string; stdcall;
+function Configure(const CallBackProcs: PdwlCallBackProcs; const Params: PWideChar): string; stdcall;
 begin
   Result := '';
   serverProcs := CallBackProcs^;
@@ -48,3 +47,6 @@ begin
   ReportMemoryLeaksOnShutdown := True;
   {$ENDIF}
 end.
+
+
+

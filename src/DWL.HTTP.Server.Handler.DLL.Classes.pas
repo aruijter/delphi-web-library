@@ -22,7 +22,7 @@ type
     function ScopesAllowed(const State: PdwlHTTPHandlingState): boolean;
   end;
 
-  THandlingEndpoints_Dictionary = TDictionary<string, THandlingEndpoint_Props>;
+  THandlingEndpoints_Dictionary = TDictionary<byte, THandlingEndpoint_Props>;
 
   /// <summary>
   ///   This a class as base functionality for internally handling HTTP requests (in a DLL)
@@ -37,7 +37,7 @@ type
   protected
     class var FConfigParams: IdwlParams;
     class var FCallBackProcs: TdwlCallBackProcs;
-    class procedure RegisterHandling(const Command: string; const URI: string; const handleProc: TEndpoint_HandleProc; const AllowedScopes: TArray<string>; Params: IdwlParams=nil);
+    class procedure RegisterHandling(const Command: byte; const URI: string; const handleProc: TEndpoint_HandleProc; const AllowedScopes: TArray<string>; Params: IdwlParams=nil);
     class function StateParams(const State: PdwlHTTPHandlingState): IdwlParams;
     class function ScopeOverlap(const State: PdwlHTTPHandlingState; const Scopes: TArray<string>): boolean; overload;
     class function Get_UserId(const State: PdwlHTTPHandlingState): integer;
@@ -79,10 +79,6 @@ type
     ///   tries to get a header value
     /// </summary>
     class function TryGetHeaderValue(const State: PdwlHTTPHandlingState; const HeaderKey: string; var Value: string; AddJSONErrorOnFailure: boolean=false; const NewStatusCodeOnError: word=HTTP_STATUS_BAD_REQUEST): boolean;
-    /// <summary>
-    ///   Set a header value of the response
-    /// </summary>
-    class procedure SetHeaderValue(const State: PdwlHTTPHandlingState; const HeaderKey, Value: string);
     /// <summary>
     ///   try get a request param string
     /// </summary>
@@ -154,7 +150,7 @@ type
 
 class function TdwlDLLHandling.Authenticate(const State: PdwlHTTPHandlingState): boolean;
 begin
-  Result := State.Command=HTTP_COMMAND_OPTIONS;
+  Result := State.Command=dwlhttpOPTIONS;
 end;
 
 class function TdwlDLLHandling.Body_JSON(const State: PdwlHTTPHandlingState): TJSONObject;
@@ -202,14 +198,14 @@ begin
   var Enum := Cmds.GetEnumerator;
   try
     while Enum.MoveNext do
-      Val := Val+', '+Enum.Current.Key;
+      Val := Val+', '+dwlhttpCommandToString[Enum.Current.Key];
   finally
     Enum.Free;
   end;
   var Hdrs: string;
-  SetHeaderValue(State, 'Access-Control-Allow-Methods', Val);
-  if TryGetHeaderValue(State, 'Access-Control-Request-Headers', Hdrs) then
-    SetHeaderValue(State, 'Access-Control-Allow-Headers', Hdrs);
+  State.SetHeaderValue('Access-Control-Allow-Methods', Val);
+  if State.TryGetHeaderValue('Access-Control-Request-Headers', Hdrs) then
+    State.SetHeaderValue('Access-Control-Allow-Headers', Hdrs);
   Success := true;
 end;
 
@@ -220,7 +216,7 @@ begin
     var Cmds: THandlingEndpoints_Dictionary;
     if FHandlingEndpoints.TryGetValue(State.URI, Cmds) then
     begin
-      if State.Command=HTTP_COMMAND_OPTIONS then
+      if State.Command=dwlhttpOPTIONS then
         ProcessOptions(State, Success, Cmds)
       else
       begin
@@ -261,7 +257,7 @@ begin
   end;
 end;
 
-class procedure TdwlDLLHandling.RegisterHandling(const Command, URI: string; const HandleProc: TEndpoint_HandleProc; const AllowedScopes: TArray<string>; Params: IdwlParams=nil);
+class procedure TdwlDLLHandling.RegisterHandling(const Command: byte; const URI: string; const HandleProc: TEndpoint_HandleProc; const AllowedScopes: TArray<string>; Params: IdwlParams=nil);
 begin
   var Cmds: THandlingEndpoints_Dictionary;
   if not FHandlingEndpoints.TryGetValue(URI, Cmds) then
@@ -292,7 +288,7 @@ end;
 
 class function TdwlDLLHandling.TryGetHeaderValue(const State: PdwlHTTPHandlingState; const HeaderKey: string; var Value: string; AddJSONErrorOnFailure: boolean; const NewStatusCodeOnError: word): boolean;
 begin
-  Result := serverProcs.TryGetHeaderValueProc(@Self, HeaderKey, Value);
+  Result := State.TryGetHeaderValue(HeaderKey, Value);
   if AddJSONErrorOnFailure and not Result then
     JSON_AddError(State, 99, 'invalid or missing header '+HeaderKey, NewStatusCodeOnError);
 end;
@@ -308,13 +304,13 @@ end;
 
 class function TdwlDLLHandling.TryGetPayloadPtr(const State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean;
 begin
-  Result := serverProcs.TryGetPayloadPtrProc(@Self, Data, DataSize);
+  Result := serverProcs.GetPayloadPtrProc(@State, Data, DataSize);
 end;
 
 class function TdwlDLLHandling.TryGetRequestParamBool(const State: PdwlHTTPHandlingState; const Key: string; var Value: boolean; AddJSONErrorOnFailure: boolean; const NewStatusCodeOnError: word): boolean;
 begin
   var StrVal: string;
-  Result := serverProcs.TryGetRequestParamProc(@Self, Key, StrVal) and boolean.TryToParse(StrVal, Value);
+  Result := State.TryGetRequestParamStr(Key, StrVal) and boolean.TryToParse(StrVal, Value);
   if AddJSONErrorOnFailure and not Result then
     JSON_AddError(State, 99, 'invalid or missing parameter '+Key, NewStatusCodeOnError);
 end;
@@ -322,7 +318,7 @@ end;
 class function TdwlDLLHandling.TryGetRequestParamCardinal(const State: PdwlHTTPHandlingState; const Key: string; var Value: cardinal; AddJSONErrorOnFailure: boolean; const NewStatusCodeOnError: word): boolean;
 begin
   var StrVal: string;
-  Result := serverProcs.TryGetRequestParamProc(@Self, Key, StrVal) and cardinal.TryParse(StrVal, Value);
+  Result := State.TryGetRequestParamStr(Key, StrVal) and cardinal.TryParse(StrVal, Value);
   if AddJSONErrorOnFailure and not Result then
     JSON_AddError(State, 99, 'invalid or missing parameter '+Key, NewStatusCodeOnError);
 end;
@@ -331,7 +327,7 @@ class function TdwlDLLHandling.TryGetRequestParamDateTime(const State: PdwlHTTPH
 begin
   try
     var StrVal: string;
-    Result := serverProcs.TryGetRequestParamProc(@Self, Key, StrVal);
+    Result := State.TryGetRequestParamStr(Key, StrVal);
     if Result then
       Value := ISO8601ToDate(StrVal);
   except
@@ -344,7 +340,7 @@ end;
 class function TdwlDLLHandling.TryGetRequestParamInt(const State: PdwlHTTPHandlingState; const Key: string; var Value: integer; AddJSONErrorOnFailure: boolean; const NewStatusCodeOnError: word): boolean;
 begin
   var StrVal: string;
-  Result := serverProcs.TryGetRequestParamProc(@Self, Key, StrVal) and integer.TryParse(StrVal, Value);
+  Result := State.TryGetRequestParamStr(Key, StrVal) and integer.TryParse(StrVal, Value);
   if AddJSONErrorOnFailure and not Result then
     JSON_AddError(State, 99, 'invalid or missing parameter '+Key, NewStatusCodeOnError);
 end;
@@ -352,14 +348,14 @@ end;
 class function TdwlDLLHandling.TryGetRequestParamInt64(const State: PdwlHTTPHandlingState; const Key: string; var Value: Int64; AddJSONErrorOnFailure: boolean; const NewStatusCodeOnError: word): boolean;
 begin
   var StrVal: string;
-  Result := serverProcs.TryGetRequestParamProc(@Self, Key, StrVal) and Int64.TryParse(StrVal, Value);
+  Result := State.TryGetRequestParamStr(Key, StrVal) and Int64.TryParse(StrVal, Value);
   if AddJSONErrorOnFailure and not Result then
     JSON_AddError(State, 99, 'invalid or missing parameter '+Key, NewStatusCodeOnError);
 end;
 
 class function TdwlDLLHandling.TryGetRequestParamStr(const State: PdwlHTTPHandlingState; const Key: string; var Value: string; AddJSONErrorOnFailure: boolean; const NewStatusCodeOnError: word): boolean;
 begin
-  Result := serverProcs.TryGetRequestParamProc(@Self, Key, Value);
+  Result := State.TryGetRequestParamStr(Key, Value);
   if AddJSONErrorOnFailure and not Result then
     JSON_AddError(State, 99, 'invalid or missing parameter '+Key, NewStatusCodeOnError);
 end;
@@ -367,7 +363,7 @@ end;
 class function TdwlDLLHandling.TryGetRequestParamUInt16(const State: PdwlHTTPHandlingState; const Key: string; var Value: word; AddJSONErrorOnFailure: boolean; const NewStatusCodeOnError: word): boolean;
 begin
   var StrVal: string;
-  Result := serverProcs.TryGetRequestParamProc(@Self, Key, StrVal) and word.TryParse(StrVal, Value);
+  Result := State.TryGetRequestParamStr(Key, StrVal) and word.TryParse(StrVal, Value);
   if AddJSONErrorOnFailure and not Result then
     JSON_AddError(State, 99, 'invalid or missing parameter '+Key, NewStatusCodeOnError);
 end;
@@ -454,11 +450,6 @@ begin
     if Result then
       Break;
   end;
-end;
-
-class procedure TdwlDLLHandling.SetHeaderValue(const State: PdwlHTTPHandlingState; const HeaderKey, Value: string);
-begin
-  serverProcs.SetHeaderValueProc(@Self, HeaderKey, Value);
 end;
 
 class function TdwlDLLHandling.StateParams(const State: PdwlHTTPHandlingState): IdwlParams;
