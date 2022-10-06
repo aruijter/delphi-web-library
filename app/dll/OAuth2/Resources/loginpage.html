@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<html>
+<head>
+  <style>
+    html{
+      overflow: hidden;
+    }
+
+    body {
+      background-color: rgb(240, 241, 243);
+    }
+
+    .box {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background-color: white;
+      font-family: ulp-font, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, sans-serif;
+      font-size: 16px;
+      border-radius: 10px;
+      box-shadow: 20px 20px 40px rgba(0, 0, 0, 0.4);
+      padding: 30px;
+    }
+
+    B.box {
+      background-color: white;
+      font-family: ulp-font, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, sans-serif;
+      font-size: 16px;
+      border-radius: 10px;
+      box-shadow: 20px 20px 40px rgba(0, 0, 0, 0.4);
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 30px;
+    }
+    .button {
+      background-color: rgb(99, 93, 255);
+      color: white;
+      text-indent: 55px;
+    }
+
+    .item {
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      border: 1px solid rgb(180, 180, 180);
+      border-radius: 5px;
+      width: 300px;
+      height: 50px;
+    }
+
+    input {
+      border-radius: 5px;
+      border: 1px solid rgb(180, 180, 180);
+      font-size: 16px;
+      text-indent: 10px;
+      width: 293px;
+      height: 43px;
+      margin-bottom: 10px;
+    }
+
+    img {
+      width: 25px;
+      height: 25px;
+      padding: 15px;
+    }
+
+    p {
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="box">
+    Please identify yourself<br />To continue to $(displayname)<br /><br /><br />
+    <form method="post" action='./authorize_reply'>
+      <input type="hidden" name="p" value="-1">
+      <input type="hidden" name="session_state" value="$(session_state)">
+      <input type="email" name="emailaddress" autofocus="true" placeholder="E-mail address">
+      <br />
+      <input type="password" name="password" placeholder="Password">
+      <p>
+      <button class="item" style="background-color: rgb(99,93,255);color: white; text-indent: 55px;">Continue</button>
+    </form>
+	 $(providerforms)
+  </div>
+</body>
+
+</html>
