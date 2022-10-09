@@ -60,21 +60,6 @@ uses
 type
   TdwlMailStatus = (msQueued=0, msRetrying=2, msSent=5, msError=9);
 
-  TMailSendThread = class(TThread)
-  strict private
-    FParams: IdwlParams;
-    FSMTP: TIdSMTP;
-    FCurrentContextParams: IdwlParams;
-    FCurrentRefreshToken: string;
-    procedure Process;
-    function ProcessMsg(Msg: TIdMessage): TdwlResult;
-    procedure Refreshtoken_Callback(var Token: string; Action: TdwlAPIAuthorizerCallBackAction);
-  protected
-    procedure Execute; override;
-  public
-    constructor Create(Params: IdwlParams);
-  end;
-
   TIdSASLOAuth2 = class(TIdSASL)
   private
     FToken: string;
@@ -84,6 +69,23 @@ type
     property User: string read FUser write FUser;
     class function ServiceName: TIdSASLServiceName; override;
     function StartAuthenticate(const AChallenge, AHost, AProtocolName: string): string; override;
+  end;
+
+  TMailSendThread = class(TThread)
+  strict private
+    FParams: IdwlParams;
+    FSMTP: TIdSMTP;
+    FIdSASL: TIdSASLOAuth2;
+    FCurrentContextParams: IdwlParams;
+    FCurrentRefreshToken: string;
+    procedure FreeSMTP;
+    procedure Process;
+    function ProcessMsg(Msg: TIdMessage): TdwlResult;
+    procedure Refreshtoken_Callback(var Token: string; Action: TdwlAPIAuthorizerCallBackAction);
+  protected
+    procedure Execute; override;
+  public
+    constructor Create(Params: IdwlParams);
   end;
 
 { TdwlMailQueue }
@@ -177,6 +179,7 @@ begin
     FMailSendThread.Free;
   end;
   CloseHandle(FMailAddedEvent);
+  FDomainContexts.Free;
   inherited;
 end;
 
@@ -220,6 +223,15 @@ begin
     Process;
     WaitForSingleObject(TdwlMailQueue.FMailAddedEvent, 300000{5 min});
   end;
+end;
+
+procedure TMailSendThread.FreeSMTP;
+begin
+  if FSMTP=nil then
+    Exit;
+  FreeAndNil(FSMTP);
+  FreeAndNil(FIdSASL);
+  FCurrentContextParams := nil;
 end;
 
 procedure TMailSendThread.Process;
@@ -279,7 +291,7 @@ begin
       end;
      end;
   finally
-    FreeAndNil(FSMTP);
+    FreeSMTP;
     FCurrentContextParams := nil;
   end;
 end;
@@ -303,9 +315,9 @@ begin
         DomainContextParams := TdwlMailQueue.FDefaultDomainContextParams;
       if (FSMTP=nil) or (not FSMTP.Connected) or (FCurrentContextParams<>DomainContextParams) then
       begin
-        FreeAndNil(FSMTP);
-        FCurrentContextParams := DomainContextParams;
+        FreeSMTP;
         FSMTP := TIdSMTP.Create(nil);
+        FCurrentContextParams := DomainContextParams;
         // AdR 20190820: See if setting timeouts prevent the queue from
         // hanging sometimes...
         FSMTP.ConnectTimeout := 30000; {30 secs}
@@ -324,10 +336,10 @@ begin
             TdwlMailQueue.Log('Error fetching Access token for Context: '+DomainFrom);
             Exit;
           end;
-          var IdSASL := TIdSASLOAuth2.Create(nil);
-          IdSASL.Token := AccessToken;
-          IdSASL.User := FSMTP.Username;
-          FSMTP.SASLMechanisms.Add.SASL := IdSASL;
+          FIdSASL := TIdSASLOAuth2.Create(nil);
+          FIdSASL.Token := AccessToken;
+          FIdSASL.User := FSMTP.Username;
+          FSMTP.SASLMechanisms.Add.SASL := FIdSASL;
         end
         else
           FSMTP.Password := FCurrentContextParams.StrValue('password');
@@ -344,9 +356,9 @@ begin
         FSMTP.Connect;
       end;
       try
-        if not FSmtp.Connected then
+        if not FSMTP.Connected then
           raise Exception.Create('Failed to connect to mailserver');
-        FSmtp.Send(Msg);
+        FSMTP.Send(Msg);
         MailIsSent := true;
       except
         on E: Exception do
@@ -364,12 +376,11 @@ begin
       Result.AddErrorMsg('For some unknown reason mail was not sent');
   except
     on E:Exception do
-      Result.AddErrorMsg('Failed delivering for "'+Msg.From.Address+'": '+E.Message);
+      Result.AddErrorMsg('Failed delivery for "'+Msg.From.Address+'": '+E.Message);
   end;
 end;
 
-procedure TMailSendThread.Refreshtoken_Callback(var Token: string;
-  Action: TdwlAPIAuthorizerCallBackAction);
+procedure TMailSendThread.Refreshtoken_Callback(var Token: string; Action: TdwlAPIAuthorizerCallBackAction);
 begin
   if Action=acaGetRefreshtoken then
     Token := FCurrentRefreshToken;
