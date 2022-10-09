@@ -7,13 +7,11 @@ unit DWL.HTTP.Client;
 interface
 
 uses
-  System.Classes, System.SysUtils;
+  System.Classes, System.SysUtils, DWL.HTTP.Types;
 
 {$I dwl.inc}
 
 type
-  TdwlHTTPProgressEvent = procedure(ReceivedBytes, TotalBytes: cardinal; var CancelReceiving: boolean) of object;
-
   IdwlHTTPResponse = interface
     function GetHeader(const HeaderKey: string): string;
     /// <summary>
@@ -133,6 +131,7 @@ function New_HTTPRequest(const URL: string=''): IdwlHTTPRequest;
 ///   the amount of MaxConcurrentConnections defined in WinINet can be limiting, use this procedure to increase it
 /// </summary>
 procedure WinInet_SetMaxConcurrentConnections(MaxConcurrentConnections: cardinal);
+procedure PutInternetExplorerBrowserEmulationInRegistry;
 
 implementation
 

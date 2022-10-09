@@ -16,3 +16,10 @@ versioninfo.res
 app/dll/HelloWorld/HelloWorld.res
 *.skincfg
 app/dll/HelloWorld/Win64/
+app/dll/OAuth2/OAuth2.res
+app/dll/OAuth2/Win64/Debug/OAuth2.dll
+app/dll/OAuth2/OAuth2Resource.rc
+app/dwlserver/dwlserver_debug/dwlserver_debug.res
+app/dwlserver/dwlserver_debug/Win64/
+app/dwlserver/dwlserver_sv/dwlserver_sv.res
+package/DWL_src.res

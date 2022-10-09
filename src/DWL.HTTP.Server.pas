@@ -146,6 +146,7 @@ type
   TdwlHTTPHandler = class
   private
     FHTTPServer: TdwlHTTPServer;
+    FURI: string;
   protected
     /// <summary>
     ///   If the variable FWrapupProc is assigned, it will be called everything a process has finished
@@ -194,7 +195,7 @@ type
   protected
     function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
   public
-    constructor Create(CheckAccess: boolean=true);
+    constructor Create;
     destructor Destroy; override;
     function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
   end;
@@ -219,7 +220,14 @@ type
 procedure TdwlHTTPServer.HTTPServerDisconnect(AContext: TIdContext);
   function GetLogLine(State: PdwlHTTPHandlingState): string;
   begin
-    Result := 'Rq '+AContext.Binding.PeerIP+':'+AContext.Binding.Port.ToString+' '+dwlhttpCommandToString[State.Command]+' '+State.URI+' '+State.StatusCode.ToString+' ('+(GetTickCount64-PServerStructure(State._InternalServerStructure).Tick).ToString+'ms)';
+    var FinalHandler := PServerStructure(State._InternalServerStructure).FinalHandler;
+    if FinalHandler<>nil then
+      Result := FinalHandler.FURI
+    else
+      Result := '';
+    Result := 'Rq '+AContext.Binding.PeerIP+':'+AContext.Binding.Port.ToString+' '+
+      dwlhttpCommandToString[State.Command]+' '+Result+PServerStructure(State._InternalServerStructure).State_URI+' '+
+      State.StatusCode.ToString+' ('+(GetTickCount64-PServerStructure(State._InternalServerStructure).Tick).ToString+'ms)';
   end;
 begin
   // remove request from FRequestsInProgress, to be able to track while ones are not yet served out
@@ -794,6 +802,7 @@ begin
     begin
       PassThroughHandler := TdwlHTTPHandler_PassThrough.Create;
       PassThroughHandler.FHTTPServer := HTTPServer;
+      PassThroughHandler.FURI := FURI+URISegment;
       FHandlers.Add(URISegment, PassThroughHandler);
     end;
     TdwlHTTPHandler_PassThrough(PassThroughHandler).RegisterHandler(Copy(S, P, MaxInt), Handler);
@@ -802,6 +811,7 @@ begin
   begin
     FHandlers.Add(S, Handler);
     Handler.FHTTPServer := HTTPServer;
+    Handler.FURI := FURI+URI;
   end;
 end;
 

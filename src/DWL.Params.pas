@@ -3,7 +3,7 @@ unit DWL.Params;
 interface
 
 uses
-  System.Rtti, System.Generics.Collections, DWL.Resolver;
+  System.Rtti, System.Generics.Collections, DWL.Resolver, System.JSON;
 
 type
   IdwlParams=interface;
@@ -334,10 +334,11 @@ type
     ///   the store'
     /// </summary>
     /// <param name="JSON">
-    ///   string containing the JSON object of which the properties will be put
+    ///   string containing the JSON object (or as overload a TJSONObject) of which the properties will be put
     ///   in the store as pairs
     /// </param>
-    procedure WriteJSON(const JSON: string);
+    procedure WriteJSON(const JSON: string); overload;
+    procedure WriteJSON(const JSON: TJSONObject); overload;
     /// <summary>
     ///   Removes the pair with teh given key from the store
     /// </summary>
@@ -451,8 +452,8 @@ procedure AddGlobalMetaKey(const Domain, Key: string; Default: TValue);
 implementation
 
 uses
-  System.SysUtils, System.Generics.Defaults, System.JSON,
-  System.TypInfo, Spring, DWL.SysUtils, System.Classes;
+  System.SysUtils, System.Generics.Defaults,
+  System.TypInfo, DWL.SysUtils, System.Classes, DWL.Rtti.Utils;
 
 type
   TdwlMetaKey = class
@@ -514,7 +515,8 @@ type
     function GetAsNameValueText: string;
     function GetEnumerator: IdwlParamsEnumerator;
     procedure WriteNameValueText(const NameValueLines: string);
-    procedure WriteJSON(const JSON: string);
+    procedure WriteJSON(const JSON: string); overload;
+    procedure WriteJSON(const JSON: TJSONObject); overload;
     procedure Clear;
   public
     class constructor Create;
@@ -853,7 +855,12 @@ begin
   var Obj := TJSONObject(TJSONObject.ParseJSONValue(JSON));
   if not (Obj is TJSONObject) then
     raise Exception.Create('JSON is not an object');
-  var ENum := Obj.GetENumerator;
+  WriteJSON(Obj);
+end;
+
+procedure TdwlParams.WriteJSON(const JSON: TJSONObject);
+begin
+  var ENum := JSON.GetENumerator;
   try
     while ENum.MoveNext do
     begin
@@ -893,7 +900,7 @@ begin
   // If a changecallback procedure or triggers are registered, we're introducing an optimization
   // So that the callbacck will only be called on a real change
   var OldValue: TValue;
-  if (Assigned(FChangeCallbackProc) or (FTriggers<>nil)) and TryGetBareValue(LowerKey, OldValue) and OldValue.Equals(Value) then
+  if (Assigned(FChangeCallbackProc) or (FTriggers<>nil)) and TryGetBareValue(LowerKey, OldValue) and Value.Equals(OldValue) then
     Exit;
   FParams.AddOrSetValue(Lowerkey, Value);
   if Assigned(FChangeCallbackProc) then

@@ -179,6 +179,7 @@ type
     ///   able to be executed
     /// </summary>
     class procedure FinalizeDispatching; static;
+    class function GetSeverityLevelAsString(SeverityLevel: TdwlLogSeverityLevel): string; static;
   end;
 
   TdwlLogHelper = record
@@ -337,6 +338,23 @@ end;
 class procedure TdwlLogger.FinalizeDispatching;
 begin
   TLogEngine.FinalizeDispatching;
+end;
+
+class function TdwlLogger.GetSeverityLevelAsString(
+  SeverityLevel: TdwlLogSeverityLevel): string;
+begin
+  case SeverityLevel of
+  lsNotSet: Result := 'NOT_SET';
+  lsTrace: Result := 'TRACE';
+  lsDebug: Result := 'DEBUG';
+  lsNotice: Result := 'NOTICE';
+  lsWarning: Result := 'WARN';
+  lsError: Result := 'ERROR';
+  lsCritical: Result := 'CRITICAL';
+  lsFatal: Result := 'FATAL';
+  else
+    Result := '';
+  end;
 end;
 
 class procedure TdwlLogger.Log(const LogItem: PdwlLogItem);

@@ -18,7 +18,7 @@ type
     FL_KeyTrail: integer;
   public
     /// <summary>
-    ///   registerd a function that replaces the key with the resolved value
+    ///   registers a function that replaces the key with the resolved value
     /// </summary>
     /// <param name="Key">
     ///   Key this function will resolve

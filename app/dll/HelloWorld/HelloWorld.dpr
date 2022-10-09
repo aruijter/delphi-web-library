@@ -4,7 +4,7 @@ uses
   DWL.HTTP.Server.Globals,
   DWL.HTTP.Server.Types,
   System.SysUtils,
-  HelloWorld.Handler in 'Units\HelloWorld.Handler.pas';
+  HelloWorld.Handler in 'units\HelloWorld.Handler.pas';
 
 {$R *.res}
 

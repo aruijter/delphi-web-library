@@ -6,7 +6,7 @@ uses
   DWL.HTTP.Server.Types,
   DWL.HTTP.Server.Globals,
   System.SysUtils,
-  OAuth2.Handler in 'Units\OAuth2.Handler.pas';
+  OAuth2.Handler in 'units\OAuth2.Handler.pas';
 
 {$R *.res}
 
