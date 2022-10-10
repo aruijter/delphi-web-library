@@ -121,13 +121,13 @@ begin
     FMySQL_Profile := New_Params;
     FParams.AssignTo(FMySQL_Profile, Params_SQLConnection);
     InitDatabase;
-    TdwlMailQueue.Configure(FParams);
+    TdwlMailQueue.Configure(FParams, true);
     FLogHandler := TdwlHTTPHandler_Log.Create(FParams); // init before activating DoLog!
     EnableLogDispatchingToCallback(false, DoLog);
     ACMECLient := TdwlACMEClient.Create;
     try
       ACMECLient.Domain := FParams.StrValue(Param_ACMEDomain);
-      ACMECLient.ProfileCountryCode := FParams.StrValue(Param_ACMECountryCode);
+      ACMECLient.ProfileCountryCode := FParams.StrValue(Param_ACMECountry);
       ACMECLient.ProfileState := FParams.StrValue(Param_ACMEState);
       ACMECLient.ProfileCity := FParams.StrValue(Param_ACMECity);
       ACMEClient.CallBackPortNumber := FParams.IntValue(Param_ACMEPort, ParamDef_ACMEPort);

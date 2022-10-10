@@ -138,6 +138,7 @@ uses
 
 const
   Param_Body_JSON='body_json';
+  Param_Scopes='scopes';
 
 type
   PBaseInternalHandlingStructure = ^TBaseInternalHandlingStructure;
@@ -251,6 +252,9 @@ begin
       var BodyJSON: TJSONObject;
       if (StateParams(State).TryGetValue(Param_Body_JSON, V) and V.TryAsType(BodyJSON, false)) then
         BodyJSON.Free;
+      var Scopes: TStringList;
+      if (StateParams(State).TryGetValue(Param_Scopes, V) and V.TryAsType(Scopes, false)) then
+        Scopes.Free;
       PBaseInternalHandlingStructure(State._InternalHandlingStructure).Params := nil;
     end;
     FreeMem(State._InternalHandlingStructure);
@@ -273,8 +277,6 @@ begin
 end;
 
 class function TdwlDLLHandling.StateParams_Scopes(const State: PdwlHTTPHandlingState): TStringList;
-const
-  Param_Scopes='scopes';
 begin
   var Params := StateParams(State);
   var V: TValue;
@@ -282,7 +284,7 @@ begin
   begin
     Result := TStringList.Create;
     Result.CaseSensitive := false;
-    Params.WriteValue('scopes', TValue.From(Result));
+    Params.WriteValue(Param_Scopes, TValue.From(Result));
   end;
 end;
 
@@ -440,8 +442,8 @@ end;
 
 class function TdwlDLLHandling.ScopeOverlap(const State: PdwlHTTPHandlingState; const Scopes: TArray<string>): boolean;
 begin
-  var StateScopes := StateParams_Scopes(State);
   Result := false;
+  var StateScopes := StateParams_Scopes(State);
   if StateScopes=nil then
     Exit;
   for var i := 0 to High(Scopes) do
@@ -520,9 +522,13 @@ end;
 class procedure TdwlDLLHandling_OpenID.Configure(const Params: string);
 begin
   inherited Configure(Params);
+  // get the Issuer,
   var Issuer := FConfigParams.StrValue(Param_Issuer);
   if Issuer='' then
-    raise Exception.Create('Issuer is not configured');
+  begin
+    Issuer :=  FConfigParams.StrValue(Param_BaseURI)+Default_EndpointURI_OAuth2;
+    TdwlLogger.Log('No issuer configured, default applied: '+Issuer, lsNotice);
+  end;
   // we only need this client for JWT checking purposes
   FOIDC_Client := TdwlOIDC_Client.Create(Issuer, '', '');
 end;

@@ -53,7 +53,6 @@ type
     class var FUserTable: string;
     class var FField_MD5: string;
     class var FNewUser_Scopes: TArray<string>;
-    class procedure Log(const Msg: string; SeverityLevel: TdwlLogSeverityLevel);
     class function GetClientInfoFromHeader(const State: PdwlHTTPHandlingState; var client_id: string): string;
     class function ResolveSQL(const SQL: string): string;
     class function ConvertScope(State: PdwlHTTPHandlingState; UserID: integer; var Scope: string): boolean;
@@ -215,7 +214,7 @@ begin
   if FIssuerUri='' then
   begin
     FIssuerUri :=  FConfigParams.StrValue(Param_BaseURI)+FConfigParams.StrValue(Param_Endpoint);
-    Log('No issuer configured, default applied: '+FIssuerUri, lsNotice);
+    TdwlLogger.Log('No issuer configured, default applied: '+FIssuerUri, lsNotice);
   end;
   // get new user scopes
   FNewUser_Scopes := FConfigParams.StrValue(Param_NewUser_Scopes).Split(['  ']);
@@ -255,11 +254,11 @@ begin
       Provider.FDisplayName := Reader.GetString(1, true, Provider.FTechName);
       Provider.FImgData := Reader.GetString(2, true);
       FProviders.Add(Provider);
-      Log('Successfully Registered external OIDC Provider '+Provider.FTechName, lsTrace);
+      TdwlLogger.Log('Successfully Registered external OIDC Provider '+Provider.FTechName, lsTrace);
     except
       on E: Exception do
       begin
-        Log('Error while registering external OIDC Provider '+Provider.FTechName+':'+E.Message, lsWarning);
+        TdwlLogger.Log('Error while registering external OIDC Provider '+Provider.FTechName+':'+E.Message, lsWarning);
         Provider.Free;
       end;
     end;
@@ -675,11 +674,6 @@ begin
     Response_JSON(State).AddPair('error', 'invalid request')
   else
     Response_JSON(State).AddPair('error', ErrorMessage);
-end;
-
-class procedure THandler_OAuth2.Log(const Msg: string; SeverityLevel: TdwlLogSeverityLevel);
-begin
-  TdwlLogger.Log('oauth2: '+Msg, SeverityLevel);
 end;
 
 class function THandler_OAuth2.Post_token(const State: PdwlHTTPHandlingState): boolean;

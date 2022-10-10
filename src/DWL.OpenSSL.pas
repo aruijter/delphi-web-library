@@ -190,18 +190,33 @@ end;
 
 class function TdwlOpenSSL.New_PrivateKey: IdwlOpenSSLKey;
 begin
-  Result := TdwlOpenSSLKey.Create(EVP_PKEY_Q_keygen(nil, nil, PAnsiChar('RSA'), 4096));
+  Result := TdwlOpenSSLKey.Create(EVP_PKEY_Q_keygen(nil, nil, 'RSA', 4096));
 end;
 
 class function TdwlOpenSSL.New_PublicKey_FromModulusExponent(const Modulus, Exponent: TBytes): IdwlOpenSSLKey;
 begin
-  var key := EVP_PKEY_new;
+  var key: pEVP_PKEY := nil;
+  var params: pOSSL_PARAM;
+  var bld := OSSL_PARAM_BLD_new;
   var BN_n := BN_bin2bn(@Modulus[0], Length(Modulus), nil);
   var BN_e := BN_bin2bn(@Exponent[0], Length(Exponent), nil);
   try
-    EVP_PKEY_set_bn_param(key, 'n', BN_n);
-    EVP_PKEY_set_bn_param(key, 'e', BN_e);
+    CheckOpenSSL(OSSL_PARAM_BLD_push_BN(bld, 'n', BN_n));
+    CheckOpenSSL(OSSL_PARAM_BLD_push_BN(bld, 'e', BN_e));
+    params := OSSL_PARAM_BLD_to_param(bld);
+    try
+      var ctx := EVP_PKEY_CTX_new_from_name(nil, 'RSA', nil);
+      try
+        CheckOpenSSL(EVP_PKEY_fromdata_init(ctx));
+        CheckOpenSSL(EVP_PKEY_fromdata(ctx, key, EVP_PKEY_PUBLIC_KEY, params));
+      finally
+        EVP_PKEY_CTX_free(ctx);
+      end;
+    finally
+      OSSL_PARAM_free(params);
+    end;
   finally
+    OSSL_PARAM_BLD_free(bld);
     BN_free(BN_n);
     BN_free(BN_e);
   end;
@@ -229,9 +244,11 @@ class function TdwlOpenSSL.VerifySignature(const Data: ansistring; const Signatu
 begin
   var mdctx := EVP_MD_CTX_new;
   try
-    EVP_DigestVerifyInit(mdctx, nil, EVP_sha256, nil, PublicKey.key);
-    EVP_DigestVerifyUpdate(mdctx, PAnsiChar(Data), Length(Data));
-    Result := EVP_DigestVerifyFinal(mdctx, PAnsiChar(@Signature[0]), Length(Signature))=1;
+    CheckOpenSSL(EVP_DigestVerifyInit(mdctx, nil, EVP_sha256, nil, PublicKey.key));
+    CheckOpenSSL(EVP_DigestVerifyUpdate(mdctx, PAnsiChar(Data), Length(Data)));
+    var Res := EVP_DigestVerifyFinal(mdctx, PAnsiChar(@Signature[0]), Length(Signature));
+    CheckOpenSSL(Res);
+    Result := Res=1;
   finally
     EVP_MD_CTX_free(mdctx);
   end;

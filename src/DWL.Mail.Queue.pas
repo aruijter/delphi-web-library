@@ -28,20 +28,20 @@ type
     /// <summary>
     ///   <para>
     ///     Call Configure to activate the MailQueue. The Params object will
-    ///     'taken' and modified internally within the processor (f.e. when
+    ///     'taken' and when sending is active modified internally within the processor (f.e. when
     ///     refreshtokens are changed), This opens the possibility to attach
     ///     an event to the Params to save the changes persistently.
     ///   </para>
     ///   <para>
     ///     Needed keys: <br />- MySQL configuration related keys like host,
-    ///     username, password and db <br />- mailqueue_domains: a JSON
+    ///     username, password and db <br />- mailqueue_domains (only when sending enabled): a JSON
     ///     string with an array of objects. each object represents a
     ///     delivery domain and needs to contains keys for domain, host,
     ///     port, username, password or endpoint/clientid/refreshtoken in the
     ///     case of oauth2 configuration <br />
     ///   </para>
     /// </summary>
-    class procedure Configure(Params: IdwlParams); static;
+    class procedure Configure(Params: IdwlParams; EnableMailSending: boolean=false); static;
     /// <summary>
     ///   Queues an Indy TIdMessage for sending. Please note ownership of
     ///   the IdMessage is not taken! You have to free it yourself (because you
@@ -91,7 +91,7 @@ type
 
 { TdwlMailQueue }
 
-class procedure TdwlMailQueue.Configure(Params: IdwlParams);
+class procedure TdwlMailQueue.Configure(Params: IdwlParams; EnableMailSending: boolean=false);
 const
   SQL_CheckTable = 'CREATE TABLE IF NOT EXISTS dwl_mailqueue (' +
     'Id INT UNSIGNED NOT NULL AUTO_INCREMENT, ' +
@@ -107,60 +107,63 @@ const
     'INDEX `StatusDelayedUntilIndex` (`Status`, `DelayedUntil`))';
 begin
   FParams := Params;
-  FParams.WriteValue(Param_CreateDatabase, true);
-  FParams.WriteValue(Param_TestConnection, true);
-  var Session := New_MySQLSession(FParams);
-  FParams.ClearKey(Param_CreateDatabase);
-  FParams.ClearKey(Param_TestConnection);
-  SeSsion.CreateCommand(SQL_CheckTable).Execute;
-  FDomainContexts := TDictionary<string, IdwlParams>.Create;
-  var DomainContextStr := FParams.StrValue(Param_mailQueue_Domains);
-  if DomainContextStr<>'' then
+  if EnableMailSending then
   begin
-    var JSON := TJSONObject.ParseJSONValue(DomainContextStr);
-    try
-      if JSON is TJSONArray then
-      begin
-        var Enum := TJSONArray(JSON).GetEnumerator;
-        try
-          while ENum.MoveNext do
-          begin
-            if not (ENum.Current is TJSONObject) then
+    FParams.WriteValue(Param_CreateDatabase, true);
+    FParams.WriteValue(Param_TestConnection, true);
+    var Session := New_MySQLSession(FParams);
+    FParams.ClearKey(Param_CreateDatabase);
+    FParams.ClearKey(Param_TestConnection);
+    SeSsion.CreateCommand(SQL_CheckTable).Execute;
+    FDomainContexts := TDictionary<string, IdwlParams>.Create;
+    var DomainContextStr := FParams.StrValue(Param_mailQueue_Domains);
+    if DomainContextStr<>'' then
+    begin
+      var JSON := TJSONObject.ParseJSONValue(DomainContextStr);
+      try
+        if JSON is TJSONArray then
+        begin
+          var Enum := TJSONArray(JSON).GetEnumerator;
+          try
+            while ENum.MoveNext do
             begin
-              Log('Configured mailqueue_domains array contains a non-object entry', lsError);
-              Break;
-            end;
-            var DomainParams := New_Params;
-            DomainParams.WriteJSON(TJSONObject(ENum.Current));
-            var Domain: string;
-            if not DomainParams.TryGetStrValue('domain', Domain) then
-              Log('Missing domain in on of the configured contexts', lsError)
-            else
-            begin
-              DomainParams.EnableChangeTracking(ParamChanged);
-              if Domain='*' then
-                FDefaultDomainContextParams := DomainParams
+              if not (ENum.Current is TJSONObject) then
+              begin
+                Log('Configured mailqueue_domains array contains a non-object entry', lsError);
+                Break;
+              end;
+              var DomainParams := New_Params;
+              DomainParams.WriteJSON(TJSONObject(ENum.Current));
+              var Domain: string;
+              if not DomainParams.TryGetStrValue('domain', Domain) then
+                Log('Missing domain in on of the configured contexts', lsError)
               else
-                FDomainContexts.Add(Domain, DomainParams);
+              begin
+                DomainParams.EnableChangeTracking(ParamChanged);
+                if Domain='*' then
+                  FDefaultDomainContextParams := DomainParams
+                else
+                  FDomainContexts.Add(Domain, DomainParams);
+              end;
             end;
+          finally
+            Enum.Free;
           end;
-        finally
-          Enum.Free;
-        end;
-      end
-      else
-        Log('Configured mailqueue_domains is not an JSON array', lsError);
-    finally
-      JSON.Free;
+        end
+        else
+          Log('Configured mailqueue_domains is not an JSON array', lsError);
+      finally
+        JSON.Free;
+      end;
     end;
-  end;
-  if FDomainContexts.Count=0 then
-    Log('No domains configured, mail will not be processed', lsWarning)
-  else
-  begin
-    var ThreadParams := New_Params;
-    FParams.AssignTo(ThreadParams, Params_SQLConnection);
-    FMailSendThread := TMailSendThread.Create(ThreadParams);
+    if FDomainContexts.Count=0 then
+      Log('No domains configured, mail will not be processed', lsWarning)
+    else
+    begin
+      var ThreadParams := New_Params;
+      FParams.AssignTo(ThreadParams, Params_SQLConnection);
+      FMailSendThread := TMailSendThread.Create(ThreadParams);
+    end;
   end;
 end;
 

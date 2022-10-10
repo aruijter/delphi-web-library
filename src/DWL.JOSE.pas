@@ -142,13 +142,13 @@ type
     function ProtectedHeader: IdwlJSONWebPart;
     function UnprotectedHeader: IdwlJSONWebPart;
     function Serialize(PrivateKey: IdwlOpenSSLKey; SerializationKind: TdwlJWSSerializationKind=jskCompact): string;
-    procedure SetPayloadString(PayloadStr: string);
   protected
     FProtectedHeader: IdwlJSONWebPart;
     function GetPayload: TBytes; virtual;
     procedure SetPayload(Payload: TBytes); virtual;
+    procedure SetPayloadString(PayloadStr: string); virtual;
   public
-    constructor Create(const CompactSerializationValue: string='');
+    constructor Create(const CompactSerializationValue: string=''); virtual;
   end;
 
   TdwlJWT = class(TdwlJWS, IdwlJWT)
@@ -161,6 +161,9 @@ type
   protected
     function GetPayload: TBytes; override;
     procedure SetPayload(Payload: TBytes); override;
+    procedure SetPayloadString(PayloadStr: string); override;
+  public
+    constructor Create(const CompactSerializationValue: string=''); override;
   end;
 
   TdwlJWK = class(TInterfacedObject, IdwlJWK)
@@ -197,7 +200,7 @@ begin
       SetLength(FPartsForSignatureCheck, 0);
       raise Exception.Create('Invalid JWS Serialization');
     end;
-    FPayload := TNetencoding.Base64URL.DecodeStringToBytes(FPartsForSignatureCheck[1]);
+    SetPayloadString(TNetencoding.Base64URL.Decode(FPartsForSignatureCheck[1]));
     FProtectedHeader := TdwlJSONWebPart.Create(TNetencoding.Base64URL.Decode(FPartsForSignatureCheck[0]));
   end;
 end;
@@ -374,6 +377,11 @@ end;
 
 { TdwlJWT }
 
+constructor TdwlJWT.Create(const CompactSerializationValue: string);
+begin
+  inherited Create(CompactSerializationValue);
+end;
+
 function TdwlJWT.GetPayload: TBytes;
 begin
   if FPayload<>nil then
@@ -387,6 +395,8 @@ end;
 
 function TdwlJWT.Payload: IdwlJSONWebPart;
 begin
+  if FPayload=nil then
+    FPayload := TdwlJSONWebPart.Create;
   Result := FPayload;
 end;
 
@@ -398,6 +408,11 @@ end;
 procedure TdwlJWT.SetPayload(Payload: TBytes);
 begin
   FPayload := TdwlJSONWebPart.Create(TEncoding.UTF8.GetString(Payload));
+end;
+
+procedure TdwlJWT.SetPayloadString(PayloadStr: string);
+begin
+  FPayload := TdwlJSONWebPart.Create(PayLoadStr);
 end;
 
 // Generic creation functions

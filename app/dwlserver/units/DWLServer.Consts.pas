@@ -7,7 +7,7 @@ const
 
   Param_ACMEPort = 'ACMEport'; ParamDef_ACMEPort = 80;
   Param_ACMEDomain = 'ACMEDomain';
-  Param_ACMECountryCode = 'ACMECountryCode';
+  Param_ACMECountry = 'ACMECountry';
   Param_ACMEState = 'ACMEState';
   Param_ACMECity = 'ACMECity';
   Param_RestPort = 'RestPort'; ParamDef_RestPort = 443;

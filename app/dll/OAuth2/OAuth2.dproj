@@ -126,7 +126,7 @@
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
-        <DCCReference Include="Units\OAuth2.Handler.pas"/>
+        <DCCReference Include="units\OAuth2.Handler.pas"/>
         <RcItem Include="Resources\loginpage.html">
             <ContainerId>ResourceItem</ContainerId>
             <ResourceType>TEXT</ResourceType>

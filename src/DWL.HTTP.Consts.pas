@@ -4,6 +4,7 @@ interface
 
 const
   HTTP_HEADER_CONTENT_TYPE = 'Content-Type';
+  HTTP_HEADER_CONTENT_DISPOSITION = 'Content-Disposition';
   HTTP_HEADER_REPLAY_NONCE = 'Replay-Nonce';
   HTTP_HEADER_LOCATION = 'Location';
 
@@ -19,13 +20,16 @@ const
   CONTENT_TYPE_X_WWW_FORM_URLENCODED = 'application/x-www-form-urlencoded';
   CONTENT_TYPE_HTML = 'text/html';
   CONTENT_TYPE_JSON = 'application/json';
-
+  CONTENT_TYPE_OCTET_STREAM = 'application/octet-stream';
   CHARSET_UTF8 = 'utf-8';
 
   Param_BaseURI= 'baseuri';
   Param_Endpoint= 'endpoint';
+  Param_Issuer = 'issuer';
+  Param_LogSecret = 'logsecret';
 
   EndpointURI_Log = '/log';
+  Default_EndpointURI_OAuth2 = '/oauth2';
 
   // HTTP Command consts
   dwlhttpUNKNOWN = 0;

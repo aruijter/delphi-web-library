@@ -277,7 +277,8 @@ begin
     if Assigned(PServerStructure(State._InternalServerStructure).FinalHandler) and
       Assigned(PServerStructure(State._InternalServerStructure).FinalHandler.FWrapupProc) then
       PServerStructure(State._InternalServerStructure).FinalHandler.FWrapupProc(State);
-    FreeMem(State._InternalServerStructure);
+    PServerStructure(State._InternalServerStructure).State_URI := ''; // dispose string
+    Freemem(State._InternalServerStructure);
     FreeMem(State);
   end;
 end;
@@ -499,6 +500,7 @@ begin
   end
   else
     Result := -1;
+  ValueCharCnt := FoundStrCharCount;
 end;
 
 procedure State_SetHeaderValue(const State: PdwlHTTPHandlingState; const HeaderKey, Value: PWideChar); stdcall;

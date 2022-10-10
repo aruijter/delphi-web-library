@@ -23,7 +23,7 @@ implementation
 uses
   DWL.Params.Utils, System.SysUtils, Winapi.ActiveX,
   System.Win.ComObj, DWLServer.Consts, System.Rtti, System.Classes,
-  DWL.Params.Consts;
+  DWL.Params.Consts, DWL.HTTP.Consts;
 
 { TDWLServerSection }
 

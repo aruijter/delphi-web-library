@@ -18,7 +18,16 @@ const
   SHA256_DIGEST_LENGTH = 32;
   SHA512_DIGEST_LENGTH = 64;
 
-  type
+  OSSL_KEYMGMT_SELECT_PRIVATE_KEY = $01;
+  OSSL_KEYMGMT_SELECT_PUBLIC_KEY = $02;
+  OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS = $04;
+  OSSL_KEYMGMT_SELECT_OTHER_PARAMETERS = $80;
+  OSSL_KEYMGMT_SELECT_ALL_PARAMETERS = OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS OR OSSL_KEYMGMT_SELECT_OTHER_PARAMETERS;
+  EVP_PKEY_KEY_PARAMETERS = OSSL_KEYMGMT_SELECT_ALL_PARAMETERS;
+  EVP_PKEY_PUBLIC_KEY = EVP_PKEY_KEY_PARAMETERS OR OSSL_KEYMGMT_SELECT_PUBLIC_KEY;
+  EVP_PKEY_KEYPAIR = EVP_PKEY_PUBLIC_KEY OR OSSL_KEYMGMT_SELECT_PRIVATE_KEY;
+
+type
   int = integer;
 
   pASN1_STRING = pointer;
@@ -40,6 +49,8 @@ const
   pEVP_PKEY = pointer;
 
   pOSSL_LIB_CTX = pointer;
+  pOSSL_PARAM = pointer;
+  pOSSL_PARAM_BLD = pointer;
 
   ppem_password_cb = pointer;
 
@@ -48,6 +59,10 @@ const
   pX509_REQ = pointer;
   pX509_NAME = pointer;
 
+// Error functions
+function ERR_get_error: long; cdecl;
+function ERR_error_string(e: ulong32; buf: PAnsiChar): PAnsiChar; cdecl;
+function ERR_GetErrorMessage: String;
 // ASN1 functions
 function ASN1_STRING_get0_data(const x: pASN1_STRING): PAnsiChar;
 function ASN1_STRING_length(const x: pASN1_STRING): int;
@@ -68,6 +83,12 @@ function BN_bn2bin(const a: pBIGNUM; _to: PAnsiChar): int cdecl;
 function BN_num_bits(const a: PBIGNUM): int cdecl;
 function BN_num_bytes(const a: pBIGNUM): integer;
 procedure BN_free(a: pBIGNUM) cdecl;
+// OSSL functions
+function OSSL_PARAM_BLD_new: pOSSL_PARAM_BLD;
+procedure OSSL_PARAM_BLD_free(bld: pOSSL_PARAM_BLD);
+function OSSL_PARAM_BLD_push_BN(bld: pOSSL_PARAM_BLD; key: PAnsiChar; const bn: pBIGNUM): int;
+function OSSL_PARAM_BLD_to_param(bld: pOSSL_PARAM_BLD): pOSSL_PARAM;
+procedure OSSL_PARAM_free(params: pOSSL_PARAM);
 // EVP functions
 function EVP_MD_CTX_new: pEVP_MD_CTX; cdecl;
 procedure EVP_MD_CTX_free(ctx: pEVP_MD_CTX); cdecl;
@@ -77,6 +98,11 @@ procedure EVP_PKEY_free(pkey: PEVP_PKEY) cdecl;
 function EVP_PKEY_Q_keygen(libctx: pOSSL_LIB_CTX; const propq: PAnsiChar; const _type: PAnsiChar; bits: size_t): pEVP_PKEY;
 function EVP_PKEY_get_bn_param(pkey: pEVP_PKEY; key_name: PAnsiChar; var bn: pBIGNUM): int;
 function EVP_PKEY_set_bn_param(pkey: pEVP_PKEY; key_name: PAnsiChar; var bn: pBIGNUM): int;
+function EVP_PKEY_CTX_new_from_name(libctx: pOSSL_LIB_CTX; const name: PAnsiChar; const propquery: PAnsiChar): pEVP_PKEY_CTX;
+procedure EVP_PKEY_CTX_free(ctx: pEVP_PKEY_CTX);
+function EVP_PKEY_fromdata_init(ctx: pEVP_PKEY_CTX): int;
+function EVP_PKEY_fromdata(ctx: pEVP_PKEY_CTX; var key: pEVP_PKEY; selection: int; params: pOSSL_PARAM): int;
+
 function EVP_DigestSignInit(ctx: pEVP_MD_CTX; pctx: ppEVP_PKEY_CTX; _type: pEVP_MD; e: pENGINE; pkey: pEVP_PKEY): int; cdecl;
 function EVP_DigestSignUpdate(ctx: pEVP_MD_CTX; const data: pointer; cnt: size_t): int; cdecl;
 function EVP_DigestSignFinal(ctx: pEVP_MD_CTX; const sig: PAnsiChar; var siglen: size_t): int; cdecl;
@@ -105,7 +131,12 @@ procedure OPENSSL_free(addr: pointer);
 procedure CRYPTO_free(ptr: pointer; const _file: PAnsiChar; line: int);
 function RAND_bytes(buf: PAnsiChar; num: int): int cdecl;
 
+procedure CheckOpenSSL(Res: int);
+
 implementation
+
+uses
+  System.AnsiStrings, System.SysUtils;
 
 const
   {$IFDEF WIN64}
@@ -114,6 +145,9 @@ const
   LIBEAY_DLL_NAME = 'libcrypto-3.dll';
   {$ENDIF}
 
+function ERR_get_error; external LIBEAY_DLL_NAME delayed;
+function ERR_error_string; external LIBEAY_DLL_NAME delayed;
+//
 function ASN1_STRING_get0_data; external LIBEAY_DLL_NAME delayed;
 function ASN1_STRING_length; external LIBEAY_DLL_NAME delayed;
 //
@@ -132,6 +166,12 @@ function BN_bn2bin; external LIBEAY_DLL_NAME delayed;
 function BN_num_bits; external LIBEAY_DLL_NAME delayed;
 procedure BN_free; external LIBEAY_DLL_NAME delayed;
 //
+function OSSL_PARAM_BLD_new; external LIBEAY_DLL_NAME delayed;
+procedure OSSL_PARAM_BLD_free; external LIBEAY_DLL_NAME delayed;
+function OSSL_PARAM_BLD_push_BN; external LIBEAY_DLL_NAME delayed;
+function OSSL_PARAM_BLD_to_param; external LIBEAY_DLL_NAME delayed;
+procedure OSSL_PARAM_free; external LIBEAY_DLL_NAME delayed;
+//
 function EVP_MD_CTX_new; external LIBEAY_DLL_NAME delayed;
 procedure EVP_MD_CTX_free; external LIBEAY_DLL_NAME delayed;
 function EVP_sha256; external LIBEAY_DLL_NAME delayed;
@@ -140,6 +180,10 @@ procedure EVP_PKEY_free; external LIBEAY_DLL_NAME delayed;
 function EVP_PKEY_Q_keygen; external LIBEAY_DLL_NAME delayed;
 function EVP_PKEY_get_bn_param; external LIBEAY_DLL_NAME delayed;
 function EVP_PKEY_set_bn_param; external LIBEAY_DLL_NAME delayed;
+function EVP_PKEY_CTX_new_from_name; external LIBEAY_DLL_NAME delayed;
+procedure EVP_PKEY_CTX_free; external LIBEAY_DLL_NAME delayed;
+function EVP_PKEY_fromdata_init; external LIBEAY_DLL_NAME delayed;
+function EVP_PKEY_fromdata; external LIBEAY_DLL_NAME delayed;
 function EVP_DigestSignInit; external LIBEAY_DLL_NAME delayed;
 function EVP_DigestSignUpdate; external LIBEAY_DLL_NAME delayed;
 function EVP_DigestSignFinal; external LIBEAY_DLL_NAME delayed;
@@ -169,6 +213,14 @@ function RAND_bytes; external LIBEAY_DLL_NAME delayed;
 
 // The following functions are the OpenSSL macro definitions
 // which are not exported in the DLL
+function ERR_GetErrorMessage: String;
+var
+  locErrMsg: array [0 .. 160] of Char;
+begin
+  ERR_error_string(ERR_get_error, @locErrMsg);
+  Result := String(System.AnsiStrings.StrPas(PAnsiChar(@locErrMsg)));
+end;
+
 function BIO_pending(b : pBIO): int;
 begin
   Result := BIO_ctrl(b, BIO_CTRL_PENDING,0,nil);
@@ -183,6 +235,15 @@ function BN_num_bytes(const a: pBIGNUM): integer;
 begin
   Result := (BN_num_bits(a)+7) div 8;
 end;
+
+procedure CheckOpenSSL(Res: int);
+begin
+  {$IFDEF DEBUG}
+  if Res<>1 then
+    raise Exception.Create(ERR_GetErrorMessage);
+  {$ENDIF}
+end;
+
 
 end.
 

@@ -11,6 +11,14 @@ type
     class function TryMD5(const S: string; out Hash: TBytes): boolean; overload; static;
     class function MD5(const S: string): string; static;
 
+    class function AsymmetricEncryption_GenerateKeyPair(var PrivateKey, PublicKey: TBytes): boolean; static;
+    class function AsymmetricEncryption_Encrypt(var Bytes: TBytes; const PublicKey: TBytes): boolean; static;
+    class function AsymmetricEncryption_Decrypt(var Bytes: TBytes; const PrivateKey: TBytes): boolean; static;
+
+    class function AsymmetricSigning_GenerateKeyPair(var PrivateKey, PublicKey: TBytes): boolean; static;
+    class function AsymmetricSigning_HashAndSign(const Bytes, PrivateKey: TBytes; out Signature: TBytes): boolean; static;
+    class function AsymmetricSigning_CheckSignature(const Bytes, PublicKey, Signature: TBytes): boolean; static;
+
     class function AES_PrepareKey(BareKey:TBytes; var PreparedKey: TBytes): boolean; static;
     class function AES_PrepareKeyFromHexStr(const HexStr: string; var Key: TBytes): boolean; static;
     class function AES_Decrypt(var Bytes: TBytes; const Key: TBytes): boolean; overload; static;
@@ -118,6 +126,207 @@ begin
     PDWORD(PByte(@Key[0])+8)^ := KeyBufSize;
     if HexToBin(PChar(HexStr), @Key[12], KeyBufSize)=KeyBufSize then
       Result := true;
+  except
+  end;
+end;
+
+class function TdwlCrypt.AsymmetricEncryption_Decrypt(var Bytes: TBytes; const PrivateKey: TBytes): boolean;
+begin
+  Result := false;
+  try
+    var hProv: HCRYPTPROV;
+    if CryptAcquireContext(@hProv, nil, nil, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) then
+    try
+      //import public key
+      var hKey: HCRYPTKEY;
+      if not CryptImportKey(hProv, @PrivateKey[0], Length(PrivateKey), 0, 0, @hKey) then
+        Exit;
+      try
+        var DataSize := length(Bytes);
+        if not CryptDecrypt(hKey, 0, true, 0, @Bytes[0], @DataSize) then
+          Exit;
+        SetLength(Bytes, DataSize);
+        Result := true;
+      finally
+        CryptDestroyKey(hKey);
+      end;
+    finally
+      CryptReleaseContext(hProv, 0);
+    end;
+  except
+  end;
+end;
+
+class function TdwlCrypt.AsymmetricEncryption_Encrypt(var Bytes: TBytes; const PublicKey: TBytes): boolean;
+begin
+  Result := false;
+  try
+    var hProv: HCRYPTPROV;
+    if not CryptAcquireContext(@hProv, nil, nil, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) then
+      Exit;
+    try
+      //import public key
+      var hKey: HCRYPTKEY;
+      if not CryptImportKey(hProv, @PublicKey[0], length(PublicKey), 0, 0, @hKey) then
+          Exit;
+      try
+        var DataSize := length(Bytes);
+        var BufSize := 1024+DataSize*2;  // rough estimate
+        SetLength(Bytes, BufSize);
+        if not CryptEncrypt(hKey, 0, true, 0, @Bytes[0], @DataSize, BufSize) then
+          Exit;
+        SetLength(Bytes, DataSize);
+        Result := true;
+      finally
+        CryptDestroyKey(hKey);
+      end;
+    finally
+      CryptReleaseContext(hProv, 0);
+    end;
+  except
+  end;
+end;
+
+class function TdwlCrypt.AsymmetricEncryption_GenerateKeyPair(var PrivateKey, PublicKey: TBytes): boolean;
+begin
+  Result := false;
+  try
+    var hProv: HCRYPTPROV;
+    if not CryptAcquireContext(@hProv, nil, nil, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) then
+      Exit;
+    try
+      var hKey: HCRYPTKEY;
+      if not CryptGenKey(hProv, AT_KEYEXCHANGE, RSA1024BIT_KEY+CRYPT_EXPORTABLE, @hKey) then
+        Exit;
+      try
+        // export Private Key
+        var BufSize: DWORD;
+        if not CryptExportKey(hKey, 0, PRIVATEKEYBLOB, 0, nil, @BufSize) then // get size of buf
+          Exit;
+        SetLength(PrivateKey, BufSize);
+        if not CryptExportKey(hKey, 0, PRIVATEKEYBLOB, 0, @PrivateKey[0], @BufSize) then
+          Exit;
+        // export Public Key
+        if not CryptExportKey(hKey, 0, PUBLICKEYBLOB, 0, nil, @BufSize) then // get size of buf
+          Exit;
+        SetLength(PublicKey, BufSize);
+        if not CryptExportKey(hKey, 0, PUBLICKEYBLOB, 0, @PublicKey[0], @BufSize) then
+          Exit;
+        Result := true;
+      finally
+        CryptDestroyKey(hKey);
+      end;
+    finally
+      CryptReleaseContext(hProv, 0);
+    end;
+  except
+  end;
+end;
+
+class function TdwlCrypt.AsymmetricSigning_CheckSignature(const Bytes, PublicKey, Signature: TBytes): boolean;
+begin
+  Result := false;
+  try
+    var hProv: HCRYPTPROV;
+    if not CryptAcquireContext(@hProv, nil, nil, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) then
+      Exit;
+    try
+      //import private key
+      var  hKey: HCRYPTKEY;
+      if not CryptImportKey(hProv, @PublicKey[0], length(PublicKey), 0, 0, @hKey) then
+        Exit;
+      try
+        var hHash: HCRYPTHASH;
+        if not CryptCreateHash(hProv, CALG_MD5, 0, 0, @hHash) then
+          Exit;
+        try
+          if not CryptHashData(hHash, @Bytes[0], length(Bytes), 0) then
+            Exit;
+          Result := CryptVerifySignature(hHash, @Signature[0], Length(Signature), hKey, nil, 0);
+        finally
+          CryptDestroyHash(hHash);
+        end;
+      finally
+        CryptDestroyKey(hKey);
+      end;
+    finally
+      CryptReleaseContext(hProv, 0);
+    end;
+  except
+  end;
+end;
+
+class function TdwlCrypt.AsymmetricSigning_GenerateKeyPair(var PrivateKey, PublicKey: TBytes): boolean;
+begin
+  Result := false;
+  try
+    var hProv: HCRYPTPROV;
+    if not CryptAcquireContext(@hProv, nil, nil, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) then
+      Exit;
+    try
+      var  hKey: HCRYPTKEY;
+      if not CryptGenKey(hProv, AT_KEYEXCHANGE, RSA1024BIT_KEY+CRYPT_EXPORTABLE, @hKey) then
+        Exit;
+      try
+        // export Private Key
+        var BufSize: DWORD;
+        if not CryptExportKey(hKey, 0, PRIVATEKEYBLOB, 0, nil, @BufSize) then // get size of buf
+          Exit;
+        SetLength(PrivateKey, BufSize);
+        if not CryptExportKey(hKey, 0, PRIVATEKEYBLOB, 0, @PrivateKey[0], @BufSize) then
+          Exit;
+        // export Public Key
+        if not CryptExportKey(hKey, 0, PUBLICKEYBLOB, 0, nil, @BufSize) then // get size of buf
+          Exit;
+        SetLength(PublicKey, BufSize);
+        if not CryptExportKey(hKey, 0, PUBLICKEYBLOB, 0, @PublicKey[0], @BufSize) then
+          Exit;
+        Result := true;
+      finally
+        CryptDestroyKey(hKey);
+      end;
+    finally
+      CryptReleaseContext(hProv, 0);
+    end;
+  except
+  end;
+end;
+
+class function TdwlCrypt.AsymmetricSigning_HashAndSign(const Bytes, PrivateKey: TBytes; out Signature: TBytes): boolean;
+begin
+  Result := false;
+  try
+    var hProv: HCRYPTPROV;
+    if not CryptAcquireContext(@hProv, nil, nil, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) then
+      Exit;
+    try
+      //import private key
+      var hKey: HCRYPTKEY;
+      if not CryptImportKey(hProv, @PrivateKey[0], length(PrivateKey), 0, 0, @hKey) then
+        Exit;
+      try
+        var hHash: HCRYPTHASH;
+        if not CryptCreateHash(hProv, CALG_MD5, 0, 0, @hHash) then
+          Exit;
+        try
+          if not CryptHashData(hHash, @Bytes[0], length(Bytes), 0) then
+            Exit;
+          var BufSize: DWord;
+          if not CryptSignHash(hHash, AT_SIGNATURE, nil, 0, nil, @BufSize) then // get size of buf
+            Exit;
+          SetLength(Signature, BufSize);
+          if not CryptSignHash(hHash, AT_SIGNATURE, nil, 0, @Signature[0], @BufSize) then
+            Exit;
+        finally
+          CryptDestroyHash(hHash);
+        end;
+      finally
+        CryptDestroyKey(hKey);
+      end;
+    finally
+      CryptReleaseContext(hProv, 0);
+    end;
+    Result := true;
   except
   end;
 end;
