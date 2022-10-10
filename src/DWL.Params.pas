@@ -12,7 +12,8 @@ type
   ///   Definition of callback procedure that will be used to signal changes
   ///   ofthe content of the IdwlParams store
   /// </summary>
-  TChangeCallbackproc = procedure(Sender: IdwlParams; const Key: string; const Value: TValue) of object;
+  TChangeMethodCallbackProc = procedure(Sender: IdwlParams; const Key: string; const Value: TValue) of object;
+  TChangeRegularCallbackProc = procedure(Sender: IdwlParams; const Key: string; const Value: TValue);
 
   /// <summary>
   ///   Enumeration interface that will be return when requestion an
@@ -365,6 +366,11 @@ type
     /// </summary>
     function GetAsNameValueText: string;
     /// <summary>
+    ///   Put the pairs from the store into a JSON Object,
+    ///   the params are the pairs
+    /// </summary>
+    procedure PutIntoJSONObject(JSONObject: TJSONObject);
+    /// <summary>
     ///   empties the store
     /// </summary>
     procedure Clear;
@@ -376,7 +382,8 @@ type
     /// <param name="CallBackProc">
     ///   The procedure to be called in the case of changes
     /// </param>
-    procedure EnableChangeTracking(CallBackProc: TChangeCallBackProc);
+    procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc); overload;
+    procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc); overload;
   end;
 
   /// <summary>
@@ -484,7 +491,8 @@ type
     FParams: TDictionary<string, TValue>;
     FTriggers: TList<TPair<string, string>>;
     FDomain: string;
-    FChangeCallbackProc: TChangeCallBackProc;
+    FChangeMethodCallbackProc: TChangeMethodCallBackProc;
+    FChangeRegularCallbackProc: TChangeRegularCallBackProc;
     class function DictKey(const Domain, Key: string): string;
     function BoolValue(const Key: string; Default: boolean=false): boolean;
     function CardinalValue(const Key: string; Default: cardinal=0): cardinal;
@@ -506,13 +514,15 @@ type
     procedure AddTrigger(const TriggerKey, DependentKey: string);
     procedure ExecuteTriggers(const TriggerKey: string);
     procedure Resolve(var Str: string);
-    procedure EnableChangeTracking(CallBackProc: TChangeCallBackProc);
+    procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc); overload;
+    procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc); overload;
     procedure WriteValue(const Key: string; const Value: TValue);
     procedure ClearKey(const Key: string);
     function ContainsKey(const Key: string): boolean;
     procedure AssignTo(Params: IdwlParams; Keys: TArray<string>); overload;
     procedure AssignTo(Params: IdwlParams); overload;
     function GetAsNameValueText: string;
+    procedure PutIntoJSONObject(JSONObject: TJSONObject);
     function GetEnumerator: IdwlParamsEnumerator;
     procedure WriteNameValueText(const NameValueLines: string);
     procedure WriteJSON(const JSON: string); overload;
@@ -619,8 +629,10 @@ procedure TdwlParams.ClearKey(const Key: string);
 begin
   var LowerKey := Key.ToLower;
   FParams.Remove(LowerKey);
-  if Assigned(FChangeCallbackProc) then
-    FChangeCallbackProc(Self, Key, TValue.Empty);
+  if Assigned(FChangeMethodCallbackProc) then
+    FChangeMethodCallbackProc(Self, Key, TValue.Empty);
+  if Assigned(FChangeRegularCallbackProc) then
+    FChangeRegularCallbackProc(Self, Key, TValue.Empty);
   ExecuteTriggers(LowerKey);
 end;
 
@@ -664,9 +676,14 @@ begin
     Result := Default
 end;
 
-procedure TdwlParams.EnableChangeTracking(CallBackProc: TChangeCallBackProc);
+procedure TdwlParams.EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc);
 begin
-  FChangeCallbackProc := CallBackProc;
+  FChangeMethodCallbackProc := CallBackProc;
+end;
+
+procedure TdwlParams.EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc);
+begin
+  FChangeRegularCallbackProc := CallBackProc;
 end;
 
 procedure TdwlParams.ExecuteTriggers(const TriggerKey: string);
@@ -707,6 +724,31 @@ function TdwlParams.IntValue(const Key: string; Default: integer): integer;
 begin
   if not TryGetIntValue(Key, Result) then
     Result := Default
+end;
+
+procedure TdwlParams.PutIntoJSONObject(JSONObject: TJSONObject);
+begin
+  var Enumerator := FParams.GetEnumerator;
+  try
+    while Enumerator.MoveNext do
+    begin
+      var Value := Enumerator.Current.Value;
+      case Value.Kind of
+      tkChar,
+      tkWChar,
+      tkUString,
+      tkWString,
+      tkString: JSONObject.AddPair(Enumerator.Current.Key, Value.ToString);
+      tkInteger: JSONObject.AddPair(Enumerator.Current.Key, Value.AsInteger);
+      tkInt64: JSONObject.AddPair(Enumerator.Current.Key, Value.AsInt64);
+      tkFloat: JSONObject.AddPair(Enumerator.Current.Key, Value.AsExtended);
+      else
+        raise Exception.Create('TValue: Unknown kind in PutIntoJSONObject');
+      end;
+    end;
+  finally
+    Enumerator.Free;
+  end;
 end;
 
 procedure TdwlParams.Resolve(var Str: string);
@@ -900,11 +942,14 @@ begin
   // If a changecallback procedure or triggers are registered, we're introducing an optimization
   // So that the callbacck will only be called on a real change
   var OldValue: TValue;
-  if (Assigned(FChangeCallbackProc) or (FTriggers<>nil)) and TryGetBareValue(LowerKey, OldValue) and Value.Equals(OldValue) then
+  if (Assigned(FChangeMethodCallbackProc) or Assigned(FChangeRegularCallbackProc) or (FTriggers<>nil)) and
+    TryGetBareValue(LowerKey, OldValue) and Value.Equals(OldValue) then
     Exit;
   FParams.AddOrSetValue(Lowerkey, Value);
-  if Assigned(FChangeCallbackProc) then
-    FChangeCallbackProc(Self, LowerKey, Value);
+  if Assigned(FChangeMethodCallbackProc) then
+    FChangeMethodCallbackProc(Self, LowerKey, Value);
+  if Assigned(FChangeRegularCallbackProc) then
+    FChangeRegularCallbackProc(Self, LowerKey, Value);
   ExecuteTriggers(LowerKey);
 end;
 

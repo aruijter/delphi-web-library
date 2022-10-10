@@ -4,7 +4,7 @@ interface
 
 uses
   DWL.Params, IdMessage, System.Generics.Collections, DWL.Logging,
-  System.Classes;
+  System.Classes, System.Rtti;
 
 const
   Param_mailQueue_Domains = 'mailqueue_domains';
@@ -15,6 +15,7 @@ type
   class var
     FParams: IdwlParams;
     FMailSendThread: TThread;
+    class procedure ParamChanged(Sender: IdwlParams; const Key: string; const Value: TValue); static;
   private
   class var
     FMailAddedEvent: THandle;
@@ -136,6 +137,7 @@ begin
               Log('Missing domain in on of the configured contexts', lsError)
             else
             begin
+              DomainParams.EnableChangeTracking(ParamChanged);
               if Domain='*' then
                 FDefaultDomainContextParams := DomainParams
               else
@@ -186,6 +188,44 @@ end;
 class procedure TdwlMailQueue.Log(const Msg: string; SeverityLevel: TdwlLogSeverityLevel=lsNotice);
 begin
   TdwlLogger.Log(Msg, SeverityLevel, '', 'mailqueue');
+end;
+
+class procedure TdwlMailQueue.ParamChanged(Sender: IdwlParams; const Key: string; const Value: TValue);
+const
+  SQL_InsertOrUpdateParameter=
+    'INSERT INTO dwl_parameters (`Key`, `Value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `Value`=VALUES(`Value`)';
+begin
+  // effectivly the only thing that is written to Params is a new refreshtoken
+  // we need to save it back into the database
+  if Key=Param_Refreshtoken then // just to be sure (and for documentation purposes ;-)
+  begin
+    var JSONArray := TJSONArray.Create;
+    try
+      if FDefaultDomainContextParams<>NIL then
+      begin
+        var JSONObject := TJSONObject.Create;
+        JSONArray.Add(JSOnObject);
+        FDefaultDomainContextParams.PutIntoJSONObject(JSONObject);
+      end;
+      var ENum := FDomainContexts.GetEnumerator;
+      try
+        while ENum.MoveNext do
+        begin
+          var JSONObject := TJSONObject.Create;
+          JSONArray.Add(JSOnObject);
+          ENum.Current.Value.PutIntoJSONObject(JSONObject);
+        end;
+      finally
+        ENum.Free;
+      end;
+      var Cmd := New_MySQLSession(FParams).CreateCommand(SQL_InsertOrUpdateParameter);
+      Cmd.Parameters.SetTextDataBinding(0, Param_mailQueue_Domains);
+      Cmd.Parameters.SetTextDataBinding(1, JSONArray.ToJSON);
+      Cmd.Execute;
+    finally
+      JSONArray.Free;
+    end;
+  end;
 end;
 
 class procedure TdwlMailQueue.QueueForSending(Msg: TIdMessage);
