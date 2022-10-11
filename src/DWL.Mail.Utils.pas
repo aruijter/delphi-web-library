@@ -8,13 +8,14 @@ uses
 type
   TdwlMailUtils = record
     class function IsValidEmailAddress(const Value: string): boolean; static;
-    class procedure SendMailToAPI(const Endpoint: string; Msg: TIdMessage); static;
+    class procedure SendMailToAPI(const Endpoint, LogSecret: string; Msg: TIdMessage); static;
   end;
 
 implementation
 
 uses
-  System.RegularExpressions, System.Classes, DWL.HTTP.Client, DWL.HTTP.Consts;
+  System.RegularExpressions, System.Classes, DWL.HTTP.Client, DWL.HTTP.Consts,
+  System.NetEncoding;
 
 { TdwlMailUtils }
 
@@ -31,9 +32,12 @@ begin
   Result := TRegEx.IsMatch(Value, EMAIL_REGEX);
 end;
 
-class procedure TdwlMailUtils.SendMailToAPI(const Endpoint: string; Msg: TIdMessage);
+class procedure TdwlMailUtils.SendMailToAPI(const Endpoint, LogSecret: string; Msg: TIdMessage);
 begin
-  var Rq := New_HTTPRequest(Endpoint);
+  var Url := Endpoint+'?secret='+TNetEncoding.URL.Encode(LogSecret);
+  if Msg.BccList.Count>0 then
+    Url := Url+'&bcc='+TNetEncoding.URL.Encode(Msg.BccList.EMailAddresses);
+  var Rq := New_HTTPRequest(Url);
   var Stream := TMemoryStream.Create;
   try
     Msg.SaveToStream(Stream);

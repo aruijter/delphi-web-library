@@ -37,7 +37,6 @@ procedure TDWL_Server.AfterConstruction;
 begin
   inherited AfterConstruction;
   FDWLServerSection := TDWLServerSection.Create;
-  FDWLServerSection.StartServer;
 end;
 
 procedure TDWL_Server.BeforeDestruction;

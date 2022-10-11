@@ -534,7 +534,11 @@ begin
               HTTPServer.OnCommandGet := HTTPServerCommand;
               HTTPServer.DefaultPort := CallBackPortNumber;
               if ChallengeIP<>'' then
-                HTTPServer.Bindings.Add.IP := ChallengeIP;
+              begin
+                var Bind := HTTPServer.Bindings.Add;
+                Bind.IP := ChallengeIP;
+                Bind.Port := IdPORT_HTTP;
+              end;
               HTTPServer.Active := true;
               // start the challenge
               TickCount := GetTickCount64;

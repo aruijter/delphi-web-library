@@ -65,13 +65,19 @@ begin
   if serverProcs.GetPayloadPtrProc(State, Data, DataSize) and (DataSize>0) then
   begin
     var Stream := TdwlReadOnlyBufferStream.Create(Data, DataSize);
-    var Msg := TIdMessage.Create;
     try
-      Msg.LoadFromStream(Stream);
-      TdwlMailQueue.QueueForSending(Msg);
-      Result := true;
+      var Msg := TIdMessage.Create;
+      try
+        Msg.LoadFromStream(Stream);
+        var BccRecipients: string;
+        if State.TryGetRequestParamStr('bcc', BccRecipients) then
+          Msg.BccList.EmailAddresses := Bccrecipients;
+        TdwlMailQueue.QueueForSending(msg);
+      finally
+        Msg.Free;
+      end;
     finally
-      Msg.Free;
+      Stream.Free;
     end;
   end;
 end;

@@ -88,7 +88,7 @@ begin
   Self.SetContentType(ContentType, CHARSET_UTF8);
   var ContentLength := WideCharToMultiByte(CP_UTF8, 0, PWideChar(BodyStr), BodyStr.Length, nil, 0, nil, nil);
   var ContentBuffer := nil;
-  serverProcs.AllocateContentBufferProc(@Self, ContentBuffer, ContentLength);
+  serverProcs.ArrangeContentBufferProc(@Self, ContentBuffer, ContentLength);
   WideCharToMultiByte(CP_UTF8, 0, PWideChar(BodyStr), BodyStr.Length, ContentBuffer, ContentLength, nil, nil);
 end;
 

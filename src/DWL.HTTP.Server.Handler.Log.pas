@@ -11,10 +11,8 @@ uses
   DWL.HTTP.Server, DWL.HTTP.Server.Types, DWL.Params,
   System.Generics.Collections, System.SysUtils;
 
-{$IFDEF DEBUG}
 const
   logdestinationServerConsole='serverconsole';
-{$ENDIF}
 
 const
   Param_EMail_To = 'email_to';

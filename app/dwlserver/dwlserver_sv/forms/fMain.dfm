@@ -1,6 +1,6 @@
 object DWL_Server: TDWL_Server
   AllowPause = False
-  DisplayName = 'DWLServer, serving handlers residing in DLLs'
+  DisplayName = 'DWLServer'
   StartType = stManual
   AfterInstall = ServiceAfterInstall
   OnStart = ServiceStart

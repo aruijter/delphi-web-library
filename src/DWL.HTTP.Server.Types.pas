@@ -14,7 +14,7 @@ type
   PdwlHTTPHandlingState = ^TdwlHTTPHandlingState;
 
   TdwlHTTPWebSocket_OnData = procedure(State: PdwlHTTPHandlingState; const Data: pointer; DataSize: cardinal; DataIsText: boolean);
-  TdwlAllocateContentBufferProc =procedure(const State: PdwlHTTPHandlingState; var ContentBuffer: pointer; const ContentLength: cardinal); stdcall;
+  TdwlArrangeContentBufferProc =procedure(const State: PdwlHTTPHandlingState; var ContentBuffer: pointer; const ContentLength: cardinal); stdcall;
   TdwlGetRequestParamProc = function(const State: PdwlHTTPHandlingState; const Key: PWideChar; const Value: PWideChar; var ValueCharCnt: integer): integer; stdcall;
   TdwlGetHeaderValueProc = function(const State: PdwlHTTPHandlingState; const Key: PWideChar; const Value: PWideChar; var ValueCharCnt: integer): integer; stdcall;
   TdwlGetPayloadPtrProc = function(State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean; stdcall;
@@ -70,7 +70,7 @@ type
     ///   if the ContentBuffer is given, it is allocated handling side and
     ///   must be disposed in a FinalizeProc that of course also must be assigend to the state
     /// </summary>
-    AllocateContentBufferProc: TdwlAllocateContentBufferProc;
+    ArrangeContentBufferProc: TdwlArrangeContentBufferProc;
     /// <summary>
     ///   a callback function that can be used to get Request Params
     /// </summary>

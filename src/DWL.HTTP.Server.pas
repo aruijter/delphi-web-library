@@ -399,7 +399,7 @@ begin
   Result := FHTTPServer.Bindings;
 end;
 
-procedure State_AllocateContentBuffer(const State: PdwlHTTPHandlingState; var ContentBuffer: pointer; const ContentLength: cardinal); stdcall;
+procedure State_ArrangeContentBuffer(const State: PdwlHTTPHandlingState; var ContentBuffer: pointer; const ContentLength: cardinal); stdcall;
 begin
   Assert(PServerStructure(State._InternalServerStructure).ContentBuffer=nil);
   var Owned := ContentBuffer=nil;
@@ -676,7 +676,7 @@ begin
     FHTTPServer.DefaultPort := IdPORT_https;
   end
   else
-    FHTTPServer.DefaultPort := IdPORT_https;
+    FHTTPServer.DefaultPort := IdPORT_HTTP;
   FHTTPServer.Active := true;
 end;
 
@@ -857,7 +857,7 @@ begin
 end;
 
 initialization
-  serverProcs.AllocateContentBufferProc := State_AllocateContentBuffer;
+  serverProcs.ArrangeContentBufferProc := State_ArrangeContentBuffer;
   serverProcs.GetRequestParamProc := State_GetRequestParam;
   serverProcs.GetHeaderValueProc := State_GetHeaderValue;
   serverProcs.GetPayloadPtrProc := State_GetPostDataPtr;

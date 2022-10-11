@@ -39,11 +39,11 @@ uses
   System.Rtti, DWL.Params.Consts, DWL.Logging.Callback, System.StrUtils,
   DWL.MySQL, DWL.HTTP.Server.Types, DWL.HTTP.Server.Handler.DLL,
   System.Generics.Collections, Winapi.Windows, Winapi.ShLwApi, DWLServer.Consts,
-  DWL.HTTP.Consts, DWL.Mail.Queue;
+  DWL.HTTP.Consts, DWL.Mail.Queue, IdAssignedNumbers, System.Math;
 
 const
   SQL_CheckTable_Handlers =
-    'CREATE TABLE IF NOT EXISTS dwl_handlers (id int AUTO_INCREMENT, endpoint varchar(50), handler_uri varchar(255), authentication_endpoint VARCHAR(50), authorization_endpoint VARCHAR(50), `params` TEXT NULL, INDEX `primaryindex` (`id`))';
+    'CREATE TABLE IF NOT EXISTS dwl_handlers (id int AUTO_INCREMENT, endpoint varchar(50), handler_uri varchar(255), `params` TEXT NULL, INDEX `primaryindex` (`id`))';
   SQL_CheckTable_UriAliases =
     'CREATE TABLE IF NOT EXISTS dwl_urialiases (id int AUTO_INCREMENT, alias varchar(255), uri varchar(255), PRIMARY KEY (id))';
   SQL_Get_UriAliases =
@@ -133,9 +133,19 @@ begin
       ACMEClient.CallBackPortNumber := FParams.IntValue(Param_ACMEPort, ParamDef_ACMEPort);
       HTTPServer := TdwlHTTPServer.Create;
       try
-//        RestServer.IP := FParams.StrValue(Param_RestIP);
-//        ACMECLient.ChallengeIP := RestServer.IP;
+        var IP := FParams.StrValue(Param_Binding_IP);
+        if IP<>'' then
+        begin
+          TdwlLogger.Log('Bound to specific IP '+IP, lsTrace);
+          ACMECLient.ChallengeIP := IP;
+        end;
         CheckACME;
+        if IP<>'' then
+        begin
+          var Binding := HTTPServer.Bindings.Add;
+          Binding.IP := IP;
+          Binding.Port := IfThen(HTTPServer.IsSecure, IdPORT_https, IDPORT_HTTP);
+        end;
         LoadURIAliases(HTTPServer);
         HTTPServer.Open;
         HTTPServer.RegisterHandler(EndpointURI_Log,  FLogHandler);
@@ -146,7 +156,7 @@ begin
           TdwlLogger.Log('SERVER IS NOT SECURE, please configure or review ACME parameters', lsWarning);
         TdwlLogger.Log('Opened HTTP Server', lsNotice);
         FDLLBasePath := FParams.StrValue('DLLBasePath', ExtractFileDir(ParamStr(0)));
-        if {$IFDEF DEBUG}true{$ELSE}RestServer.IsSecure{$ENDIF} then
+        if {$IFDEF DEBUG}true{$ELSE}HTTPServer.IsSecure{$ENDIF} then
           LoadDLLHandlers(HTTPServer)
         else
           TdwlLogger.Log('Skipped loading of handlers because server is not secure', lsWarning);
@@ -322,7 +332,8 @@ end;
 procedure TdwlServerCore.Stop;
 begin
   FIsStopping := true;
-  FExecutionTask.Wait(5000);
+  if FExecutionTask<>nil then
+    FExecutionTask.Wait(5000);
 end;
 
 end.

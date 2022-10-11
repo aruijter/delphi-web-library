@@ -245,10 +245,10 @@ begin
     Cmd.Parameters.SetTextDataBinding(0, Msg.BccList.EMailAddresses);
     Cmd.Parameters.SetTextDataBinding(1, Str.ReadString(MaxInt));
     Cmd.Execute;
+    SetEvent(FMailAddedEvent);
   finally
     Str.Free;
   end;
-  SetEvent(FMailAddedEvent);
 end;
 
 { TMailSendThread }
