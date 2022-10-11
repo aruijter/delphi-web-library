@@ -3,7 +3,7 @@ unit DWL.Classes;
 interface
 
 uses
-  DWL.Params;
+  DWL.Params, System.Classes;
 
 type
   /// <summary>
@@ -52,6 +52,12 @@ type
     function Success: boolean;
   end;
 
+  TdwlReadOnlyBufferStream = class(TCustomMemoryStream)
+  public
+    constructor Create(ContentBuffer: pointer; ContentSize: NativeInt);
+  end;
+
+
 implementation
 
 { TdwlResult }
@@ -93,6 +99,14 @@ end;
 function TdwlResult.Success: boolean;
 begin
   Result := FSuccess;
+end;
+
+{ TdwlReadOnlyBufferStream }
+
+constructor TdwlReadOnlyBufferStream.Create(ContentBuffer: pointer; ContentSize: NativeInt);
+begin
+  inherited Create;
+  SetPointer(ContentBuffer, ContentSize);
 end;
 
 end.

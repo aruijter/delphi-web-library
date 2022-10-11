@@ -99,7 +99,7 @@ begin
       if State.TryGetHeaderValue('Origin', Origin) then
       begin
         if FAllowAllOrigins or (FAllowOrigins.IndexOf(Origin)>=0) then
-          State.TryGetHeaderValue('Access-Control-Allow-Origin', Origin);
+          State.SetHeaderValue('Access-Control-Allow-Origin', Origin);
       end;
     end;
   end

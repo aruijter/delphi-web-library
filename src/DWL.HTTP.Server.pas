@@ -182,7 +182,7 @@ uses
   IdGlobal, IdHashSHA,
   System.NetEncoding, IdSSLOpenSSL, DWL.Logging, DWL.HTTP.Consts,
   IdAssignedNumbers, System.StrUtils, DWL.HTTP.Server.Utils,
-  DWL.HTTP.Server.Globals, DWL.HTTP.Utils;
+  DWL.HTTP.Server.Globals, DWL.HTTP.Utils, DWL.Classes;
 
 type
   TdwlHTTPHandler_PassThrough = class(TdwlHTTPHandler)
@@ -582,18 +582,6 @@ begin
   TdwlLogger.Log('Rq '+Binding.PeerIP+':'+Binding.Port.ToString+' '+dwlhttpCommandToString[State.Command]+' '+State.URI+' '+State.StatusCode.ToString+' (websocket opened)', lsTrace);
 end;
 
-type
-  TContentStream = class(TCustomMemoryStream)
-  public
-    constructor Create(ContentBuffer: pointer; ContentSize: NativeInt);
-  end;
-
-constructor TContentStream.Create(ContentBuffer: pointer; ContentSize: NativeInt);
-begin
-  inherited Create;
-  SetPointer(ContentBuffer, ContentSize);
-end;
-
 procedure TdwlHTTPServer.HTTPServerCommand(AContext: TIdContext; ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
 begin
   var State: PdwlHTTPHandlingState := AllocMem(SizeOf(TdwlHTTPHandlingState));
@@ -669,7 +657,7 @@ begin
   else
   begin
     AResponseInfo.ResponseNo := State.StatusCode;
-    AResponseInfo.ContentStream := TContentStream.Create(PServerStructure(State._InternalServerStructure).ContentBuffer, PServerStructure(State._InternalServerStructure).ContentLength);
+    AResponseInfo.ContentStream := TdwlReadOnlyBufferStream.Create(PServerStructure(State._InternalServerStructure).ContentBuffer, PServerStructure(State._InternalServerStructure).ContentLength);
   end;
 end;
 

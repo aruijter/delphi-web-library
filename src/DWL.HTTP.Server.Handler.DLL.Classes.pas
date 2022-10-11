@@ -481,7 +481,6 @@ begin
   Result := inherited Authorize(State);
   if Result then
     Exit;
-  Result := false;
   var AccessToken := '';
   var AuthStr: string;
   if TryGetHeaderValue(State, 'Authorization', AuthStr) then
@@ -496,26 +495,26 @@ begin
       TryGetHeaderValue(State, 'accesstoken', AccessToken)) then
       AccessToken := '';
   end;
-  if AccessToken<>'' then
-  begin
-    try
-      var JWT := New_JWT_FromSerialization(AccessToken);
-      if not FOIDC_Client.CheckJWT(JWT).Success then
-        Exit;
-      Result := (JWT.Payload.IntValues[jwtclaimEXPIRATION_TIME]>TUnixEpoch.Now) and
-        SameText(JWT.Payload.Values[jwtclaimISSUER], FOIDC_Client.Issuer_Uri);
-      // all ok store authentication information
-      var JWTScopes := JWT.Payload.Values[jwt_key_SCOPE].Split([' ']);
-      var Scopes := StateParams_Scopes(State);
-      for var Scope in  JWTScopes do
-        Scopes.Add(Scope);
-      // write userid in state var, to be deprecated at some point
-      // add logging info to state
-      var Subject := JWT.Payload.Values[jwtclaimSUBJECT];
-      StateParams(State).WriteValue(Param_Subject, Subject);
-    except
-      Result := false;
-    end;
+  if AccessToken='' then
+    Exit;
+  try
+    var JWT := New_JWT_FromSerialization(AccessToken);
+    if not FOIDC_Client.CheckJWT(JWT).Success then
+      Exit;
+    if not  (JWT.Payload.IntValues[jwtclaimEXPIRATION_TIME]>TUnixEpoch.Now) and
+      SameText(JWT.Payload.Values[jwtclaimISSUER], FOIDC_Client.Issuer_Uri) then
+      Exit;
+    // all ok store authentication information
+    var JWTScopes := JWT.Payload.Values[jwt_key_SCOPE].Split([' ']);
+    var Scopes := StateParams_Scopes(State);
+    for var Scope in  JWTScopes do
+      Scopes.Add(Scope);
+    // write userid in state var, to be deprecated at some point
+    // add logging info to state
+    var Subject := JWT.Payload.Values[jwtclaimSUBJECT];
+    StateParams(State).WriteValue(Param_Subject, Subject);
+    Result := true;
+  except
   end;
 end;
 

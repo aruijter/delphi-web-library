@@ -2,15 +2,19 @@ unit DWL.Mail.Utils;
 
 interface
 
+uses
+  IdMessage;
+
 type
   TdwlMailUtils = record
     class function IsValidEmailAddress(const Value: string): boolean; static;
+    class procedure SendMailToAPI(const Endpoint: string; Msg: TIdMessage); static;
   end;
 
 implementation
 
 uses
-  System.RegularExpressions;
+  System.RegularExpressions, System.Classes, DWL.HTTP.Client, DWL.HTTP.Consts;
 
 { TdwlMailUtils }
 
@@ -25,6 +29,21 @@ const
              +'[\x01-\x7f])+)\])(?(angle)>)$';
 begin
   Result := TRegEx.IsMatch(Value, EMAIL_REGEX);
+end;
+
+class procedure TdwlMailUtils.SendMailToAPI(const Endpoint: string; Msg: TIdMessage);
+begin
+  var Rq := New_HTTPRequest(Endpoint);
+  var Stream := TMemoryStream.Create;
+  try
+    Msg.SaveToStream(Stream);
+    Rq.PostStream.WriteData(Stream.Memory, Stream.Size);
+  finally
+    Stream.Free;
+  end;
+  Rq.Header[HTTP_HEADER_CONTENT_TYPE] := CONTENT_TYPE_OCTET_STREAM;
+  Rq.Method  := HTTP_COMMAND_POST;
+  Rq.Execute;
 end;
 
 end.

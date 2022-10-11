@@ -21,6 +21,7 @@ const
   CONTENT_TYPE_HTML = 'text/html';
   CONTENT_TYPE_JSON = 'application/json';
   CONTENT_TYPE_OCTET_STREAM = 'application/octet-stream';
+
   CHARSET_UTF8 = 'utf-8';
 
   Param_BaseURI= 'baseuri';
@@ -29,6 +30,7 @@ const
   Param_LogSecret = 'logsecret';
 
   EndpointURI_Log = '/log';
+  EndpointURI_Mail = '/mail';
   Default_EndpointURI_OAuth2 = '/oauth2';
 
   // HTTP Command consts

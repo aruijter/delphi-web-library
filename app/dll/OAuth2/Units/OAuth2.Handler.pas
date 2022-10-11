@@ -88,11 +88,11 @@ uses
 const
   OIDC_Return_Path = '/oidc_return';
 
-  keyREFRESHTOKEN='refresh_token';
-  keyACCESSTOKEN='access_token';
-  keyEXPIRESIN='expires_in';
+  keyREFRESH_TOKEN='refresh_token';
+  keyACCESS_TOKEN='access_token';
+  keyEXPIRES_IN='expires_in';
   keySCOPE='scope';
-  keyTokenType='token_type';
+  keyTOKEN_TYPE='token_type';
 
   tokentypeBEARER='Bearer';
 
@@ -211,11 +211,6 @@ begin
   Session.CreateCommand(SQL_CheckTable_UserScopes).Execute;
   // get the Issuer,
   FIssuerUri := FConfigParams.StrValue(Param_Issuer);
-  if FIssuerUri='' then
-  begin
-    FIssuerUri :=  FConfigParams.StrValue(Param_BaseURI)+FConfigParams.StrValue(Param_Endpoint);
-    TdwlLogger.Log('No issuer configured, default applied: '+FIssuerUri, lsNotice);
-  end;
   // get new user scopes
   FNewUser_Scopes := FConfigParams.StrValue(Param_NewUser_Scopes).Split(['  ']);
   // Initialze Sign Key
@@ -727,11 +722,11 @@ begin
   end;
   var JSON := Response_JSON(State);
   if GrantToken<>'' then
-    JSON.AddPair(keyREFRESHTOKEN, CreateRefreshtoken(UserID, Refreshtoken_Order, GrantToken, RequestedScope));
-  JSON.AddPair(keyACCESSTOKEN, CreateAccesstoken(UserID, Accesstoken_ConvertedScope));
-  JSON.AddPair(keyEXPIRESIN, ACCESS_DURATION.ToString);
+    JSON.AddPair(keyREFRESH_TOKEN, CreateRefreshtoken(UserID, Refreshtoken_Order, GrantToken, RequestedScope));
+  JSON.AddPair(keyACCESS_TOKEN, CreateAccesstoken(UserID, Accesstoken_ConvertedScope));
+  JSON.AddPair(keyEXPIRES_IN, ACCESS_DURATION.ToString);
   JSON.AddPair(keySCOPE, Accesstoken_ConvertedScope);
-  JSON.AddPair(keyTOKENTYPE, tokentypeBearer);
+  JSON.AddPair(keyTOKEN_TYPE, tokentypeBearer);
 end;
 
 class function THandler_OAuth2.Post_token_handle_authorization_code(const State: PdwlHTTPHandlingState; var UserID: integer; var RequestedScope, GrantToken: string): boolean;

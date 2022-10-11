@@ -4,7 +4,7 @@ interface
 
 uses
   System.Threading, DWL.Params, DWL.HTTP.Server.Handler.Log, DWL.Logging,
-  DWL.HTTP.Server;
+  DWL.HTTP.Server, DWL.HTTP.Server.Handler.Mail;
 
 type
   TdwlServerCore = class
@@ -139,6 +139,7 @@ begin
         LoadURIAliases(HTTPServer);
         HTTPServer.Open;
         HTTPServer.RegisterHandler(EndpointURI_Log,  FLogHandler);
+        HTTPServer.RegisterHandler(EndpointURI_Mail,  TdwlHTTPHandler_Mail.Create(FParams));
         HTTPServer.LogLevel := FParams.IntValue(Param_LogLevel, httplogLevelWarning);
         TdwlLogger.Log('Enabled Request logging (level '+HTTPServer.LogLevel.ToString+')', lsTrace);
         if not HTTPServer.IsSecure then
@@ -209,6 +210,14 @@ var
   Handler: TdwlHTTPHandler_DLL;
   CreatedHandlers: TList<TdwlHTTPHandler_DLL>;
 begin
+  FParams.WriteValue(Param_BaseURI, HTTPServer.BaseURI);
+  var Issuer := FParams.StrValue(Param_Issuer);
+  if Issuer='' then
+  begin
+    Issuer :=  FParams.StrValue(Param_BaseURI)+Default_EndpointURI_OAuth2;
+    TdwlLogger.Log('No issuer configured, default applied: '+Issuer, lsNotice);
+    FParams.WriteValue(Param_Issuer, Issuer);
+  end;
   try
     Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Get_Resthandlers);
     Cmd.Execute;
@@ -224,7 +233,6 @@ begin
           HandlerParams.WriteNameValueText(Cmd.Reader.GetString(2 ,true));
           if not HandlerParams.BoolValue(Param_Enabled, true) then
             Continue;
-          HandlerParams.WriteValue(Param_BaseURI, HTTPServer.BaseURI);
           HandlerParams.WriteValue(Param_Endpoint, Endpoint);
           HTTPServer.SuspendHandling;
           try
