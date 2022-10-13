@@ -306,7 +306,7 @@ end;
 
 class function TdwlDLLHandling.TryGetPayloadPtr(const State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean;
 begin
-  Result := serverProcs.GetPayloadPtrProc(@State, Data, DataSize);
+  Result := serverProcs.GetPayloadPtrProc(State, Data, DataSize);
 end;
 
 class function TdwlDLLHandling.TryGetRequestParamBool(const State: PdwlHTTPHandlingState; const Key: string; var Value: boolean; AddJSONErrorOnFailure: boolean; const NewStatusCodeOnError: word): boolean;

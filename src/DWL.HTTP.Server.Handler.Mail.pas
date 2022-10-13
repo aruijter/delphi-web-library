@@ -73,6 +73,7 @@ begin
         if State.TryGetRequestParamStr('bcc', BccRecipients) then
           Msg.BccList.EmailAddresses := Bccrecipients;
         TdwlMailQueue.QueueForSending(msg);
+        Result := true;
       finally
         Msg.Free;
       end;
