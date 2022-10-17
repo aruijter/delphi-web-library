@@ -173,18 +173,18 @@ type
 
   /// <summary>
   ///   A TThread to be used by a descendant. The descendents then has a
-  ///   TerminatedEventHandle avalable to be able to wait (in the Execute
-  ///   function) to be signalled immediately when the thread is terminated. <br />
+  ///   FWorkToDoEventHandle avalable to be able to wait (in the Execute
+  ///   function) to be signalled immediately when there is work to do (set in another way) or (automatically) the thread is terminated. <br />
   /// </summary>
   /// <example>
   ///   procedure TdwlThreadX.Execute; <br />begin <br />while not Terminated
   ///   do <br />begin <br />.......... <br />
-  ///   WaitForSingleObject(FTerminatedEventHandle, 1000); <br />end; <br />
+  ///   WaitForSingleObject(FWorkToDoEventHandle, 1000); <br />end; <br />
   ///   end; <br />
   /// </example>
   TdwlThread = class(TThread)
   protected
-    FTerminatedEventHandle: THandle;
+    FWorkToDoEventHandle: THandle;
     procedure TerminatedSet; override;
   public
     destructor Destroy; override;
@@ -339,19 +339,19 @@ end;
 procedure TdwlThread.AfterConstruction;
 begin
   inherited AfterConstruction;
-  FTerminatedEventHandle := CreateEvent(nil, true, false, nil);
+  FWorkToDoEventHandle := CreateEvent(nil, true, false, nil);
 end;
 
 destructor TdwlThread.Destroy;
 begin
   inherited Destroy;
-  CloseHandle(FTerminatedEventHandle);
+  CloseHandle(FWorkToDoEventHandle);
 end;
 
 procedure TdwlThread.TerminatedSet;
 begin
   inherited TerminatedSet;
-  SetEvent(FTerminatedEventHandle);
+  SetEvent(FWorkToDoEventHandle);
 end;
 
 { TdwlThreadQueue_Evented<T> }
