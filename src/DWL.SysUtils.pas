@@ -25,7 +25,6 @@ uses
 function TryDotStrToFloat(const TextToConvert: string; out Value: double): boolean;
 function BytestoLowerHex(Bytes: TBytes): string;
 function LowerHexToBytes(const Hex: string): TBytes;
-function ExtractBareFileName(const FileName: string): string;
 
 implementation
 
@@ -97,11 +96,6 @@ begin
     Result[I] :=
       (H2BConvert[Hex[I*2+1]] shl 4) or
        H2BConvert[Hex[I*2+2]];
-end;
-
-function ExtractBareFileName(const FileName: string): string;
-begin
-  Result := ChangeFileExt(ExtractFileName(FileName),'');
 end;
 
 initialization
