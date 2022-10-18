@@ -201,7 +201,7 @@ implementation
 
 uses
   System.Classes, System.Generics.Collections, DWL.SyncObjs, System.NetEncoding,
-  DWL.Logging.EventLog, System.Hash, DWL.SysUtils;
+  DWL.Logging.EventLog, System.Hash, DWL.SysUtils, DWL.IOUtils;
 
 type
   TLogDispatchThread = class(TThread)
@@ -243,7 +243,7 @@ begin
   FLogDispatchThread := TLogDispatchThread.Create;
   FLogDispatchThread.FreeOnTerminate := true;
   FLogDispatchers := TdwlThreadList<IdwlLogDispatcher>.Create;
-  FDefaultSource := ExtractBareFilename(GetModuleName(hInstance));
+  FDefaultSource := TdwlFile.ExtractBareName(GetModuleName(hInstance));
 end;
 
 class function TLogEngine.CreateLogItem: PdwlLogItem;

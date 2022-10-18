@@ -9,7 +9,8 @@ uses
   DWL.Logging;
 
 type
-  TdwlLogDispatchProc = procedure(LogItem: PdwlLogItem) of object;
+  TdwlLogDispatchObjectProc = procedure(LogItem: PdwlLogItem) of object;
+  TdwlLogDispatchRegularProc = procedure(LogItem: PdwlLogItem);
 
 /// <summary>
 ///   Enabled Dispatching to a callback function.
@@ -17,7 +18,8 @@ type
 ///   and if needed an identifier (to receive specific
 ///   destination logs) <br />
 /// </summary>
-function EnableLogDispatchingToCallback(AQueueForMainThread: boolean; ALogDispatchProc: TdwlLogDispatchProc; const Identifier: string=''): IdwlLogDispatcher;
+function EnableLogDispatchingToCallback(AQueueForMainThread: boolean; ALogDispatchProc: TdwlLogDispatchObjectProc; const Identifier: string=''): IdwlLogDispatcher; overload;
+function EnableLogDispatchingToCallback(AQueueForMainThread: boolean; ALogDispatchProc: TdwlLogDispatchRegularProc; const Identifier: string=''): IdwlLogDispatcher; overload;
 
 implementation
 
@@ -25,32 +27,75 @@ uses
   System.Classes;
 
 type
-  TdwlLogDispatcher_CallBack = class(TdwlLogDispatcher)
+  TdwlLogDispatcher_CallBack_Object = class(TdwlLogDispatcher)
   strict private
-    FOnLog: TdwlLogDispatchProc;
+    FOnLog: TdwlLogDispatchObjectProc;
     FQueueForMainThread: boolean;
   protected
     procedure DispatchLog(LogItem: PdwlLogItem); override;
   public
-    constructor Create(const Identifier: string; AQueueForMainThread: boolean; AOnLog: TdwlLogDispatchProc);
+    constructor Create(const Identifier: string; AQueueForMainThread: boolean; AOnLog: TdwlLogDispatchObjectProc);
   end;
 
-function EnableLogDispatchingToCallback(AQueueForMainThread: boolean; ALogDispatchProc: TdwlLogDispatchProc; const Identifier: string=''): IdwlLogDispatcher; overload;
+  TdwlLogDispatcher_CallBack_Regular = class(TdwlLogDispatcher)
+  strict private
+    FOnLog: TdwlLogDispatchRegularProc;
+    FQueueForMainThread: boolean;
+  protected
+    procedure DispatchLog(LogItem: PdwlLogItem); override;
+  public
+    constructor Create(const Identifier: string; AQueueForMainThread: boolean; AOnLog: TdwlLogDispatchRegularProc);
+  end;
+
+
+function EnableLogDispatchingToCallback(AQueueForMainThread: boolean; ALogDispatchProc: TdwlLogDispatchObjectProc; const Identifier: string=''): IdwlLogDispatcher; overload;
 begin
-  Result := TdwlLogDispatcher_Callback.Create(Identifier, AQueueForMainThread, ALogDispatchProc);
+  Result := TdwlLogDispatcher_CallBack_Object.Create(Identifier, AQueueForMainThread, ALogDispatchProc);
   TdwlLogger.RegisterDispatcher(Result);
 end;
 
-{ TdwlLogDispatcher_CallBack }
+function EnableLogDispatchingToCallback(AQueueForMainThread: boolean; ALogDispatchProc: TdwlLogDispatchRegularProc; const Identifier: string=''): IdwlLogDispatcher; overload;
+begin
+  Result := TdwlLogDispatcher_CallBack_Regular.Create(Identifier, AQueueForMainThread, ALogDispatchProc);
+  TdwlLogger.RegisterDispatcher(Result);
+end;
 
-constructor TdwlLogDispatcher_CallBack.Create(const Identifier: string; AQueueForMainThread: boolean; AOnLog: TdwlLogDispatchProc);
+{ TdwlLogDispatcher_CallBack_Object }
+
+constructor TdwlLogDispatcher_CallBack_Object.Create(const Identifier: string; AQueueForMainThread: boolean; AOnLog: TdwlLogDispatchObjectProc);
 begin
   inherited Create(Identifier);
   FQueueForMainThread := AQueueForMainThread;
   FOnLog := AOnLog;
 end;
 
-procedure TdwlLogDispatcher_CallBack.DispatchLog(LogItem: PdwlLogItem);
+procedure TdwlLogDispatcher_CallBack_Object.DispatchLog(LogItem: PdwlLogItem);
+begin
+  if FQueueForMainThread then
+  begin
+    // create a copy for use in another thread
+    var NewItem := TdwlLogger.PrepareLogitem;
+    NewItem^ := LogItem^;
+    TThread.Queue(nil, procedure
+      begin
+        FOnLog(NewItem);
+        Dispose(NewItem);
+      end);
+  end
+  else
+    FOnLog(LogItem);
+end;
+
+{ TdwlLogDispatcher_CallBack_Regular }
+
+constructor TdwlLogDispatcher_CallBack_Regular.Create(const Identifier: string; AQueueForMainThread: boolean; AOnLog: TdwlLogDispatchRegularProc);
+begin
+  inherited Create(Identifier);
+  FQueueForMainThread := AQueueForMainThread;
+  FOnLog := AOnLog;
+end;
+
+procedure TdwlLogDispatcher_CallBack_Regular.DispatchLog(LogItem: PdwlLogItem);
 begin
   if FQueueForMainThread then
   begin
