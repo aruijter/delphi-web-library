@@ -55,6 +55,7 @@ type
     procedure HTTPServerCommand(AContext: TIdContext; ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
     procedure HTTPServerDisconnect(AContext: TIdContext);
     procedure HTTPServerParseAuthentication(AContext: TIdContext; const AAuthType, AAuthData: String; var VUsername, VPassword: String; var VHandled: Boolean);
+    procedure QuerySSLPort(APort: Word; var VUseSSL: boolean);
     function GetActive: boolean;
   public
     /// <summary>
@@ -673,11 +674,14 @@ begin
     HandleSSL.SSLOptions.KeyFile := FSSL_PrivateKeyFileName;
     HandleSSL.SSLOptions.SSLVersions := [sslvTLSv1, sslvTLSv1_1, sslvTLSv1_2];
     FHTTPServer.IOHandler := HandleSSL;
-    FHTTPServer.DefaultPort := IdPORT_https;
-  end
-  else
-    FHTTPServer.DefaultPort := IdPORT_HTTP;
+  end;
+  FHTTPServer.OnQuerySSLPort := QuerySSLPort;
   FHTTPServer.Active := true;
+end;
+
+procedure TdwlHTTPServer.QuerySSLPort(APort: Word; var VUseSSL: boolean);
+begin
+  VUseSSL := IsSecure;
 end;
 
 procedure TdwlHTTPServer.RegisterHandler(const URI: string; Handler: TdwlHTTPHandler);

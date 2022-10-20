@@ -140,12 +140,19 @@ begin
           ACMECLient.ChallengeIP := IP;
         end;
         CheckACME;
-        if IP<>'' then
+        var Port: integer;
+        if not FParams.TryGetIntValue(Param_Binding_Port, Port) then
         begin
-          var Binding := HTTPServer.Bindings.Add;
-          Binding.IP := IP;
-          Binding.Port := IfThen(HTTPServer.IsSecure, IdPORT_https, IDPORT_HTTP);
+          if HTTPServer.IsSecure then
+            Port := IdPORT_https
+          else
+            Port := IdPORT_HTTP;
         end;
+        var Binding := HTTPServer.Bindings.Add;
+        if IP<>'' then
+          Binding.IP := IP;
+        Binding.Port := Port;
+        TdwlLogger.Log('Bound to '+IfThen(Binding.IP='', '*', Binding.IP)+':'+Binding.Port.ToString);
         LoadURIAliases(HTTPServer);
         HTTPServer.Open;
         HTTPServer.RegisterHandler(EndpointURI_Log,  FLogHandler);

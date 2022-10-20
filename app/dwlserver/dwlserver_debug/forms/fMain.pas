@@ -66,9 +66,9 @@ begin
   if not (csDestroying in ComponentState) then
     Memo1.Lines.Add(
       FormatDateTime('dd-mm-yyyy hh:nn:ss', UnixToDateTime(LogItem.TimeStamp, false))+'  '+
-      LogItem.Source.PadRight(15)+
-      LogItem.Channel.PadRight(15)+
-      LogItem.Topic.PadRight(15)+
+      LogItem.Source.PadRight(17)+
+      LogItem.Channel.PadRight(17)+
+      LogItem.Topic.PadRight(17)+
       LogItem.Msg);
 end;
 

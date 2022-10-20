@@ -523,7 +523,7 @@ begin
           begin
             ChallToken := Challenges.Items[ChallNo].GetValue<string>('token');
             ChallUrl := Challenges.Items[ChallNo].GetValue<string>('url');
-            Log('Starting HTTP challenge '+(ChallNo+1).Tostring, lsTrace);
+            Log('Starting HTTP challenge '+(ChallNo+1).Tostring+ ' (listening on port '+CallBackPortNumber.ToString+')', lsTrace);
             Status := '';
             FHTTPRequestSeen := false;
             HTTPServer := TIdHTTPServer.Create(nil);

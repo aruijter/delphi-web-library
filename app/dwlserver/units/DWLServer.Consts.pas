@@ -12,6 +12,7 @@ const
   Param_ACMECity = 'ACMECity';
   Param_RestPort = 'RestPort'; ParamDef_RestPort = 443;
   Param_Binding_IP = 'Binding_IP';
+  Param_Binding_Port = 'Binding_Port';
   Param_DLLBasePath = 'DLLBasePath';
 
   Param_FeedConfigProc = 'feedconfigproc';
