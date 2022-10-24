@@ -35,6 +35,12 @@ type
     /// </param>
     class procedure Resolve(var TextToBeResolved: string); static;
     /// <summary>
+    ///  Will resolve any reference to ${ until the next closing curly bracket
+    ///  If the contents between the curly brackets is a number between
+    ///  0 and 255, an ASCII-character is inserted instead of the reference.
+    /// </summary>
+    class procedure ResolveChars(var S: string); static;
+    /// <summary>
     ///   Defines the global lead/trail combination to be used when enclosing
     ///   keys for resolving
     /// </summary>
@@ -134,6 +140,31 @@ begin
       end;
     end;
     inc(Walker);
+  end;
+end;
+
+class procedure TdwlResolver.ResolveChars(var S: string);
+const
+  dlCharRefStart='${';
+  dlCharRefEnd='}';
+  dlCharRefStartLength=2;
+  dlCharRefEndLength=1;
+begin
+  var P := Pos(dlCharRefStart, S);
+  while (P>0) do
+  begin
+    var Q := P-1+Pos(dlCharRefEnd, Copy(S, P, MaxInt));
+    if Q>0 then
+    begin
+      var i := StrToIntDef(Copy(S, P+dlCharRefStartLength, Q-P+1-dlCharRefStartLength-dlCharRefEndLength), -1);
+      if (i>0) and (i<256) then
+        S := Copy(S, 1, P-1)+chr(i)+Copy(S, Q+dlCharRefEndLength, MaxInt)
+      else
+        S := Copy(S, 1, P-1)+Copy(S, Q+dlCharRefEndLength, MaxInt);
+      P := Pos(dlCharRefStart, S);
+    end
+    else
+      P := 0;
   end;
 end;
 

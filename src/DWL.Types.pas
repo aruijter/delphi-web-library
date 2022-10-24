@@ -3,7 +3,7 @@ unit DWL.Types;
 interface
 
 uses
-  System.Rtti;
+  System.Rtti, System.UITypes;
 
 type
   /// <summary>
@@ -130,6 +130,35 @@ type
     function IsEmpty: boolean;
   end;
 
+  TdwlARGBColor = cardinal;
+  TdwlABGRColor = cardinal;
+
+  TdwlDelphiABGRColorRec = record
+    constructor Create(AColor: TColor); overload;
+    constructor Create(AColor: TdwlARGBColor); overload;
+    constructor Create(const AHTMLColor: string); overload;
+    function AsHTML: string;
+    function AsARGBColor: TdwlARGBCOlor;
+    case Cardinal of
+      0:
+        (Color: TdwlABGRColor);
+      1:
+        (R, G, B, A: System.Byte);
+  end;
+
+  TdwlRestOfTheWorldARGBColorRec = record
+    constructor Create(AColor: TColor); overload;
+    constructor Create(AColor: TdwlARGBColor); overload;
+    constructor Create(const AHTMLColor: string); overload;
+    function AsHTML: string;
+    function AsABGRColor: TdwlABGRCOlor;
+    case Cardinal of
+      0:
+        (Color: TdwlARGBColor);
+      1:
+        (B, G, R, A: System.Byte);
+  end;
+
 const
   EmptyEpoch: TUnixEpoch = (FEpoch: Low(Int64));
   MinEpoch: TUnixEpoch = (FEpoch: Low(Int64)+1);
@@ -138,7 +167,7 @@ const
 implementation
 
 uses
-  System.DateUtils, System.SysUtils, Winapi.Windows;
+  System.DateUtils, System.SysUtils, Winapi.Windows, System.UIConsts;
 
 { TUnixEpoch }
 
@@ -415,5 +444,68 @@ begin
     Self := Empty;
   end;
 end;
+
+{ TdwlDelphiABGRColorRec }
+
+constructor TdwlDelphiABGRColorRec.Create(AColor: TdwlARGBColor);
+begin
+  R := TdwlRestOfTheWorldARGBColorRec(AColor).R;
+  G := TdwlRestOfTheWorldARGBColorRec(AColor).G;
+  B := TdwlRestOfTheWorldARGBColorRec(AColor).B;
+  A := TdwlRestOfTheWorldARGBColorRec(AColor).A;
+end;
+
+constructor TdwlDelphiABGRColorRec.Create(AColor: TColor);
+begin
+  Color := TColorRec.ColorToRGB(AColor);
+end;
+
+function TdwlDelphiABGRColorRec.AsARGBColor: TdwlARGBCOlor;
+begin
+  Result := TdwlRestOfTheWorldARGBColorRec.Create(Color).Color;
+end;
+
+function TdwlDelphiABGRColorRec.AsHTML: string;
+begin
+  Result := '#' + IntToHex(R, 2)+IntToHex(G, 2)+IntToHex(B, 2);
+end;
+
+constructor TdwlDelphiABGRColorRec.Create(const AHTMLColor: string);
+begin
+  Color := StringToColor('$' + Copy(AHTMLColor, 6, 2) + Copy(AHTMLColor, 4, 2) + Copy(AHTMLColor, 2, 2));
+end;
+
+{ TdwlRestOfTheWorldARGBColorRec }
+
+constructor TdwlRestOfTheWorldARGBColorRec.Create(AColor: TColor);
+begin
+  AColor := TColorRec.ColorToRGB(AColor);
+  R := TdwlDelphiABGRColorRec(AColor).R;
+  G := TdwlDelphiABGRColorRec(AColor).G;
+  B := TdwlDelphiABGRColorRec(AColor).B;
+  A := TdwlDelphiABGRColorRec(AColor).A;
+end;
+
+constructor TdwlRestOfTheWorldARGBColorRec.Create(AColor: TdwlARGBColor);
+begin
+  Color := AColor;
+end;
+
+function TdwlRestOfTheWorldARGBColorRec.AsABGRColor: TdwlABGRCOlor;
+begin
+  Result := TdwlDelphiABGRColorRec.Create(Color).Color;
+end;
+
+function TdwlRestOfTheWorldARGBColorRec.AsHTML: string;
+begin
+  Result := '#' + IntToHex(R, 2)+IntToHex(G, 2)+IntToHex(B, 2);
+end;
+
+constructor TdwlRestOfTheWorldARGBColorRec.Create(const AHTMLColor: string);
+begin
+  Create(StringToColor('$' + Copy(AHTMLColor, 6, 2) + Copy(AHTMLColor, 4, 2) + Copy(AHTMLColor, 2, 2)));
+end;
+
+
 
 end.

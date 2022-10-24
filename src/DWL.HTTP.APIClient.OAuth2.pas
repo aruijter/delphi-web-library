@@ -9,7 +9,7 @@ const
   param_ForceLoginPrompt='forceloginprompt';
 
 type
-  IfdlRestOAuth2Authorizer = interface(IdwlAPIAuthorizer)
+  IdwlAPIOAuth2Authorizer = interface(IdwlAPIAuthorizer)
     ['{A1BB96A5-7391-4633-B9DC-7BD681FF7731}']
     function CheckJWT(JWT: IdwlJWT): TdwlResult;
   end;
@@ -20,8 +20,8 @@ type
 ///   DialogTitle is required, if left empty, the authorizer will not try to get a refreshtoken interactivly, but only through the callback procedure. This is meant for server applications.<br/><br/>
 ///   Params: <br/>param_ForceLoginPrompt; bool; to force a login-prompt and skip SingleSignOn in the browser.
 /// </summary>
-function New_OAuth2Authorizer(CallbackProc: TdwlAPIAuthorizerCallBackProc; const Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string; Params: IdwlParams=nil): IfdlRestOAuth2Authorizer; overload;
-function New_OAuth2Authorizer(const Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName: string; AESKey: TBytes): IfdlRestOAuth2Authorizer; overload;
+function New_OAuth2Authorizer(CallbackProc: TdwlAPIAuthorizerCallBackProc; const Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string; Params: IdwlParams=nil): IdwlAPIOAuth2Authorizer; overload;
+function New_OAuth2Authorizer(const Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName: string; AESKey: TBytes): IdwlAPIOAuth2Authorizer; overload;
 
 
 implementation
@@ -32,7 +32,7 @@ uses
   System.IOUtils, DWL.Crypt;
 
 type
-  TfdlRestOAuth2Authorizer = class(TdwlAPIAuthorizer, IfdlRestOAuth2Authorizer)
+  TdwlAPIOAuth2Authorizer = class(TdwlAPIAuthorizer, IdwlAPIOAuth2Authorizer)
   strict private
     FOIDC_Client: TdwlOIDC_Client;
     FDialogTitle: string;
@@ -47,7 +47,7 @@ type
     destructor Destroy; override;
   end;
 
-  TfdlRestOAuth2SecretsFileAuthorizer = class(TfdlRestOAuth2Authorizer, IfdlRestOAuth2Authorizer)
+  TdwlAPIOAuth2SecretsFileAuthorizer = class(TdwlAPIOAuth2Authorizer, IdwlAPIOAuth2Authorizer)
   strict private
     FSecretsFileName: string;
     FAESKey: TBytes;
@@ -56,19 +56,19 @@ type
     constructor Create(const Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName: string; AESKey: TBytes);
   end;
 
-function New_OAuth2Authorizer(CallbackProc: TdwlAPIAuthorizerCallBackProc; const Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string; Params: IdwlParams=nil): IfdlRestOAuth2Authorizer;
+function New_OAuth2Authorizer(CallbackProc: TdwlAPIAuthorizerCallBackProc; const Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string; Params: IdwlParams=nil): IdwlAPIOAuth2Authorizer;
 begin
-  Result := TfdlRestOAuth2Authorizer.Create(CallbackProc, Issuer_Uri, Client_Id, Redirect_Uri, Scopes, DialogTitle, Params);
+  Result := TdwlAPIOAuth2Authorizer.Create(CallbackProc, Issuer_Uri, Client_Id, Redirect_Uri, Scopes, DialogTitle, Params);
 end;
 
-function New_OAuth2Authorizer(const Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName: string; AESKey: TBytes): IfdlRestOAuth2Authorizer; overload;
+function New_OAuth2Authorizer(const Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName: string; AESKey: TBytes): IdwlAPIOAuth2Authorizer; overload;
 begin
-  Result := TfdlRestOAuth2SecretsFileAuthorizer.Create(Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName, AESKey);
+  Result := TdwlAPIOAuth2SecretsFileAuthorizer.Create(Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName, AESKey);
 end;
 
-{ TfdlRestOAuth2Authorizer }
+{ TdwlAPIOAuth2Authorizer }
 
-procedure TfdlRestOAuth2Authorizer.AcquireAccessToken;
+procedure TdwlAPIOAuth2Authorizer.AcquireAccessToken;
 begin
   var Access_Token: string;
   var Expires_In: integer;
@@ -86,7 +86,7 @@ begin
   end;
 end;
 
-procedure TfdlRestOAuth2Authorizer.AcquireRefreshtoken;
+procedure TdwlAPIOAuth2Authorizer.AcquireRefreshtoken;
 var
   Session: TdwlOIDC_Client_Session;
 begin
@@ -121,12 +121,12 @@ begin
   end;
 end;
 
-function TfdlRestOAuth2Authorizer.CheckJWT(JWT: IdwlJWT): TdwlResult;
+function TdwlAPIOAuth2Authorizer.CheckJWT(JWT: IdwlJWT): TdwlResult;
 begin
    Result := FOIDC_Client.CheckJWT(JWT);
 end;
 
-constructor TfdlRestOAuth2Authorizer.Create(CallbackProc: TdwlAPIAuthorizerCallBackProc; const Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string; Params: IdwlParams=nil);
+constructor TdwlAPIOAuth2Authorizer.Create(CallbackProc: TdwlAPIAuthorizerCallBackProc; const Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string; Params: IdwlParams=nil);
 begin
   inherited Create(CallbackProc);
   PutInternetExplorerBrowserEmulationInRegistry;
@@ -140,15 +140,15 @@ begin
   end;
 end;
 
-destructor TfdlRestOAuth2Authorizer.Destroy;
+destructor TdwlAPIOAuth2Authorizer.Destroy;
 begin
   FOIDC_Client.Free;
   inherited Destroy;
 end;
 
-{ TfdlRestOAuth2SecretsFileAuthorizer }
+{ TdwlAPIOAuth2SecretsFileAuthorizer }
 
-procedure TfdlRestOAuth2SecretsFileAuthorizer.CallBack(var Token: string; Action: TdwlAPIAuthorizerCallBackAction);
+procedure TdwlAPIOAuth2SecretsFileAuthorizer.CallBack(var Token: string; Action: TdwlAPIAuthorizerCallBackAction);
 begin
   case Action of
     acaGetRefreshtoken:
@@ -166,7 +166,7 @@ begin
   end;
 end;
 
-constructor TfdlRestOAuth2SecretsFileAuthorizer.Create(const Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName: string; AESKey: TBytes);
+constructor TdwlAPIOAuth2SecretsFileAuthorizer.Create(const Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName: string; AESKey: TBytes);
 begin
   FSecretsFileName := SecretsFileName;
   FAESKey := AESKey;

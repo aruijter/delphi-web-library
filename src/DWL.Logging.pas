@@ -201,7 +201,7 @@ implementation
 
 uses
   System.Classes, System.Generics.Collections, DWL.SyncObjs, System.NetEncoding,
-  DWL.Logging.EventLog, System.Hash, DWL.SysUtils, DWL.IOUtils;
+  DWL.Logging.EventLog, System.Hash, DWL.IOUtils;
 
 type
   TLogDispatchThread = class(TThread)

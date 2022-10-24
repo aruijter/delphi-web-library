@@ -460,7 +460,7 @@ implementation
 
 uses
   System.SysUtils, System.Generics.Defaults,
-  System.TypInfo, DWL.SysUtils, System.Classes, DWL.Rtti.Utils;
+  System.TypInfo, System.Classes, DWL.Rtti.Utils, DWL.ConvUtils;
 
 type
   TdwlMetaKey = class
@@ -819,7 +819,7 @@ begin
   begin
     Result := V.TryAsType(Value, false);
     if not Result then
-      Result := TryDotStrToFloat(V.ToString, Value);
+      Result := TdwlConvUtils.TryDotStrToFloat(V.ToString, Value);
   end;
 end;
 

@@ -133,7 +133,7 @@ implementation
 
 uses
   DWL.HTTP.Consts, System.SysUtils, DWL.JOSE, DWL.Types, DWL.Params.Consts,
-  System.Rtti, System.DateUtils, DWL.SysUtils, DWL.Logging, DWL.Logging.API,
+  System.Rtti, System.DateUtils, DWL.Logging, DWL.Logging.API,
   DWL.HTTP.Server.Utils, DWL.HTTP.Server.Globals;
 
 const

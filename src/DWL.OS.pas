@@ -1,4 +1,4 @@
-unit DWL.OS.Utils;
+unit DWL.OS;
 
 interface
 
@@ -9,7 +9,7 @@ type
   /// <summary>
   ///   a abstract class containing OS related utility functions
   /// </summary>
-  TdwlOSUtils = record
+  TdwlOS = record
     class var
       FServices: ISWbemServices;
     /// <summary>
@@ -107,9 +107,9 @@ uses
   System.SysUtils, Winapi.ShellAPI, Winapi.ShLwApi,
   Winapi.ActiveX;
 
-{ TdwlOSUtils }
+{ TdwlOS }
 
-class function TdwlOSUtils.ExecuteFile(const FileName, Params, DefaultDir: string; ShowCmd: integer): TdwlResult;
+class function TdwlOS.ExecuteFile(const FileName, Params, DefaultDir: string; ShowCmd: integer): TdwlResult;
   procedure CheckRes(Res:HINST);
   begin
     if Res<=32 then
@@ -170,7 +170,7 @@ begin
 end;
 
 
-class function TdwlOSUtils.ExecuteFileAndWait(const FileName, Params, DefaultDir: string; ShowCmd: integer): TdwlResult;
+class function TdwlOS.ExecuteFileAndWait(const FileName, Params, DefaultDir: string; ShowCmd: integer): TdwlResult;
   procedure CheckRes(Res:HINST);
   begin
     if Res<=32 then
@@ -207,13 +207,13 @@ begin
   CloseHandle(Proc);
 end;
 
-class function TdwlOSUtils.ExecuteURI(const URI: string): TdwlResult;
+class function TdwlOS.ExecuteURI(const URI: string): TdwlResult;
 begin
   if ShellExecute(0, nil, PWideChar(URI), '', '', SW_SHOW)< 32 then
     Result.AddErrorMsg('Failed to execute program: "'+URI+'". Error Code ' +IntToStr(GetLastError));
 end;
 
-class function TdwlOSUtils.FindExecutableByExtension(const Extension: string): string;
+class function TdwlOS.FindExecutableByExtension(const Extension: string): string;
 begin
   SetLength(Result, MAX_PATH);
   var Ext := Extension;
@@ -229,7 +229,7 @@ begin
     Result := '';
 end;
 
-class function TdwlOSUtils.FindExecutableByProgID(const ProgID: string): string;
+class function TdwlOS.FindExecutableByProgID(const ProgID: string): string;
 begin
   SetLength(Result, MAX_PATH);
   var StrLen := MAX_PATH;
@@ -240,7 +240,7 @@ begin
     Result := '';
 end;
 
-class function TdwlOSUtils.GetWindowsUserSid: string;
+class function TdwlOS.GetWindowsUserSid: string;
 var
   UserNameSam: array[0..249] of char;
 begin
@@ -273,7 +273,7 @@ begin
   end;
 end;
 
-class function TdwlOSUtils.WMI_Value(const Win32Class, Win32Property: string): string;
+class function TdwlOS.WMI_Value(const Win32Class, Win32Property: string): string;
 begin
   if FServices=nil then
     FServices := CoSWbemLocator.Create.ConnectServer('', 'root\cimv2', '', '', '','', 0, nil);
