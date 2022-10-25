@@ -3,7 +3,7 @@ unit DWL.Mail.Utils;
 interface
 
 uses
-  IdMessage;
+  IdMessage, DWL.Classes;
 
 type
   TdwlMailCheckOption=(mcEmptyStringIsValid, mcDoNotTrimSpaces, mcEvaluateCommaSeparatedList);
@@ -11,14 +11,14 @@ type
 
   TdwlMailUtils = record
     class function IsValidEmailAddress(const Value: string; Options: TdwlMailCheckOptions=[]): boolean; static;
-    class procedure SendMailToAPI(const Endpoint, LogSecret: string; Msg: TIdMessage); static;
+    class function SendMailToAPI(const Endpoint, LogSecret: string; Msg: TIdMessage): TdwlResult; static;
   end;
 
 implementation
 
 uses
   System.RegularExpressions, System.Classes, DWL.HTTP.Client, DWL.HTTP.Consts,
-  System.NetEncoding, System.SysUtils;
+  System.NetEncoding, System.SysUtils, Winapi.WinInet;
 
 { TdwlMailUtils }
 
@@ -57,22 +57,24 @@ begin
     Result := TRegEx.IsMatch(EMail2Check, EMAIL_REGEX);
 end;
 
-class procedure TdwlMailUtils.SendMailToAPI(const Endpoint, LogSecret: string; Msg: TIdMessage);
+class function TdwlMailUtils.SendMailToAPI(const Endpoint, LogSecret: string; Msg: TIdMessage): TdwlResult;
 begin
   var Url := Endpoint+'?secret='+TNetEncoding.URL.Encode(LogSecret);
   if Msg.BccList.Count>0 then
     Url := Url+'&bcc='+TNetEncoding.URL.Encode(Msg.BccList.EMailAddresses);
-  var Rq := New_HTTPRequest(Url);
+  var Request := New_HTTPRequest(Url);
   var Stream := TMemoryStream.Create;
   try
     Msg.SaveToStream(Stream);
-    Rq.PostStream.WriteData(Stream.Memory, Stream.Size);
+    Request.PostStream.WriteData(Stream.Memory, Stream.Size);
   finally
     Stream.Free;
   end;
-  Rq.Header[HTTP_HEADER_CONTENT_TYPE] := CONTENT_TYPE_OCTET_STREAM;
-  Rq.Method  := HTTP_COMMAND_POST;
-  Rq.Execute;
+  Request.Header[HTTP_HEADER_CONTENT_TYPE] := CONTENT_TYPE_OCTET_STREAM;
+  Request.Method  := HTTP_COMMAND_POST;
+  var Response := Request.Execute;
+  if Response.StatusCode<>HTTP_STATUS_OK then
+    Result.AddErrorMsg('Error '+Response.StatusCode.ToString);
 end;
 
 end.

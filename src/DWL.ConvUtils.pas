@@ -8,7 +8,7 @@ uses
 type
   TdwlConvUtils = record
     class var
-       _DotFormatSettings: TFormatSettings;
+       FDotFormatSettings: TFormatSettings;
     /// <summary>
     ///   A string to float conversion function that always uses a decimal point
     ///   for fraction separation.
@@ -28,6 +28,7 @@ type
     /// </remarks>
     class function TryDotStrToFloat(const TextToConvert: string; out Value: double): boolean; static;
     class function DotStrToFloatDef(const TextToConvert: string; Default: double=0): double; static;
+    class function FloatToDotStr(Value: double): string; static;
     class function BytestoLowerHex(Bytes: TBytes): string; static;
     class function HexToBytes(const Hex: string): TBytes; static;
     class constructor Create;
@@ -55,7 +56,7 @@ end;
 class function TdwlConvUtils.TryDotStrToFloat(const TextToConvert: string; out Value: double): boolean;
 begin
   try
-    Result := DWL.ConvUtils.TextToFloat(TextToConvert, Value, _DotFormatSettings);
+    Result := DWL.ConvUtils.TextToFloat(TextToConvert, Value, FDotFormatSettings);
   except
     Result := false;
   end;
@@ -81,7 +82,7 @@ end;
 
 class constructor TdwlConvUtils.Create;
 begin
-  _DotFormatSettings.DecimalSeparator := '.';
+  FDotFormatSettings.DecimalSeparator := '.';
 end;
 
 class function TdwlConvUtils.DotStrToFloatDef(const TextToConvert: string;
@@ -89,6 +90,11 @@ class function TdwlConvUtils.DotStrToFloatDef(const TextToConvert: string;
 begin
   if not TryDotStrToFloat(TextToConvert, Result) then
     Result := Default;
+end;
+
+class function TdwlConvUtils.FloatToDotStr(Value: double): string;
+begin
+  Result := FloatToStr(Value, FDotFormatSettings);
 end;
 
 class function TdwlConvUtils.HexToBytes(const Hex: string): TBytes;
