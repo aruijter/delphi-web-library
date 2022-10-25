@@ -121,8 +121,8 @@ begin
     FMySQL_Profile := New_Params;
     FParams.AssignTo(FMySQL_Profile, Params_SQLConnection);
     InitDatabase;
-    TdwlMailQueue.Configure(FParams, true);
     FLogHandler := TdwlHTTPHandler_Log.Create(FParams); // init before activating DoLog!
+    TdwlMailQueue.Configure(FParams, true);
     EnableLogDispatchingToCallback(false, DoLog);
     ACMECLient := TdwlACMEClient.Create;
     try

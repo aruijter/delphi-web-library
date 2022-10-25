@@ -55,22 +55,12 @@ implementation
 
 uses
   DWL.MySQL, DWL.Params.Consts, System.JSON, Winapi.Windows, System.SysUtils,
-  IdSMTP, IdSSLOpenSSL, IdSASL, DWL.HTTP.APIClient.OAuth2, DWL.HTTP.APIClient,
-  IdAssignedNumbers, System.Math, IdExplicitTLSClientServerBase, DWL.Classes;
+  IdSMTP, IdSSLOpenSSL, DWL.HTTP.APIClient.OAuth2, DWL.HTTP.APIClient, DWL.Mail.SASL,
+  IdAssignedNumbers, System.Math, IdExplicitTLSClientServerBase, DWL.Classes,
+  DWL.StrUtils;
 
 type
   TdwlMailStatus = (msQueued=0, msRetrying=2, msSent=5, msError=9);
-
-  TIdSASLOAuth2 = class(TIdSASL)
-  private
-    FToken: string;
-    FUser: string;
-  public
-    property Token: string read FToken write FToken;
-    property User: string read FUser write FUser;
-    class function ServiceName: TIdSASLServiceName; override;
-    function StartAuthenticate(const AChallenge, AHost, AProtocolName: string): string; override;
-  end;
 
   TMailSendThread = class(TThread)
   strict private
@@ -261,6 +251,7 @@ end;
 
 procedure TMailSendThread.Execute;
 begin
+  Sleep(1000); // Let logging handler in server initialize
   while not Terminated do
   begin
     Process;
@@ -280,13 +271,14 @@ end;
 procedure TMailSendThread.Process;
 const
   SQL_GetQueuedMail =
-    'SELECT Id, eml, bccrecipients, Attempts FROM dwl_mailqueue '+
+    'SELECT Id, eml, bccrecipients, Attempts, processinglog FROM dwl_mailqueue '+
     'WHERE (Status<?) and ((DelayedUntil is NULL) or (DelayedUntil<=CURRENT_TIMESTAMP())) '+
     'and ((Attempts IS NULL) or (Attempts<?)) ORDER BY Status, DelayedUntil';
-  SQL_UPDATE_part1 = 'UPDATE dwl_mailqueue SET status=';
-  SQL_UPDATE_part3_Complete = ', attempts=?, momentsent=CURRENT_TIMESTAMP() WHERE id=?';
-  SQL_UPDATE_part3_Retry = ', attempts=?, DelayedUntil=DATE_ADD(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE) WHERE id=?';
-  SQL_UPDATE_part3_Error = ', attempts=?, DelayedUntil=NULL WHERE id=?';
+  SQL_UPDATE_part1 = 'UPDATE dwl_mailqueue SET processinglog=?, attempts=?, status=';
+  SQL_UPDATE_part2_Complete = ', DelayedUntil=NULL, momentsent=CURRENT_TIMESTAMP()';
+  SQL_UPDATE_part2_Retry = ', DelayedUntil=DATE_ADD(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)';
+  SQL_UPDATE_part2_Error = ', DelayedUntil=NULL';
+  SQL_UPDATE_part3 = ' WHERE id=?';
   MAX_ATTEMPTS = 5;
 begin
   try
@@ -300,6 +292,7 @@ begin
     begin
       var Current_ID := Reader.GetInteger(0);
       var Attempts := Reader.GetInteger(3, true);
+      var ProcessingLog := Reader.GetString(4, true);
       inc(Attempts);
       var Str := TStringStream.Create(Reader.GetString(1));
       try
@@ -310,22 +303,25 @@ begin
           var Update_SQL := SQL_UPDATE_part1;
           var Res := ProcessMsg(Msg);
           if Res.Success then
-            Update_SQL := Update_SQL+byte(msSent).ToString+SQL_UPDATE_part3_Complete
+            Update_SQL := Update_SQL+byte(msSent).ToString+SQL_UPDATE_part2_Complete
           else
           begin
             if Attempts=MAX_ATTEMPTS then
-              Update_SQL := Update_SQL+byte(msError).ToString+SQL_UPDATE_part3_Error
+              Update_SQL := Update_SQL+byte(msError).ToString+SQL_UPDATE_part2_Error
             else
-              Update_SQL := Update_SQL+byte(msRetrying).ToString+SQL_UPDATE_part3_Retry;
+              Update_SQL := Update_SQL+byte(msRetrying).ToString+SQL_UPDATE_part2_Retry;
+            ProcessingLog := ProcessingLog+#13#10+Res.ErrorMsg;
           end;
+          Update_SQL := Update_SQL+SQL_UPDATE_part3;
           var Cmd := Session.CreateCommand(Update_SQL);
-          Cmd.Parameters.SetIntegerDataBinding(0, Attempts);
-          Cmd.Parameters.SetIntegerDataBinding(1, Current_ID);
+          Cmd.Parameters.SetTextDataBinding(0, ProcessingLog);
+          Cmd.Parameters.SetIntegerDataBinding(1, Attempts);
+          Cmd.Parameters.SetIntegerDataBinding(2, Current_ID);
           Cmd.Execute;
           if Res.Success then
             TdwlMailQueue.Log('Successfully sent mail to '+Msg.Recipients.EMailAddresses, lsTrace)
           else
-            TdwlMailQueue.Log('Failed to sent mail ['+Res.ErrorMsg+'] to '+Msg.Recipients.EMailAddresses, lsTrace);
+            TdwlMailQueue.Log('Failed to sent mail to '+Msg.Recipients.EMailAddresses+' ['+TdwlStrUtils.Sanatize(Res.ErrorMsg, [soRemoveLineBreaks])+']', lsError);
         finally
           Msg.Free;
         end;
@@ -361,6 +357,11 @@ begin
         FreeSMTP;
         FSMTP := TIdSMTP.Create(nil);
         FCurrentContextParams := DomainContextParams;
+        if FCurrentContextParams=nil then
+        begin
+          Result.AddErrorMsg('No Context found for from: '+Msg.From.Address);
+          Exit;
+        end;
         // AdR 20190820: See if setting timeouts prevent the queue from
         // hanging sometimes...
         FSMTP.ConnectTimeout := 30000; {30 secs}
@@ -376,7 +377,7 @@ begin
           var AccessToken := Authorizer.GetAccesstoken;
           if AccessToken='' then
           begin
-            TdwlMailQueue.Log('Error fetching Access token for Context: '+DomainFrom);
+            Result.AddErrorMsg('Error fetching Access token for Context: '+DomainFrom);
             Exit;
           end;
           FIdSASL := TIdSASLOAuth2.Create(nil);
@@ -400,7 +401,10 @@ begin
       end;
       try
         if not FSMTP.Connected then
-          raise Exception.Create('Failed to connect to mailserver');
+        begin
+          Result.AddErrorMsg('Failed to connect to mailserver');
+          Exit;
+        end;
         FSMTP.Send(Msg);
         MailIsSent := true;
       except
@@ -419,7 +423,7 @@ begin
       Result.AddErrorMsg('For some unknown reason mail was not sent');
   except
     on E:Exception do
-      Result.AddErrorMsg('Failed delivery for "'+Msg.From.Address+'": '+E.Message);
+      Result.AddErrorMsg(E.Message);
   end;
 end;
 
@@ -432,18 +436,6 @@ begin
     FCurrentContextParams.WriteValue(Param_Refreshtoken, Token);
     // we need to add here that the mailqueue_domains is written back to params
   end;
-end;
-
-{ TIdSASLOAuth2 }
-
-class function TIdSASLOAuth2.ServiceName: TIdSASLServiceName;
-begin
-  Result := 'XOAUTH2';
-end;
-
-function TIdSASLOAuth2.StartAuthenticate(const AChallenge, AHost, AProtocolName: string): string;
-begin
-  Result := 'user=' + FUser + Chr($01) + 'auth=Bearer ' + FToken + Chr($01) + Chr($01);
 end;
 
 end.

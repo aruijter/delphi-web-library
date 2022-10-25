@@ -161,7 +161,7 @@ uses
   IdCoderMIME, System.Classes, System.AnsiStrings, System.StrUtils,
   System.DateUtils, System.IOUtils, System.Math, System.JSON, Winapi.WinInet,
   IdHTTPServer, System.Hash, Winapi.Windows,
-  System.Generics.Collections, DWL.SysUtils, System.NetEncoding,
+  System.Generics.Collections, System.NetEncoding,
   IdAssignedNumbers;
 
 const
