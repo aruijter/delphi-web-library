@@ -18,6 +18,9 @@
         <Projects Include="..\app\dll\OAuth2\OAuth2.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="..\app\dll\DisCo\DisCo.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -71,14 +74,23 @@
     <Target Name="OAuth2:Make">
         <MSBuild Projects="..\app\dll\OAuth2\OAuth2.dproj" Targets="Make"/>
     </Target>
+    <Target Name="DisCo">
+        <MSBuild Projects="..\app\dll\DisCo\DisCo.dproj"/>
+    </Target>
+    <Target Name="DisCo:Clean">
+        <MSBuild Projects="..\app\dll\DisCo\DisCo.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DisCo:Make">
+        <MSBuild Projects="..\app\dll\DisCo\DisCo.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="DWL_src;dwlserver_sv;dwlserver_debug;HelloWorld;OAuth2"/>
+        <CallTarget Targets="DWL_src;dwlserver_sv;dwlserver_debug;HelloWorld;OAuth2;DisCo"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="DWL_src:Clean;dwlserver_sv:Clean;dwlserver_debug:Clean;HelloWorld:Clean;OAuth2:Clean"/>
+        <CallTarget Targets="DWL_src:Clean;dwlserver_sv:Clean;dwlserver_debug:Clean;HelloWorld:Clean;OAuth2:Clean;DisCo:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="DWL_src:Make;dwlserver_sv:Make;dwlserver_debug:Make;HelloWorld:Make;OAuth2:Make"/>
+        <CallTarget Targets="DWL_src:Make;dwlserver_sv:Make;dwlserver_debug:Make;HelloWorld:Make;OAuth2:Make;DisCo:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>
