@@ -92,8 +92,8 @@ end;
 
 class procedure TdwlResolver.Register(const Key: string; ResolverFunc: TResolveKeyFunc);
 begin
-  Assert(FResolvableReferences.IndexOf(LowerCase(Key))<0, 'Duplicate registration of '+Key);
-  FResolvableReferences.AddObject(LowerCase(Key), pointer(@Resolverfunc));
+  if FResolvableReferences.IndexOf(LowerCase(Key))<0 then
+    FResolvableReferences.AddObject(LowerCase(Key), pointer(@Resolverfunc));
 end;
 
 class procedure TdwlResolver.Resolve(var TextToBeResolved: string);
