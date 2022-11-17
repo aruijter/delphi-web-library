@@ -105,7 +105,7 @@ begin
         begin
           FAuthorizer.InvalidateAuthorization;
           // try again and we will ask for a username password next time
-          Result := DoApiRequest(StatusCode, UriPart, Http_Command, URLEncodedParamsOrPostBody, OmitAccessToken, true);
+          Result := DoApiRequest(StatusCode, UriPart, Http_Command, URLEncodedParamsOrPostBody, PostBodyIsJSON, OmitAccessToken, true);
         end;
       end;
     end;

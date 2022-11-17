@@ -7,7 +7,7 @@ uses
 
 type
   TdwlFile = record
-    class function ExtractBareName(const Path: string): string; static;
+    class function ExtractBareName(const Path: string=''): string; static;
   end;
 
 
@@ -18,9 +18,12 @@ uses
 
 { TdwlFile }
 
-class function TdwlFile.ExtractBareName(const Path: string): string;
+class function TdwlFile.ExtractBareName(const Path: string=''): string;
 begin
-  Result := ChangeFileExt(ExtractFileName(Path),'');
+  if Path='' then
+    Result := ChangeFileExt(ExtractFileName(ParamStr(0)),'')
+  else
+    Result := ChangeFileExt(ExtractFileName(Path),'');
 end;
 
 end.

@@ -6,12 +6,11 @@ uses
   DWL.HTTP.Server.Handler.DLL.Classes, DWL.HTTP.Server.Types;
 
 type
-  THandler_DisCo = class(TdwlDLLHandling)
+  THandler_DisCo = class(TdwlDLLHandling_OpenID)
   strict private
     class var FAdditionalParametersSQL: string;
     class function Get_phonehome(const State: PdwlHTTPHandlingState): boolean;
   public
-    class function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
     class procedure Configure(const Params: string); override;
   end;
 
@@ -26,11 +25,6 @@ const
   Param_Additional_parameters_SQL = 'additional_parameters_sql';
 
 { THandler_DisCo }
-
-class function THandler_DisCo.Authorize(const State: PdwlHTTPHandlingState): boolean;
-begin
-  Result := true;
-end;
 
 class procedure THandler_DisCo.Configure(const Params: string);
 const
@@ -57,7 +51,7 @@ end;
 class function THandler_DisCo.Get_phonehome(const State: PdwlHTTPHandlingState): boolean;
 const
   SQL_Get_ProfileByIP = 'SELECT profile from dwl_disco_known_ipaddresses WHERE ipaddress=?';
-  SQL_Get_ProfileParameters = 'SELECT `key`, value FROM dwl_disco_profileparameters WHERE (appname=?) AND ((profile IS NULL) or (profile='''') OR (profile=?))';
+  SQL_Get_ProfileParameters = 'SELECT `key`, value FROM dwl_disco_profileparameters WHERE ((appname IS NULL) OR (appname="") OR (appname=?)) AND ((profile IS NULL) or (profile="") OR (profile=?))';
   SQL_Get_AppVersion = 'SELECT version FROM dwl_disco_releases r WHERE (r.packagename=?) ORDER BY ReleaseMoment DESC LIMIT 1';
   SQL_Get_PackageVersions = 'SELECT ap.packagename, (SELECT version FROM dwl_disco_releases r WHERE (ap.packagename=r.packagename) ORDER BY ReleaseMoment DESC LIMIT 1) FROM dwl_disco_apppackages ap WHERE (ap.appname=?)';
 begin

@@ -45,8 +45,14 @@
         <CfgParent>Base</CfgParent>
         <Base>true</Base>
     </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win64' and '$(Cfg_2)'=='true') or '$(Cfg_2_Win64)'!=''">
+        <Cfg_2_Win64>true</Cfg_2_Win64>
+        <CfgParent>Cfg_2</CfgParent>
+        <Cfg_2>true</Cfg_2>
+        <Base>true</Base>
+    </PropertyGroup>
     <PropertyGroup Condition="'$(Base)'!=''">
-        <DCC_DcuOutput>.\$(Platform)\$(Config)</DCC_DcuOutput>
+        <DCC_DcuOutput>.\$(Platform)\$(Config)\Units</DCC_DcuOutput>
         <DCC_ExeOutput>.\$(Platform)\$(Config)</DCC_ExeOutput>
         <DCC_E>false</DCC_E>
         <DCC_N>false</DCC_N>
@@ -58,6 +64,7 @@
         <SanitizedProjectName>DisCo</SanitizedProjectName>
         <DCC_UnitSearchPath>..\..\..\src;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <VerInfo_Locale>1043</VerInfo_Locale>
+        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
         <DCC_UsePackage>dxPSdxSpreadSheetLnkRS28;vclwinx;fmx;dxRichEditDocumentModelRS28;vclie;DbxCommonDriver;bindengine;IndyIPCommon;VCLRESTComponents;FireDACCommonODBC;cxExportRS28;dxGanttControlRS28;FireDACCommonDriver;dxHttpIndyRequestRS28;appanalytics;IndyProtocols;vclx;dxTileControlRS28;dxPScxPivotGridLnkRS28;IndyIPClient;dbxcds;vcledge;cxLibraryRS28;dxCloudServiceLibraryRS28;bindcompvclwinx;cxPivotGridOLAPRS28;FmxTeeUI;dxPScxVGridLnkRS28;dxPSdxDBOCLnkRS28;dxPSdxMapControlLnkRS28;dxGDIPlusRS28;dxPSPrVwRibbonRS28;cxGridEMFRS28;d3Party;bindcompfmx;dsxLib;IDElineaOpen;dxCoreRS28;cxPivotGridRS28;dxPSdxPDFViewerLnkRS28;inetdb;dxSpreadSheetCoreRS28;cxSchedulerTreeBrowserRS28;dxPSCoreRS28;FireDACSqliteDriver;DbxClientDriver;dxSpreadSheetRS28;dxTabbedMDIRS28;dxSkinsCoreRS28;Tee;soapmidas;dxBarRS28;vclactnband;TeeUI;dxADOServerModeRS28;fmxFireDAC;dbexpress;dxFireDACServerModeRS28;dxWizardControlRS28;dcldsxLib;DBXMySQLDriver;VclSmp;inet;dxServerModeRS28;dxPSdxLCLnkRS28;vcltouch;fmxase;cxTreeListRS28;dxBarDBNavRS28;dxdbtrRS28;d2Party;dbrtl;dxPSLnksRS28;fmxdae;TeeDB;dxPScxCommonRS28;FireDACMSAccDriver;dxNavBarRS28;CustomIPTransport;dxSpreadSheetReportDesignerRS28;dxChartControlRS28;dxFireDACEMFRS28;vcldsnap;dxComnRS28;DBXInterBaseDriver;dxFlowChartDesignerRS28;IndySystem;dxSpreadSheetConditionalFormattingDialogsRS28;cxVerticalGridRS28;dxOrgChartAdvancedCustomizeFormRS28;vcldb;dxDBXServerModeRS28;cxSchedulerRS28;dxPSDBTeeChartRS28;dxRibbonRS28;dxmdsRS28;dxRichEditControlRS28;cxSchedulerGridRS28;dxPScxSchedulerLnkRS28;dxFlowChartLayoutsRS28;dxPScxExtCommonRS28;dxPSdxOCLnkRS28;dxPsPrVwAdvRS28;dxdborRS28;vclFireDAC;dxRichEditControlCoreRS28;dsLib;bindcomp;FireDACCommon;dxADOEMFRS28;dxPSdxDBTVLnkRS28;dxRibbonCustomizationFormRS28;IndyCore;RESTBackendComponents;dxPScxGridLnkRS28;cxPivotGridChartRS28;dxBarExtDBItemsRS28;bindcompdbx;dxGaugeControlRS28;dxRichEditCoreRS28;cxTreeListdxBarPopupMenuRS28;rtl;FireDACMySQLDriver;dxDockingRS28;dxPDFViewerRS28;FireDACADSDriver;dxFlowChartAdvancedCustomizeFormRS28;dcldsLib;IDElinea;RESTComponents;dxPSTeeChartRS28;DBXSqliteDriver;vcl;IndyIPServer;dsnapxml;dsnapcon;adortl;dxBarExtItemsRS28;cxSchedulerWebServiceStorageRS28;dxtrmdRS28;dxorgcRS28;dxSpreadSheetCoreConditionalFormattingDialogsRS28;dxPSdxFCLnkRS28;d4Lib;dxPSdxGaugeControlLnkRS28;dxPSRichEditControlLnkRS28;dxSpellCheckerRS28;cxGridRS28;vclimg;FireDACPgDriver;FireDAC;inetdbxpress;xmlrtl;tethering;dxMapControlRS28;bindcompvcl;dsnap;dxEMFRS28;CloudService;cxSchedulerRibbonStyleEventEditorRS28;dxPScxTLLnkRS28;fmxobj;bindcompvclsmp;FMXTee;dxFlowChartRS28;dcl2Party;dxPScxPCProdRS28;soaprtl;soapserver;FireDACIBDriver;$(DCC_UsePackage)</DCC_UsePackage>
@@ -74,6 +81,8 @@
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
         <VerInfo_Locale>1033</VerInfo_Locale>
+        <Manifest_File>(None)</Manifest_File>
+        <AppDPIAwarenessMode>none</AppDPIAwarenessMode>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
         <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
@@ -101,11 +110,16 @@
         <DCC_SymbolReferenceInfo>0</DCC_SymbolReferenceInfo>
         <DCC_DebugInformation>0</DCC_DebugInformation>
     </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_2_Win64)'!=''">
+        <DCC_IOChecking>false</DCC_IOChecking>
+        <DCC_AssertionsAtRuntime>false</DCC_AssertionsAtRuntime>
+        <DCC_MapFile>3</DCC_MapFile>
+    </PropertyGroup>
     <ItemGroup>
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
-        <DCCReference Include="Units\DisCo.Handler.pas"/>
+        <DCCReference Include="units\DisCo.Handler.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -127,7 +141,7 @@
                     <Source Name="MainSource">DisCo.dpr</Source>
                 </Source>
                 <Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dcloffice2k280.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
+                    <Excluded_Packages Name="C:\Users\Public\Documents\Embarcadero\Studio\22.0\Bpl\dclProBe.bpl">ProBe Components</Excluded_Packages>
                     <Excluded_Packages Name="$(BDSBIN)\dclofficexp280.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
                 </Excluded_Packages>
             </Delphi.Personality>
