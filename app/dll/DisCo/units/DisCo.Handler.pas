@@ -10,6 +10,7 @@ type
   strict private
     class var FAdditionalParametersSQL: string;
     class function Get_phonehome(const State: PdwlHTTPHandlingState): boolean;
+    class function Post_profileip(const State: PdwlHTTPHandlingState): boolean;
   public
     class procedure Configure(const Params: string); override;
   end;
@@ -19,7 +20,7 @@ implementation
 
 uses
   DWL.HTTP.Consts, DWL.HTTP.Server.Utils, DWL.MySQL, DWL.Params.Consts,
-  System.JSON, DWL.Resolver, System.StrUtils;
+  System.JSON, DWL.Resolver, System.StrUtils, System.SysUtils;
 
 const
   Param_Additional_parameters_SQL = 'additional_parameters_sql';
@@ -31,8 +32,7 @@ const
   SQL_CheckTable_AppPackages = 'CREATE TABLE IF NOT EXISTS `dwl_disco_apppackages` (id INT AUTO_INCREMENT, appname VARCHAR(50), packagename VARCHAR(50),	PRIMARY KEY (id), INDEX appnameIndex (appname))';
   SQL_CheckTable_Releases = 'CREATE TABLE IF NOT EXISTS dwl_disco_releases (id INT AUTO_INCREMENT, packagename VARCHAR(50), version VARCHAR(20), build SMALLINT, releasemoment DATETIME, kind TINYINT, data LONGBLOB, PRIMARY KEY (id)'+',	INDEX packagenamereleasemomentIndex (packagename, releasemoment))';
   SQL_CheckTable_ProfileParameters = 'CREATE TABLE IF NOT EXISTS dwl_disco_profileparameters (id INT AUTO_INCREMENT, appname VARCHAR(50), profile VARCHAR(50),	`key` VARCHAR(50), value VARCHAR(100), PRIMARY KEY (id), INDEX `appnameprofileIndex` (appname, profile))';
-  SQL_CheckTable_KnownIps = 'CREATE TABLE IF NOT EXISTS dwl_disco_known_ipaddresses (id INT AUTO_INCREMENT, ipaddress VARCHAR(50), profile VARCHAR(50), lastseen DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (id), INDEX `profileIndex` (profile))';
-
+  SQL_CheckTable_KnownIps = 'CREATE TABLE IF NOT EXISTS dwl_disco_known_ipaddresses'+' (id INT AUTO_INCREMENT, ipaddress VARCHAR(50), profile VARCHAR(50), lastseen DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (id), INDEX `profileIndex` (profile), 	UNIQUE INDEX IpIndex (ipaddress))';
 begin
   inherited Configure(Params);
   FConfigParams.WriteValue(Param_CreateDatabase, true);
@@ -46,6 +46,7 @@ begin
   Session.CreateCommand(SQL_CheckTable_KnownIps).Execute;
   FAdditionalParametersSQL := FConfigParams.StrValue(Param_Additional_parameters_SQL);
   RegisterHandling(dwlhttpGET, '/phonehome', Get_phonehome, []);
+  RegisterHandling(dwlhttpPOST, '/profileip', Post_profileip, []);
 end;
 
 class function THandler_DisCo.Get_phonehome(const State: PdwlHTTPHandlingState): boolean;
@@ -105,6 +106,25 @@ begin
   while Cmd.Reader.Read do
     JSONVersions.AddPair(Cmd.Reader.GetString(0), Cmd.Reader.GetString(1));
   JSON_Set_Success(State);
+end;
+
+class function THandler_DisCo.Post_profileip(const State: PdwlHTTPHandlingState): boolean;
+const
+  SQL_Post_Profile = 'INSERT INTO dwl_disco_known_ipaddresses (ipaddress, profile, lastseen) VALUES (?,?,?) ON DUPLICATE KEY UPDATE profile=VALUES(profile), lastseen=VALUES(lastseen)';
+begin
+  Result := true;
+  var Profile: string;
+  if not TryGetJSONParam<string>(State, nil, 'profile', Profile, true) then
+    Exit;
+  var RemoteIP: string;
+  if not TryGetRequestParamStr(State, 'remoteip', RemoteIP, true) then
+    Exit;
+ var Cmd := MySQLCommand(State, SQL_Post_Profile);
+ Cmd.Parameters.SetTextDataBinding(0, RemoteIP);
+ Cmd.Parameters.SetTextDataBinding(1, Profile);
+ Cmd.Parameters.SetDateTimeDataBinding(2, Now);
+ Cmd.Execute;
+ JSON_Set_Success(State);
 end;
 
 end.

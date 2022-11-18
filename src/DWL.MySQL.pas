@@ -840,7 +840,7 @@ begin
     end;
   end;
   if ErrorMessage<>'' then
-    raise Exception.Create(ExtractFilename(ParamStr(0)) +  ' mysql connect did not succeeed (host:'+UTF8ToString(FHost)+', user:'+UTF8ToString(FUserName)+', db: '+UTF8ToString(FDatabaseName)+')'#13#10+ErrorMessage);
+    raise Exception.Create(ExtractFilename(ParamStr(0)) +  ' mysql connect did not succeeed (host:'+UTF8ToString(FHost)+', user:'+UTF8ToString(FUserName)+', db:'+UTF8ToString(FDatabaseName)+')'#13#10+ErrorMessage);
 end;
 
 constructor TdwlMySQLConnection.Create(const AHost: string; APort: cardinal; const ADatabaseName, AUserName, APassword: string; ACreateDatabase: boolean=true; AUseSSL: boolean=false);

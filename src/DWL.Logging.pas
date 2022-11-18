@@ -161,7 +161,7 @@ type
     /// <summary>
     ///   Posts a prepared logitem obtained before bu PrepareLogItem
     /// </summary>
-    class procedure Log(Exc: Exception); overload; static;
+    class procedure Log(Exc: Exception; SeverityLevel: TdwlLogSeverityLevel=lsFatal); overload; static;
     /// <summary>
     ///   Sets the default Source, Channel and Topic that will be added fo
     ///   items when not provided
@@ -391,11 +391,11 @@ begin
   TLogEngine.PostLog(LogItem);
 end;
 
-class procedure TdwlLogger.Log(Exc: Exception);
+class procedure TdwlLogger.Log(Exc: Exception; SeverityLevel: TdwlLogSeverityLevel=lsFatal);
 begin
   var LogItem := TLogEngine.CreateLogItem;
   LogItem.Msg := Exc.Message;
-  LogItem.SeverityLevel := lsFatal;
+  LogItem.SeverityLevel := SeverityLevel;
   var S := Exc.StackTrace;
   if S<>'' then
   begin
@@ -409,9 +409,12 @@ end;
 
 class procedure TdwlLogHelper.AddPlainTextAsHTMLLogDetail(const LogItem: PdwlLogItem; const Text: string; const FontFamily: string='Tahoma'; const FontSize: byte=10);
 begin
+  var HTMLTxt := TNetEncoding.HTML.Encode(Text);
+  HTMLTxt := StringReplace(HTMLTxt, #13, '', [rfReplaceAll]);
+  HTMLTxt := StringReplace(HTMLTxt, #10, '<br />', [rfReplaceAll]);
   AddPureHtmlAsLogDetail(LogItem,
     '<!DOCTYPE html>'#13#10'<html><head><meta charset="utf-8"></head><body style="font-family: '+FontFamily+'; font-size: '+FontSize.ToString+';">'+
-    TNetEncoding.HTML.Encode(Text)+'</body></html>');
+    HTMLTxt+'</body></html>');
 end;
 
 class procedure TdwlLogHelper.AddPureHtmlAsLogDetail(const LogItem: PdwlLogItem; const Html: string);
