@@ -37,7 +37,8 @@ requires
   IndyProtocols,
   IndyCore,
   vclie,
-  vcledge;
+  vcledge,
+  Jcl;
 
 contains
   DWL.HTTP.Server.Handler.Log in '..\..\src\DWL.HTTP.Server.Handler.Log.pas',
@@ -88,6 +89,9 @@ contains
   DWL.Logging.TextFile in '..\..\src\DWL.Logging.TextFile.pas',
   DWL.Mail.SASL in '..\..\src\DWL.Mail.SASL.pas',
   DWL.Mail.Utils in '..\..\src\DWL.Mail.Utils.pas',
-  DWL.ToolsAPI in '..\..\src\DWL.ToolsAPI.pas';
+  DWL.ToolsAPI in '..\..\src\DWL.ToolsAPI.pas',
+  DWL.Compression in '..\..\src\DWL.Compression.pas',
+  DWL.DisCo in '..\..\src\DWL.DisCo.pas',
+  DWL.DisCo.Consts in '..\..\src\DWL.DisCo.Consts.pas';
 
 end.

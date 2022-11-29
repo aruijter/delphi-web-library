@@ -139,6 +139,7 @@
         <DCCReference Include="IndyCore.dcp"/>
         <DCCReference Include="vclie.dcp"/>
         <DCCReference Include="vcledge.dcp"/>
+        <DCCReference Include="Jcl.dcp"/>
         <DCCReference Include="..\..\src\DWL.HTTP.Server.Handler.Log.pas"/>
         <DCCReference Include="..\..\src\DWL.HTTP.Server.pas"/>
         <DCCReference Include="..\..\src\DWL.HTTP.Server.Types.pas"/>
@@ -188,6 +189,9 @@
         <DCCReference Include="..\..\src\DWL.Mail.SASL.pas"/>
         <DCCReference Include="..\..\src\DWL.Mail.Utils.pas"/>
         <DCCReference Include="..\..\src\DWL.ToolsAPI.pas"/>
+        <DCCReference Include="..\..\src\DWL.Compression.pas"/>
+        <DCCReference Include="..\..\src\DWL.DisCo.pas"/>
+        <DCCReference Include="..\..\src\DWL.DisCo.Consts.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
