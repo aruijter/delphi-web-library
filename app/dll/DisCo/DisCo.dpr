@@ -4,7 +4,8 @@ uses
   DWL.HTTP.Server.Globals,
   DWL.HTTP.Server.Types,
   System.SysUtils,
-  DisCo.Handler in 'units\DisCo.Handler.pas';
+  DisCo.Handler in 'units\DisCo.Handler.pas',
+  DWL.DisCo.Consts in '..\..\..\src\DWL.DisCo.Consts.pas';
 
 {$R *.res}
 

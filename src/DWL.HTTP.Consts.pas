@@ -22,6 +22,7 @@ const
   CONTENT_TYPE_JSON = 'application/json';
   CONTENT_TYPE_OCTET_STREAM = 'application/octet-stream';
   CONTENT_TYPE_IMAGE_PNG = 'image/png';
+  CONTENT_TYPE_7Z = 'application/x-7z-compressed';
 
   CHARSET_UTF8 = 'utf-8';
 

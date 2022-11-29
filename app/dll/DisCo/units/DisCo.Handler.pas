@@ -10,8 +10,10 @@ type
   strict private
     class var FAdditionalParametersSQL: string;
     class function Get_phonehome(const State: PdwlHTTPHandlingState): boolean;
+    class function Get_download_package(const State: PdwlHTTPHandlingState): boolean;
     class function Post_profileip(const State: PdwlHTTPHandlingState): boolean;
   public
+//    class function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
     class procedure Configure(const Params: string); override;
   end;
 
@@ -20,17 +22,23 @@ implementation
 
 uses
   DWL.HTTP.Consts, DWL.HTTP.Server.Utils, DWL.MySQL, DWL.Params.Consts,
-  System.JSON, DWL.Resolver, System.StrUtils, System.SysUtils;
+  System.JSON, DWL.Resolver, System.StrUtils, System.SysUtils, Winapi.WinInet,
+  DWL.HTTP.Server.Globals, DWL.DisCo.Consts;
 
 const
   Param_Additional_parameters_SQL = 'additional_parameters_sql';
 
 { THandler_DisCo }
 
+//class function THandler_DisCo.Authorize(const State: PdwlHTTPHandlingState): boolean;
+//begin
+//  Result := true;
+//end;
+
 class procedure THandler_DisCo.Configure(const Params: string);
 const
   SQL_CheckTable_AppPackages = 'CREATE TABLE IF NOT EXISTS `dwl_disco_apppackages` (id INT AUTO_INCREMENT, appname VARCHAR(50), packagename VARCHAR(50),	PRIMARY KEY (id), INDEX appnameIndex (appname))';
-  SQL_CheckTable_Releases = 'CREATE TABLE IF NOT EXISTS dwl_disco_releases (id INT AUTO_INCREMENT, packagename VARCHAR(50), version VARCHAR(20), build SMALLINT, releasemoment DATETIME, kind TINYINT, data LONGBLOB, PRIMARY KEY (id)'+',	INDEX packagenamereleasemomentIndex (packagename, releasemoment))';
+  SQL_CheckTable_Releases = 'CREATE TABLE IF NOT EXISTS dwl_disco_releases (id INT AUTO_INCREMENT, packagename VARCHAR(50), version VARCHAR(20), build SMALLINT, releasemoment DATETIME, kind TINYINT, data LONGBLOB, mediatype VARCHAR(50), fileextension VARCHAR(10), PRIMARY KEY (id)'+',	INDEX packagenamereleasemomentIndex (packagename, releasemoment))';
   SQL_CheckTable_ProfileParameters = 'CREATE TABLE IF NOT EXISTS dwl_disco_profileparameters (id INT AUTO_INCREMENT, appname VARCHAR(50), profile VARCHAR(50),	`key` VARCHAR(50), value VARCHAR(100), PRIMARY KEY (id), INDEX `appnameprofileIndex` (appname, profile))';
   SQL_CheckTable_KnownIps = 'CREATE TABLE IF NOT EXISTS dwl_disco_known_ipaddresses'+' (id INT AUTO_INCREMENT, ipaddress VARCHAR(50), profile VARCHAR(50), lastseen DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (id), INDEX `profileIndex` (profile), 	UNIQUE INDEX IpIndex (ipaddress))';
 begin
@@ -46,6 +54,7 @@ begin
   Session.CreateCommand(SQL_CheckTable_KnownIps).Execute;
   FAdditionalParametersSQL := FConfigParams.StrValue(Param_Additional_parameters_SQL);
   RegisterHandling(dwlhttpGET, '/phonehome', Get_phonehome, []);
+  RegisterHandling(dwlhttpGET, '/download/package', Get_download_package, []);
   RegisterHandling(dwlhttpPOST, '/profileip', Post_profileip, []);
 end;
 
@@ -106,6 +115,45 @@ begin
   while Cmd.Reader.Read do
     JSONVersions.AddPair(Cmd.Reader.GetString(0), Cmd.Reader.GetString(1));
   JSON_Set_Success(State);
+end;
+
+class function THandler_DisCo.Get_download_package(const State: PdwlHTTPHandlingState): boolean;
+const
+  SQl_GetRelease = 'SELECT data, mediatype, fileextension FROM dwl_disco_releases WHERE (packagename=?) AND (Kind=?) ORDER BY ReleaseMoment DESC LIMIT 1';
+begin
+  Result := true;
+  var PackageName: string;
+  if not TryGetRequestParamStr(State, 'packagename', PackageName) then
+  begin
+    State.StatusCode := HTTP_STATUS_BAD_REQUEST;
+    Exit;
+  end;
+  var Kind: integer;
+  if not TryGetRequestParamInt(State, 'kind', Kind) then
+    Kind := discoreleasekindRelease;
+  var Cmd := MySQLCommand(State, SQl_GetRelease);
+  Cmd.Parameters.SetTextDataBinding(0, PackageName);
+  Cmd.Parameters.SetIntegerDataBinding(1, Kind);
+  Cmd.Execute;
+  if Cmd.Reader.Read then
+  begin
+    Cmd.Reader.GetBlobRef(0, procedure(const pBuffer: Pointer; const dwDataSize: cardinal; var MemoryOwnerShipTaken: boolean)
+      begin
+        if dwDataSize > 0 then
+        begin
+          var ContentBuffer: pointer := nil;
+          var Size: Int64 := dwDataSize;
+          serverProcs.ArrangeContentBufferProc(State, ContentBuffer, Size);
+          Move(pBuffer^, ContentBuffer^, Size);
+          State.SetContentType(Cmd.Reader.GetString(1));
+          State.SetHeaderValue(HTTP_HEADER_CONTENT_DISPOSITION, 'filename='+PackageName+'.'+Cmd.Reader.GetString(2));
+        end
+        else
+          State.StatusCode := HTTP_STATUS_NO_CONTENT;
+      end);
+  end
+  else
+    State.StatusCode := HTTP_STATUS_NO_CONTENT;
 end;
 
 class function THandler_DisCo.Post_profileip(const State: PdwlHTTPHandlingState): boolean;
