@@ -34,13 +34,17 @@ type
     /// </summary>
     function StatusCode: cardinal;
     /// <summary>
-    ///   Gives the postdata back as textual data
+    ///   Gives the data back as textual data
     /// </summary>
     /// <param name="Encoding">
     ///   Encoding to use when converting bytes to string. No Encoding means
     ///   TEncoding.Default
     /// </param>
     function AsString(Encoding: TEncoding=nil): string;
+    /// <summary>
+    ///   Gives the data back as TBytes
+    /// </summary>
+    function AsBytes: TBytes;
     /// <summary>
     ///   a stream to be able to access the body returned
     /// </summary>
@@ -183,6 +187,7 @@ type
     constructor Create;
     destructor Destroy; override;
     function AsString(Encoding: TEncoding=nil): string;
+    function AsBytes: TBytes;
     function ErrorMsg: string;
     function GetHeader(const HeaderKey: string): string;
     function StatusCode: cardinal;
@@ -488,18 +493,18 @@ end;
 
 { TdwlHTTPResponse }
 
+function TdwlHTTPResponse.AsBytes: TBytes;
+begin
+  SetLength(Result, FStream.Size);
+  FStream.Seek(0, soBeginning);
+  FStream.Read(Result, 0, FStream.Size);
+end;
+
 function TdwlHTTPResponse.AsString(Encoding: TEncoding): string;
 begin
   if Encoding=nil then
     Encoding := TEncoding.Default;
-  // we cannot feed the TMemoryStream memory pointer directly in the Encoding.GetString
-  // because it really needs a TBytes with length set
-  // so unfortunately we need to stream it to a TBytes
-  var Buffer: TBytes;
-  SetLength(Buffer, FStream.Size);
-  FStream.Seek(0, soBeginning);
-  FStream.Read(Buffer, 0, FStream.Size);
-  Result := Encoding.GetString(Buffer);
+  Result := Encoding.GetString(AsBytes);
 end;
 
 constructor TdwlHTTPResponse.Create;

@@ -3,7 +3,7 @@ unit DWL.HTTP.APIClient;
 interface
 
 uses
-  DWL.HTTP.Consts, DWL.HTTP.Types;
+  DWL.HTTP.Consts, DWL.HTTP.Types, System.SysUtils, DWL.HTTP.Client;
 
 type
   TdwlAPIAuthorizerCallBackAction = (acaGetRefreshtoken, acaNewRefreshtoken, acaNewAccessToken, acaInvalidateAuthorization);
@@ -39,18 +39,19 @@ type
   strict private
     FAuthorizer: IdwlAPIAuthorizer;
     FApiBaseUrl: string;
+    function InternalApiRequest(IsARetry: boolean; const UriPart: string; const Http_Command, URLEncodedParamsOrPostBody: string; PostBodyIsJSON, OmitAccessToken: boolean; AOnProgress: TdwlHTTPProgressEvent): IdwlHTTPResponse;
   protected
     property ApiBaseUrl: string read FApiBaseUrl;
   public
     property Authorizer: IdwlAPIAuthorizer read FAuthorizer;
     constructor Create(const AApiBaseUrl: string; Authorizer: IdwlAPIAuthorizer);
-    function DoApiRequest(out StatusCode: word; const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; const URLEncodedParamsOrPostBody: string=''; PostBodyIsJSON: boolean=true; OmitAccessToken: boolean=false; IsARetry: boolean=false; AOnProgress: TdwlHTTPProgressEvent=nil): string;
+    function DoApiRequest(const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; const URLEncodedParamsOrPostBody: string=''; PostBodyIsJSON: boolean=true; OmitAccessToken: boolean=false; AOnProgress: TdwlHTTPProgressEvent=nil): IdwlHTTPResponse;
   end;
 
 implementation
 
 uses
-  System.StrUtils, Winapi.Windows, Winapi.WinInet, DWL.HTTP.Client;
+  System.StrUtils, Winapi.Windows, Winapi.WinInet;
 
 { TdwlAPISession }
 
@@ -58,16 +59,21 @@ constructor TdwlAPISession.Create(const AApiBaseUrl: string; Authorizer: IdwlAPI
 begin
   inherited Create;
   FApiBaseUrl := AApiBaseUrl;
+  if not FApiBaseUrl.EndsWith('/') then
+    FApiBaseUrl := FApiBaseUrl+'/';
   FAuthorizer := Authorizer;
 end;
 
-function TdwlAPISession.DoApiRequest(out StatusCode: word; const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; const URLEncodedParamsOrPostBody: string=''; PostBodyIsJSON: boolean=true; OmitAccessToken: boolean=false; IsARetry: boolean=false; AOnProgress: TdwlHTTPProgressEvent=nil): string;
+function TdwlAPISession.DoApiRequest(const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; const URLEncodedParamsOrPostBody: string=''; PostBodyIsJSON: boolean=true; OmitAccessToken: boolean=false; AOnProgress: TdwlHTTPProgressEvent=nil): IdwlHTTPResponse;
+begin
+  Result := InternalApiRequest(false, UriPart, Http_Command, URLEncodedParamsOrPostBody, PostBodyIsJSON, OmitAccessToken, AOnProgress);
+end;
+
+function TdwlAPISession.InternalApiRequest(IsARetry: boolean; const UriPart, Http_Command, URLEncodedParamsOrPostBody: string; PostBodyIsJSON, OmitAccessToken: boolean; AOnProgress: TdwlHTTPProgressEvent): IdwlHTTPResponse;
 var
   lRequest: IdwlHTTPRequest;
   lResponse: IdwlHTTPResponse;
 begin
-  Result := '';
-  StatusCode := HTTP_STATUS_BAD_REQUEST;
   try
     lRequest := New_HTTPRequest(FApiBaseUrl + UriPart);
     lRequest.OnProgress := AOnProgress;
@@ -76,10 +82,7 @@ begin
     begin
       var AccessToken := FAuthorizer.GetAccesstoken;
       if AccessToken='' then
-      begin
-        StatusCode := HTTP_STATUS_DENIED; // actually this means, you're not authenticated in the right way I cant help you
         Exit;
-      end;
       lRequest.Header['Authorization'] := 'Bearer '+AccessToken;
     end;
     if URLEncodedParamsOrPostBody<>'' then
@@ -96,16 +99,15 @@ begin
         lRequest.URL := lRequest.URL+'?'+URLEncodedParamsOrPostBody;
     end;
     lResponse := lRequest.Execute;
-    StatusCode := lResponse.StatusCode;
     case lResponse.StatusCode of
-    200: Result := lResponse.AsString;
+    200: Result := lResponse;
     401:
       begin
         if not IsARetry then
         begin
           FAuthorizer.InvalidateAuthorization;
           // try again and we will ask for a username password next time
-          Result := DoApiRequest(StatusCode, UriPart, Http_Command, URLEncodedParamsOrPostBody, PostBodyIsJSON, OmitAccessToken, true);
+          Result := InternalApiRequest(true, UriPart, Http_Command, URLEncodedParamsOrPostBody, PostBodyIsJSON, OmitAccessToken, AOnProgress);
         end;
       end;
     end;
