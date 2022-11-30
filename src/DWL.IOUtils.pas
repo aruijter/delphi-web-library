@@ -11,13 +11,12 @@ type
   end;
 
   TdwlFileVersionInfo = record
-  strict private
+  public
     Major: word;
     Minor: word;
     Release: word;
     Build: word;
     IsPreRelease: boolean;
-  public
     class function CreateFromFile(const FileName: string=''): TdwlFileVersionInfo; static;
     class function CreateFromString(const VersionString: string; Separator: char='.'): TdwlFileVersionInfo; static;
 
@@ -33,7 +32,7 @@ type
     procedure Clear;
 
     function IsEmpty: boolean;
-    function GetAsString(IncludeBuild: boolean=false; Separator: char='.'): string;
+    function GetAsString(IncludeBuild: boolean=false; IncludePrerelease: boolean=false; Separator: char='.'): string;
   end;
 
 implementation
@@ -126,11 +125,13 @@ begin
     ((VersionInfoA.Build<>0) and (VersionInfoB.Build<>0) and (VersionInfoA.Build<>VersionInfoB.Build));
 end;
 
-function TdwlFileVersionInfo.GetAsString(IncludeBuild: boolean=false; Separator: char='.'): string;
+function TdwlFileVersionInfo.GetAsString(IncludeBuild: boolean=false; IncludePrerelease: boolean=false; Separator: char='.'): string;
 begin
   Result := Major.ToString+Separator+Minor.ToString+Separator+Release.ToString;
   if IncludeBuild then
     Result := Result+Separator+Build.ToString;
+  if IncludePrerelease and IsPreRelease then
+    Result := Result+Separator+'PreRelease';
 end;
 
 class operator TdwlFileVersionInfo.GreaterThan(VersionInfoA, VersionInfoB: TdwlFileVersionInfo): boolean;

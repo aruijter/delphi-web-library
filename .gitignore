@@ -26,3 +26,4 @@ app/dwlserver/dwlserver_sv/Win64/
 package/DWL/DWL.res
 app/dll/DisCo/DisCo.res
 app/dll/DisCo/Win64/
+package/DiscoIDE/DisCoIde.res

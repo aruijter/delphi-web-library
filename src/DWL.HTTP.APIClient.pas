@@ -46,6 +46,7 @@ type
     property Authorizer: IdwlAPIAuthorizer read FAuthorizer;
     constructor Create(const AApiBaseUrl: string; Authorizer: IdwlAPIAuthorizer);
     function DoApiRequest(const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; const URLEncodedParamsOrPostBody: string=''; PostBodyIsJSON: boolean=true; OmitAccessToken: boolean=false; AOnProgress: TdwlHTTPProgressEvent=nil): IdwlHTTPResponse;
+    function PrepareAPIRequest(const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; OmitAccessToken: boolean=false): IdwlHTTPRequest;
   end;
 
 implementation
@@ -105,13 +106,31 @@ begin
       begin
         if not IsARetry then
         begin
-          FAuthorizer.InvalidateAuthorization;
+          if not OmitAccessToken then
+            FAuthorizer.InvalidateAuthorization;
           // try again and we will ask for a username password next time
           Result := InternalApiRequest(true, UriPart, Http_Command, URLEncodedParamsOrPostBody, PostBodyIsJSON, OmitAccessToken, AOnProgress);
         end;
       end;
     end;
   except
+  end;
+end;
+
+function TdwlAPISession.PrepareAPIRequest(const UriPart, Http_Command: string; OmitAccessToken: boolean): IdwlHTTPRequest;
+begin
+  try
+    Result := New_HTTPRequest(FApiBaseUrl + UriPart);
+    Result.Method := Http_Command;
+    if not OmitAccessToken then
+    begin
+      var AccessToken := FAuthorizer.GetAccesstoken;
+      if AccessToken='' then
+        Exit;
+      Result.Header['Authorization'] := 'Bearer '+AccessToken;
+    end;
+  except
+    Result := nil;
   end;
 end;
 

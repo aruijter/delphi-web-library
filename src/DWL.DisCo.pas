@@ -7,10 +7,9 @@ uses
 
 type
   TdwlDisCo = class
-  protected
+  public
     class var
       FApiSession: TdwlAPISession;
-  public
     class destructor Destroy;
     class procedure Initialize(const Disco_BaseURL: string; Authorizer: IdwlAPIAuthorizer);
   end;
@@ -46,7 +45,8 @@ uses
 
 class procedure TdwlDisCo.Initialize(const Disco_BaseURL: string; Authorizer: IdwlAPIAuthorizer);
 begin
-  FApiSession := TdwlAPISession.Create(Disco_BaseURL, Authorizer);
+  if FApiSession=nil then
+    FApiSession := TdwlAPISession.Create(Disco_BaseURL, Authorizer);
 end;
 
 class destructor TdwlDisCo.Destroy;

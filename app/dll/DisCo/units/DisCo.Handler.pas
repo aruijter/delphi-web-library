@@ -11,9 +11,10 @@ type
     class var FAdditionalParametersSQL: string;
     class function Get_phonehome(const State: PdwlHTTPHandlingState): boolean;
     class function Get_download_package(const State: PdwlHTTPHandlingState): boolean;
+    class function Get_release(const State: PdwlHTTPHandlingState): boolean;
     class function Post_profileip(const State: PdwlHTTPHandlingState): boolean;
+    class function Post_upload_package(const State: PdwlHTTPHandlingState): boolean;
   public
-//    class function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
     class procedure Configure(const Params: string); override;
   end;
 
@@ -23,22 +24,17 @@ implementation
 uses
   DWL.HTTP.Consts, DWL.HTTP.Server.Utils, DWL.MySQL, DWL.Params.Consts,
   System.JSON, DWL.Resolver, System.StrUtils, System.SysUtils, Winapi.WinInet,
-  DWL.HTTP.Server.Globals, DWL.DisCo.Consts;
+  DWL.HTTP.Server.Globals, DWL.DisCo.Consts, System.DateUtils;
 
 const
   Param_Additional_parameters_SQL = 'additional_parameters_sql';
 
 { THandler_DisCo }
 
-//class function THandler_DisCo.Authorize(const State: PdwlHTTPHandlingState): boolean;
-//begin
-//  Result := true;
-//end;
-
 class procedure THandler_DisCo.Configure(const Params: string);
 const
   SQL_CheckTable_AppPackages = 'CREATE TABLE IF NOT EXISTS `dwl_disco_apppackages` (id INT AUTO_INCREMENT, appname VARCHAR(50), packagename VARCHAR(50),	PRIMARY KEY (id), INDEX appnameIndex (appname))';
-  SQL_CheckTable_Releases = 'CREATE TABLE IF NOT EXISTS dwl_disco_releases (id INT AUTO_INCREMENT, packagename VARCHAR(50), version VARCHAR(20), build SMALLINT, releasemoment DATETIME, kind TINYINT, data LONGBLOB, mediatype VARCHAR(50), fileextension VARCHAR(10), PRIMARY KEY (id)'+',	INDEX packagenamereleasemomentIndex (packagename, releasemoment))';
+  SQL_CheckTable_Releases = 'CREATE TABLE IF NOT EXISTS dwl_disco_releases (id INT AUTO_INCREMENT, packagename VARCHAR(50), version VARCHAR(20), build SMALLINT, releasemoment DATETIME, kind TINYINT, data LONGBLOB, fileextension VARCHAR(10), PRIMARY KEY (id)'+',	INDEX packagenamereleasemomentIndex (packagename, releasemoment))';
   SQL_CheckTable_ProfileParameters = 'CREATE TABLE IF NOT EXISTS dwl_disco_profileparameters (id INT AUTO_INCREMENT, appname VARCHAR(50), profile VARCHAR(50),	`key` VARCHAR(50), value VARCHAR(100), PRIMARY KEY (id), INDEX `appnameprofileIndex` (appname, profile))';
   SQL_CheckTable_KnownIps = 'CREATE TABLE IF NOT EXISTS dwl_disco_known_ipaddresses'+' (id INT AUTO_INCREMENT, ipaddress VARCHAR(50), profile VARCHAR(50), lastseen DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (id), INDEX `profileIndex` (profile), 	UNIQUE INDEX IpIndex (ipaddress))';
 begin
@@ -53,9 +49,12 @@ begin
   Session.CreateCommand(SQL_CheckTable_ProfileParameters).Execute;
   Session.CreateCommand(SQL_CheckTable_KnownIps).Execute;
   FAdditionalParametersSQL := FConfigParams.StrValue(Param_Additional_parameters_SQL);
+  var AdminScope := FConfigParams.StrValue('scope_admin', 'disco_admin');
   RegisterHandling(dwlhttpGET, '/phonehome', Get_phonehome, []);
   RegisterHandling(dwlhttpGET, '/download/package', Get_download_package, []);
-  RegisterHandling(dwlhttpPOST, '/profileip', Post_profileip, []);
+  RegisterHandling(dwlhttpGET, '/release', Get_release, [AdminScope]);
+  RegisterHandling(dwlhttpPOST, '/profileip', Post_profileip, [AdminScope]);
+  RegisterHandling(dwlhttpPOST, '/upload/package', Post_upload_package, [AdminScope]);
 end;
 
 class function THandler_DisCo.Get_phonehome(const State: PdwlHTTPHandlingState): boolean;
@@ -117,17 +116,37 @@ begin
   JSON_Set_Success(State);
 end;
 
-class function THandler_DisCo.Get_download_package(const State: PdwlHTTPHandlingState): boolean;
+class function THandler_DisCo.Get_release(const State: PdwlHTTPHandlingState): boolean;
 const
-  SQl_GetRelease = 'SELECT data, mediatype, fileextension FROM dwl_disco_releases WHERE (packagename=?) AND (Kind=?) ORDER BY ReleaseMoment DESC LIMIT 1';
+  SQl_GetRelease = 'SELECT version, build, releasemoment, kind FROM dwl_disco_releases WHERE (packagename=?) ORDER BY ReleaseMoment DESC LIMIT 1';
 begin
   Result := true;
   var PackageName: string;
-  if not TryGetRequestParamStr(State, 'packagename', PackageName) then
-  begin
-    State.StatusCode := HTTP_STATUS_BAD_REQUEST;
+  if not TryGetRequestParamStr(State, 'packagename', PackageName, true) then
     Exit;
-  end;
+  var Cmd := MySQLCommand(State, SQl_GetRelease);
+  Cmd.Parameters.SetTextDataBinding(0, PackageName);
+  Cmd.Execute;
+  if Cmd.Reader.Read then
+  begin
+    var JSON:= JSON_Data(State);
+    JSON.AddPair('version', Cmd.Reader.GetString(0));
+    JSON.AddPair('build', TJSONNumber.Create(Cmd.Reader.GetInteger(1)));
+    JSON.AddPair('releasemoment', DateToISO8601(Cmd.Reader.GetDateTime(2)));
+    JSON.AddPair('kind', TJSONNumber.Create(Cmd.Reader.GetInteger(3)));
+  end
+  else
+    State.StatusCode := HTTP_STATUS_NO_CONTENT;
+end;
+
+class function THandler_DisCo.Get_download_package(const State: PdwlHTTPHandlingState): boolean;
+const
+  SQl_GetRelease = 'SELECT data, fileextension FROM dwl_disco_releases WHERE (packagename=?) AND (Kind=?) ORDER BY ReleaseMoment DESC LIMIT 1';
+begin
+  Result := true;
+  var PackageName: string;
+  if not TryGetRequestParamStr(State, 'packagename', PackageName, true) then
+    Exit;
   var Kind: integer;
   if not TryGetRequestParamInt(State, 'kind', Kind) then
     Kind := discoreleasekindRelease;
@@ -145,8 +164,8 @@ begin
           var Size: Int64 := dwDataSize;
           serverProcs.ArrangeContentBufferProc(State, ContentBuffer, Size);
           Move(pBuffer^, ContentBuffer^, Size);
-          State.SetContentType(Cmd.Reader.GetString(1));
-          State.SetHeaderValue(HTTP_HEADER_CONTENT_DISPOSITION, 'filename='+PackageName+'.'+Cmd.Reader.GetString(2));
+          State.SetContentType(CONTENT_TYPE_OCTET_STREAM);
+          State.SetHeaderValue(HTTP_HEADER_CONTENT_DISPOSITION, 'filename='+PackageName+'.'+Cmd.Reader.GetString(1));
         end
         else
           State.StatusCode := HTTP_STATUS_NO_CONTENT;
@@ -171,6 +190,39 @@ begin
  Cmd.Parameters.SetTextDataBinding(0, RemoteIP);
  Cmd.Parameters.SetTextDataBinding(1, Profile);
  Cmd.Parameters.SetDateTimeDataBinding(2, Now);
+ Cmd.Execute;
+ JSON_Set_Success(State);
+end;
+
+class function THandler_DisCo.Post_upload_package(const State: PdwlHTTPHandlingState): boolean;
+const
+  SQL_Post_Release = 'INSERT INTO dwl_disco_releases (packagename, version, build, releasemoment, kind, fileextension, data) VALUES (?,?,?,?,?,?,?)';
+begin
+  Result := true;
+  var PackageName: string;
+  var Version: string;
+  var Build: string;
+  var Kind: string;
+  var FileExtension: string;
+  if not (TryGetHeaderValue(State, 'packagename', PackageName, true) and TryGetHeaderValue(State, 'version', Version, true) and
+    TryGetHeaderValue(State, 'build', Build, true) and TryGetHeaderValue(State, 'kind', Kind, true) and
+    TryGetHeaderValue(State, 'fileextension', FileExtension, true)) then
+    Exit;
+  var Data: pointer;
+  var DataSize: Int64;
+  if not TryGetPayloadPtr(State, Data, DataSize) then
+  begin
+    JSON_AddError(State, 99, 'missing payload', HTTP_STATUS_BAD_REQUEST);
+    Exit;
+  end;
+ var Cmd := MySQLCommand(State, SQL_Post_Release);
+ Cmd.Parameters.SetTextDataBinding(0, PackageName);
+ Cmd.Parameters.SetTextDataBinding(1, Version);
+ Cmd.Parameters.SetTextDataBinding(2, Build);
+ Cmd.Parameters.SetDateTimeDataBinding(3, Now);
+ Cmd.Parameters.SetTextDataBinding(4, Kind);
+ Cmd.Parameters.SetTextDataBinding(5, FileExtension);
+ Cmd.Parameters.SetBinaryRefDataBinding(6, Data, DataSize);
  Cmd.Execute;
  JSON_Set_Success(State);
 end;
