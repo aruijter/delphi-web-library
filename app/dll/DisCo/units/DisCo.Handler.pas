@@ -52,7 +52,7 @@ begin
   var AdminScope := FConfigParams.StrValue('scope_admin', 'disco_admin');
   RegisterHandling(dwlhttpGET, '/phonehome', Get_phonehome, []);
   RegisterHandling(dwlhttpGET, '/download/package', Get_download_package, []);
-  RegisterHandling(dwlhttpGET, '/release', Get_release, [AdminScope]);
+  RegisterHandling(dwlhttpGET, '/release', Get_release, []);
   RegisterHandling(dwlhttpPOST, '/profileip', Post_profileip, [AdminScope]);
   RegisterHandling(dwlhttpPOST, '/upload/package', Post_upload_package, [AdminScope]);
 end;
