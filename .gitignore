@@ -27,3 +27,4 @@ package/DWL/DWL.res
 app/dll/DisCo/DisCo.res
 app/dll/DisCo/Win64/
 package/DiscoIDE/DisCoIde.res
+app/tools/cocon/CoCon.res

@@ -1,5 +1,5 @@
 unit uCocon;
-
+{$WARN SYMBOL_PLATFORM OFF}
 interface
 
 procedure Install_New_Exe(const OldExe, ActualExe, NewExe: string);
@@ -11,14 +11,12 @@ uses
   System.Classes;
 
 const
-  COPY_RETRY_MSECS = 1000;
-  DEL_RETRY_MSECS = 1000;
-  COPY_FILE_ATTEMPTS = 40;
+  RETRY_MSECS = 1000;
+  COPY_FILE_ATTEMPTS = 15;
 
 procedure Install_New_Exe(const OldExe, ActualExe, NewExe: string);
 var
   ErrorLog: TStringlist;
-  ErrorLog0: TStringlist;
   Res: Cardinal;
 
   function DoDeleteFile(const Fn: string): boolean;
@@ -28,19 +26,19 @@ var
     Result := not FileExists(Fn);
     if Result then
       Exit;
-    T := GetTickCount+DEL_RETRY_MSECS;
+    T := GetTickCount+RETRY_MSECS;
     Result := Winapi.Windows.DeleteFile(PChar(Fn));
     if not Result then
-      ErrorLog0.Add('Failed to delete ' + Fn + ' at first attempt');
+      ErrorLog.Add('Failed to delete ' + Fn + ' at first attempt');
     while (not Result) and (GetTickCount<T) do
     begin
       sleep(250);
       Result := Winapi.Windows.DeleteFile(PChar(Fn));
       if not Result then
-        ErrorLog0.Add('DeleteFile error: ' + SysErrorMessage(GetLastError));
+        ErrorLog.Add('DeleteFile error: ' + SysErrorMessage(GetLastError));
     end;
     if not Result then
-      ErrorLog.AddStrings(ErrorLog0);
+      ErrorLog.AddStrings(ErrorLog);
   end;
 
   function DoCopyFile(const SourceFn, DestFn: string): boolean;
@@ -52,11 +50,11 @@ var
     if Result then
       Exit;
     if not Result then
-      ErrorLog0.Add('Failed to copy ' + SourceFn + ' at first attempt to ' + DestFn);
+      ErrorLog.Add('Failed to copy ' + SourceFn + ' at first attempt to ' + DestFn);
 
     ErrCode := GetLastError;
     if ErrCode <= 32 then
-      ErrorLog0.Add('CopyFile error: ' + SysErrorMessage(ErrCode));
+      ErrorLog.Add('CopyFile error: ' + SysErrorMessage(ErrCode));
 
     Attempts := 0;
     while (not Result) and (Attempts<COPY_FILE_ATTEMPTS) do
@@ -65,8 +63,8 @@ var
       inc(Attempts);
       if not Result then
       begin
-        Sleep(COPY_RETRY_MSECS);
-        ErrorLog0.Add('CopyFile error: ' + SysErrorMessage(GetLastError));
+        Sleep(RETRY_MSECS);
+        ErrorLog.Add('CopyFile error: ' + SysErrorMessage(GetLastError));
       end;
     end;
     if not Result then
@@ -77,20 +75,18 @@ var
   Parm: string;
   i: integer;
 begin
-  ErrorLog := TStringlist.Create;
-  ErrorLog0 := TStringlist.Create;
+  ErrorLog := TStringList.Create;
   try
-    // copy the Current exe to the old exe (for fallback scenario's)
-    if not DoDeleteFile(OldExe) then
-      ErrorLog.Add('Failed to delete ' + OldExe);
-    if not DoCopyFile(ActualExe, OldExe) then
-      ErrorLog.Add('Failed to copy ' + ActualExe + ' to ' + OldExe);
-
-    // copy the new exe in place
-    if DoCopyFile(NewExe, ActualExe) then
-    begin
-      DoDeleteFile(OldExe);
-      DoDeleteFile(NewExe);
+    var LogFileName := ExtractFilePath(ActualExe)+'CoCon_errors.log';
+    var AllOk := true;
+    try
+      // cleanup and copy the Current exe to the old exe (for fallback scenario's)
+      AllOk := DoDeleteFile(LogFileName) and DoDeleteFile(OldExe) and DoCopyFile(ActualExe, OldExe);
+      // copy the new exe in place
+      AllOk := AllOk and DoCopyFile(NewExe, ActualExe);
+      // remove the old and the fallback
+      AllOk := AllOk and DoDeleteFile(OldExe);
+      AllOk := AllOk and DoDeleteFile(NewExe);
       if ParamCount>2 then
       begin
         Parm := ParamStr(3);
@@ -101,20 +97,21 @@ begin
         Parm := '';
       Res := ShellExecute(0, nil, PChar(ActualExe), PChar(Parm), '', 5);
       if Res <= 32 then
+      begin
+        AllOk := false;
         ErrorLog.Add('Failed to execute ' + ActualExe + ' ' + Parm + ' error ' + SysErrorMessage(GetLastError));
-    end
-    else
-      ErrorLog.Add('Failed to copy ' + NewExe + ' to ' + ActualExe);
-
-    if ErrorLog.Count > 0 then
-    begin
-      ErrorLog.Insert(0, 'Timeout delete = ' + DEL_RETRY_MSECS.ToString + ' copy = ' + COPY_RETRY_MSECS.ToString);
-      ErrorLog.Insert(0, 'Executed ' + CmdLine);
-      TFile.WriteAllText(ChangeFileExt(ParamStr(0), '_errors.log'), ErrorLog.Text);
+      end
+    finally
+      if not AllOk then
+      begin
+        ErrorLog.Insert(0, '');
+        ErrorLog.Insert(0, 'Timeout = ' + RETRY_MSECS.ToString);
+        ErrorLog.Insert(0, 'Executed ' + CmdLine);
+        TFile.WriteAllText(LogFileName, ErrorLog.Text);
+      end;
     end;
   finally
     ErrorLog.Free;
-    ErrorLog0.Free;
   end;
 end;
 
