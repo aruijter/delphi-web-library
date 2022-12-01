@@ -3,9 +3,11 @@ unit DWL.DisCo;
 interface
 
 uses
-  DWL.HTTP.APIClient, DWL.Params, DWL.Classes;
+  DWL.HTTP.APIClient, DWL.Params, DWL.Classes, DWL.HTTP.Types;
 
 type
+  TdwlDiscoMsgFunc = procedure(const Msg: string; ProcessingFinished: boolean) of object;
+
   TdwlDisCo = class
   public
     class var
@@ -26,6 +28,11 @@ type
     class procedure Init_Params;
     class function VersionParams: IdwlParams;
     class function TempUpdateDir: string;
+    class procedure ProgressMsg(const Msg: string; ProcessingFinished: boolean=false);
+  protected
+    class var
+      FProgressBytesFunc: TdwlHTTPProgressEvent;
+      FProgressMsgFunc: TdwlDiscoMsgFunc;
   public
     class constructor Create;
     class function AppName: string;
@@ -43,6 +50,7 @@ uses
   Winapi.WinInet, System.Classes, DWL.Compression, DWL.DisCo.Consts,
   System.Math, DWL.OS, sevenzip, DWL.Params.Utils, DWL.Params.Consts,
   System.StrUtils, DWL.StrUtils;
+
 
 { TdwlDisCo }
 
@@ -186,32 +194,37 @@ class function TdwlDiscoClient.GetReleaseInDir(const PackageName, DestinationDir
 begin
   Result := false;
   try
-    var Response := FApiSession.ExecuteApiRequest('download/package', HTTP_COMMAND_GET, 'packagename='+PackageName+'&kind='+
-      IfThen(RequestPrerelease, discoreleasekindPreRelease, discoreleasekindRelease).ToString);
-    if (Response=nil) or (Response.StatusCode<>HTTP_STATUS_OK) then
-      Exit;
-    var FileName: string;
-    var DispList := TStringList.Create;
+    ProgressMsg('Downloading '+PackageName);
     try
-      DispList.Delimiter := ';';
-      DispList.DelimitedText := Response.Header[HTTP_HEADER_CONTENT_DISPOSITION];
-      FileName := DispList.Values['filename'];
-    finally
-      DispList.Free;
-    end;
-    if FileName='' then
-      Exit;
-    if SameText(ExtractFileExt(FileName), '.7z') then
-    begin
-      CheckDLL_7Z;
-      var ZipFn := TempUpdateDir+'\'+FileName;
-      TFile.WriteAllBytes(ZipFn, Response.AsBytes);
-      if not TdwlCompression.ExtractArchive(ZipFn, DestinationDir).Success then
+      var Response := FApiSession.ExecuteApiRequest('download/package', HTTP_COMMAND_GET, 'packagename='+PackageName+'&kind='+
+        IfThen(RequestPrerelease, discoreleasekindPreRelease, discoreleasekindRelease).ToString, true, false, FProgressBytesFunc);
+      if (Response=nil) or (Response.StatusCode<>HTTP_STATUS_OK) then
         Exit;
-    end
-    else
-      TFile.WriteAllBytes(DestinationDir+'\'+FileName, Response.AsBytes);
-    Result :=true;
+      var FileName: string;
+      var DispList := TStringList.Create;
+      try
+        DispList.Delimiter := ';';
+        DispList.DelimitedText := Response.Header[HTTP_HEADER_CONTENT_DISPOSITION];
+        FileName := DispList.Values['filename'];
+      finally
+        DispList.Free;
+      end;
+      if FileName='' then
+        Exit;
+      if SameText(ExtractFileExt(FileName), '.7z') then
+      begin
+        CheckDLL_7Z;
+        var ZipFn := TempUpdateDir+'\'+FileName;
+        TFile.WriteAllBytes(ZipFn, Response.AsBytes);
+        if not TdwlCompression.ExtractArchive(ZipFn, DestinationDir).Success then
+          Exit;
+      end
+      else
+        TFile.WriteAllBytes(DestinationDir+'\'+FileName, Response.AsBytes);
+      Result := true;
+    finally
+      ProgressMsg('', true);
+    end;
   except
   end;
 end;
@@ -259,6 +272,12 @@ begin
   // Now add commandline params to configparams
   // Doing this at the end give the commandline the highest priority
   CommandLineParams.AssignTo(FConfigParams);
+end;
+
+class procedure TdwlDiscoClient.ProgressMsg(const Msg: string; ProcessingFinished: boolean=false);
+begin
+  if Assigned(FProgressMsgFunc) then
+    FProgressMsgFunc(Msg, ProcessingFinished);
 end;
 
 class function TdwlDiscoClient.TempUpdateDir: string;
