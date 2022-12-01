@@ -17,8 +17,7 @@ type
     class procedure DoBuildPreRelease(Sender: TObject);
     class procedure DoBuildRelease(Sender: TObject);
     class function GetSuitableproject: IOTAProject;
-    class procedure OutputVersionInfo(Project: IOTAProject;
-      IsARelease: boolean);
+    class procedure OutputVersionInfo(Project: IOTAProject; IsARelease, IsAPreRelease: boolean);
   public
     class constructor Create;
     class destructor Destroy;
@@ -30,10 +29,8 @@ class constructor TDisCoIde_BuildProfiles.Create;
 begin
   inherited;
   FMenuItems := TObjectList<TMenuItem>.Create(true);
-  var
-  MainMenu := (BorlandIDEServices as INTAServices).MainMenu;
-  var
-  ProjectMenu := MainMenu.Items.Find('Project');
+  var MainMenu := (BorlandIDEServices as INTAServices).MainMenu;
+  var ProjectMenu := MainMenu.Items.Find('Project');
   if ProjectMenu <> nil then
   begin
     var
@@ -88,7 +85,7 @@ begin
     TdwlToolsAPI.SetProjectOption(Project, 'StackFrames', 0);
     TdwlToolsAPI.SetProjectOption(Project, 'DebugInfo', true);
     TdwlToolsAPI.SetProjectOption(Project, 'MapFile', 0);
-    OutputVersionInfo(Project, false);
+    OutputVersionInfo(Project, false, false);
     Project.ProjectBuilder.BuildProject(cmOTABuild, true);
   except
     on E: Exception do
@@ -115,7 +112,7 @@ begin
     TdwlToolsAPI.SetProjectOption(Project, 'StackFrames', 0);
     TdwlToolsAPI.SetProjectOption(Project, 'DebugInfo', false);
     TdwlToolsAPI.SetProjectOption(Project, 'MapFile', 3);
-    OutputVersionInfo(Project, false);
+    OutputVersionInfo(Project, false, true);
     Project.ProjectBuilder.BuildProject(cmOTABuild, true);
   except
     on E: Exception do
@@ -142,7 +139,7 @@ begin
     TdwlToolsAPI.SetProjectOption(Project, 'StackFrames', 0);
     TdwlToolsAPI.SetProjectOption(Project, 'DebugInfo', false);
     TdwlToolsAPI.SetProjectOption(Project, 'MapFile', 3);
-    OutputVersionInfo(Project, true);
+    OutputVersionInfo(Project, true, false);
     Project.ProjectBuilder.BuildProject(cmOTABuild, true);
   except
     on E: Exception do
@@ -160,91 +157,88 @@ begin
     Result := nil;
 end;
 
-class procedure TDisCoIde_BuildProfiles.OutputVersionInfo(Project: IOTAProject;
-  IsARelease: boolean);
+class procedure TDisCoIde_BuildProfiles.OutputVersionInfo(Project: IOTAProject; IsARelease, IsAPreRelease: boolean);
 begin
-  var
-  Fn_ProjPar := ChangeFileExt(Project.FileName, '.params');
-  var
-  Path_Proj := ExtractFilePath(Fn_ProjPar);
-  var
-  ProjPar := TStringList.Create;
+  var VersionInfo: TdwlFileVersionInfo;
+  var Fn_ProjPar := ChangeFileExt(Project.FileName, '.params');
+  var Path_Proj := ExtractFilePath(Fn_ProjPar);
+  var ProjPar := TStringList.Create;
   try
     if FileExists(Fn_ProjPar) then
       ProjPar.LoadFromFile(Fn_ProjPar);
-    var
-    BuildN := StrToIntDef(ProjPar.Values[paramVersion_Build], 0) + 1;
-    var
-    MajorN := StrToIntDef(ProjPar.Values[paramVersion_MajorVersion], 1);
-    var
-    MinorN := StrToIntDef(ProjPar.Values[paramVersion_MinorVersion], 0);
-    var
-    ReleaseN := StrToIntDef(ProjPar.Values[paramVersion_Release], 0);
-    if IsARelease then
+    var PublishVersion := ProjPar.Values[paramPublish_Version];
+    if PublishVersion='' then // backward compatibility
     begin
-      inc(ReleaseN);
-      if ReleaseN > 9 then
-      begin
-        ReleaseN := 0;
-        inc(MinorN);
-      end;
-      if MinorN > 9 then
-      begin
-        MinorN := 0;
-        inc(MajorN);
-      end;
-    end;
-    // write versioninfo.rc for inclusion as a resource in project
-    var
-    Version := MajorN.ToString + '.' + MinorN.ToString + '.' + ReleaseN.ToString
-      + '.' + BuildN.ToString;
-    var
-    CommaVersion := StringReplace(Version, '.', ',', [rfReplaceAll]);
-    var
-    Resource := TStringList.Create;
-    try
-      Resource.Add('1 VERSIONINFO');
-      Resource.Add('FILEVERSION ' + CommaVersion);
-      Resource.Add('PRODUCTVERSION ' + CommaVersion);
-      if not IsARelease then
-      begin
-        Resource.Add('FILEFLAGSMASK VS_FFI_FILEFLAGSMASK');
-        Resource.Add('FILEFLAGS VS_FF_PRERELEASE');
-      end;
-      if Project.CurrentPlatform <> 'Win64' then
-        Resource.Add('FILEOS VOS__WINDOWS32');
-      Resource.Add('FILETYPE VFT_APP');
-      Resource.Add('BEGIN');
-      Resource.Add('BLOCK "StringFileInfo"');
-      Resource.Add('BEGIN');
-      Resource.Add('BLOCK "040904E4"');
-      Resource.Add('BEGIN');
-      Resource.Add('VALUE "FileVersion", "' + Version + '\000"');
-      Resource.Add('VALUE "ProductVersion", "' + Version + '\000"');
-      Resource.Add('END');
-      Resource.Add('END');
-      Resource.Add('BLOCK "VarFileInfo"');
-      Resource.Add('BEGIN');
-      Resource.Add('VALUE "Translation", 0x0409 0x04E4');
-      Resource.Add('END');
-      Resource.Add('END');
-      Resource.SaveToFile(Path_Proj + 'versioninfo.rc');
-    finally
-      Resource.Free;
-    end;
-    // write versioninfo.inc for usage where needed in pascal source
-    System.IOUtils.TFile.WriteAllText(Path_Proj + 'versioninfo.inc',
-      'const'#13#10 + '  ' + paramVersion_MajorVersion + ' = ' + MajorN.ToString
-      + ';'#13#10 + '  ' + paramVersion_MinorVersion + ' = ' + MinorN.ToString +
-      ';'#13#10 + '  ' + paramVersion_Release + ' = ' + ReleaseN.ToString +
-      ';'#13#10 + '  ' + paramVersion_Build + ' = ' + BuildN.ToString +
-      ';'#13#10 + '  ' + paramVersion_Time + ' = ' + TdwlConvUtils.FloatToDotStr
-      (TTimeZone.Local.ToUniversalTime(Now)) + ';'#13#10 + '  ' +
-      paramVersion_Is_Prerelease + ' = ' + IfThen(IsARelease, 'false',
-      'true') + ';');
+      VersionInfo.Major := StrToIntDef(ProjPar.Values[paramVersion_MajorVersion], 1);
+      VersionInfo.Minor := StrToIntDef(ProjPar.Values[paramVersion_MinorVersion], 0);
+      VersionInfo.Release := StrToIntDef(ProjPar.Values[paramVersion_Release], 0);
+      VersionInfo.Build := StrToIntDef(ProjPar.Values[paramVersion_Build], 0);
+    end
+    else
+      VersionInfo.SetFromString(PublishVersion);
   finally
     ProjPar.Free;
   end;
+  if IsARelease then
+  begin
+    if VersionInfo.Release=9 then
+    begin
+      VersionInfo.Release := 0;
+      if VersionInfo.Minor=9 then
+      begin
+        VersionInfo.Minor := 0;
+        inc(VersionInfo.Major);
+      end
+      else
+        inc(VersionInfo.Minor);
+    end
+    else
+      inc(VersionInfo.Release);
+  end;
+  // always increase build number
+  inc(VersionInfo.Build);
+  // write versioninfo.rc for inclusion as a resource in project
+  var Resource := TStringList.Create;
+  try
+    Resource.Add('1 VERSIONINFO');
+    Resource.Add('FILEVERSION ' + VersionInfo.GetAsString(true, false, ',' ));
+    Resource.Add('PRODUCTVERSION ' + VersionInfo.GetAsString(true, false, ',' ));
+    if IsAPreRelease then
+    begin
+      Resource.Add('FILEFLAGSMASK VS_FFI_FILEFLAGSMASK');
+      Resource.Add('FILEFLAGS VS_FF_PRERELEASE');
+    end;
+    if Project.CurrentPlatform <> 'Win64' then
+      Resource.Add('FILEOS VOS__WINDOWS32');
+    Resource.Add('FILETYPE VFT_APP');
+    Resource.Add('BEGIN');
+    Resource.Add('BLOCK "StringFileInfo"');
+    Resource.Add('BEGIN');
+    Resource.Add('BLOCK "040904E4"');
+    Resource.Add('BEGIN');
+    Resource.Add('VALUE "FileVersion", "' + VersionInfo.GetAsString(true) + '\000"');
+    Resource.Add('VALUE "ProductVersion", "' + VersionInfo.GetAsString(true) + '\000"');
+    Resource.Add('END');
+    Resource.Add('END');
+    Resource.Add('BLOCK "VarFileInfo"');
+    Resource.Add('BEGIN');
+    Resource.Add('VALUE "Translation", 0x0409 0x04E4');
+    Resource.Add('END');
+    Resource.Add('END');
+    Resource.SaveToFile(Path_Proj + 'versioninfo.rc');
+  finally
+    Resource.Free;
+  end;
+  // write versioninfo.inc for usage where needed in pascal source
+  System.IOUtils.TFile.WriteAllText(Path_Proj + 'versioninfo.inc',
+    'const'#13#10 + '  ' + paramVersion_MajorVersion + ' = ' + VersionInfo.Major.ToString
+    + ';'#13#10 + '  ' + paramVersion_MinorVersion + ' = ' + VersionInfo.Minor.ToString +
+    ';'#13#10 + '  ' + paramVersion_Release + ' = ' + VersionInfo.Release.ToString +
+    ';'#13#10 + '  ' + paramVersion_Build + ' = ' + VersionInfo.Build.ToString +
+    ';'#13#10 + '  ' + paramVersion_Time + ' = ' + TdwlConvUtils.FloatToDotStr
+    (TTimeZone.Local.ToUniversalTime(Now)) + ';'#13#10 + '  ' +
+    paramVersion_Is_Prerelease + ' = ' + IfThen(IsAPreRelease, 'true',
+    'false') + ';');
 end;
 
 end.

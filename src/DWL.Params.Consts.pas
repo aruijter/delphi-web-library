@@ -18,6 +18,7 @@ const
   Param_Subject='subject';
   Param_Scopes = 'scopes';
   Param_Refreshtoken = 'refreshtoken';
+  Param_Profile = 'profile';
 
 implementation
 

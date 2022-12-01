@@ -34,6 +34,8 @@ end;
 class constructor TDisCoIde_General.Create;
 begin
   FConfigParams := New_Params;
+  if not FileExists(ConfigFileName) then
+    ShowMessage('Config file "'+ConfigFileName+'" does not exist.');
   if FileExists(ConfigFileName) then
     FConfigParams.WriteJSON(TFile.ReadAllText(ConfigFileName));
 

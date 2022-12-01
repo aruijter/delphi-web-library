@@ -3,7 +3,8 @@ unit DWL.HTTP.APIClient;
 interface
 
 uses
-  DWL.HTTP.Consts, DWL.HTTP.Types, System.SysUtils, DWL.HTTP.Client;
+  DWL.HTTP.Consts, DWL.HTTP.Types, System.SysUtils, DWL.HTTP.Client,
+  System.JSON;
 
 type
   TdwlAPIAuthorizerCallBackAction = (acaGetRefreshtoken, acaNewRefreshtoken, acaNewAccessToken, acaInvalidateAuthorization);
@@ -35,24 +36,83 @@ type
     constructor Create(CallbackProc: TdwlAPIAuthorizerCallBackProc);
   end;
 
+  IdwlAPIResponse = interface
+    function Data: TJSONObject;
+    function Success: boolean;
+  end;
+
   TdwlAPISession = class
   strict private
     FAuthorizer: IdwlAPIAuthorizer;
     FApiBaseUrl: string;
     function InternalApiRequest(IsARetry: boolean; const UriPart: string; const Http_Command, URLEncodedParamsOrPostBody: string; PostBodyIsJSON, OmitAccessToken: boolean; AOnProgress: TdwlHTTPProgressEvent): IdwlHTTPResponse;
   protected
-    property ApiBaseUrl: string read FApiBaseUrl;
   public
+    property ApiBaseUrl: string read FApiBaseUrl;
     property Authorizer: IdwlAPIAuthorizer read FAuthorizer;
     constructor Create(const AApiBaseUrl: string; Authorizer: IdwlAPIAuthorizer);
-    function DoApiRequest(const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; const URLEncodedParamsOrPostBody: string=''; PostBodyIsJSON: boolean=true; OmitAccessToken: boolean=false; AOnProgress: TdwlHTTPProgressEvent=nil): IdwlHTTPResponse;
+    function ExecuteApiRequest(const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; const URLEncodedParamsOrPostBody: string=''; PostBodyIsJSON: boolean=true; OmitAccessToken: boolean=false; AOnProgress: TdwlHTTPProgressEvent=nil): IdwlHTTPResponse;
+    function ExecuteJSONRequest(const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; const URLEncodedParamsOrPostBody: string=''; OmitAccessToken: boolean=false): IdwlAPIResponse;
     function PrepareAPIRequest(const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; OmitAccessToken: boolean=false): IdwlHTTPRequest;
   end;
 
 implementation
 
 uses
-  System.StrUtils, Winapi.Windows, Winapi.WinInet;
+  System.StrUtils, Winapi.Windows, Winapi.WinInet, System.IOUtils;
+
+type
+  TdwlAPIResponse = class(TInterfacedObject, IdwlAPIResponse)
+  private
+    FJSON: TJSONObject;
+    FData: TJSONObject;
+    function Success: boolean;
+  public
+    constructor Create(Response: IdwlHTTPResponse);
+    destructor Destroy; override;
+    function Data: TJSONObject;
+  end;
+
+{ TdwlAPIResponse }
+
+constructor TdwlAPIResponse.Create(Response: IdwlHTTPResponse);
+begin
+  inherited Create;
+  if Response.StatusCode=HTTP_STATUS_OK then
+  begin
+    var JSONResult:= TJSONValue.ParseJSONValue(Response.AsString);
+    if JSONResult is TJSONObject then
+    begin
+      FJSON := TJSONObject(JSONResult);
+      var IsOk := FJSON.GetValue<boolean>('success', false);
+      if IsOk then
+      begin
+        FData := FJSON.GetValue<TJSONObject>('data');
+        IsOk := FData<>nil;
+      end;
+      if not IsOk then
+        FreeAndNil(FJSON);
+    end
+    else
+      JSONResult.Free;
+  end;
+end;
+
+function TdwlAPIResponse.Data: TJSONObject;
+begin
+  Result := FData;
+end;
+
+destructor TdwlAPIResponse.Destroy;
+begin
+  FJSON.Free;
+  inherited Destroy;
+end;
+
+function TdwlAPIResponse.Success: boolean;
+begin
+  Result := (FJSON<>nil);
+end;
 
 { TdwlAPISession }
 
@@ -65,15 +125,19 @@ begin
   FAuthorizer := Authorizer;
 end;
 
-function TdwlAPISession.DoApiRequest(const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; const URLEncodedParamsOrPostBody: string=''; PostBodyIsJSON: boolean=true; OmitAccessToken: boolean=false; AOnProgress: TdwlHTTPProgressEvent=nil): IdwlHTTPResponse;
+function TdwlAPISession.ExecuteApiRequest(const UriPart: string; const Http_Command: string=HTTP_COMMAND_GET; const URLEncodedParamsOrPostBody: string=''; PostBodyIsJSON: boolean=true; OmitAccessToken: boolean=false; AOnProgress: TdwlHTTPProgressEvent=nil): IdwlHTTPResponse;
 begin
   Result := InternalApiRequest(false, UriPart, Http_Command, URLEncodedParamsOrPostBody, PostBodyIsJSON, OmitAccessToken, AOnProgress);
+end;
+
+function TdwlAPISession.ExecuteJSONRequest(const UriPart, Http_Command, URLEncodedParamsOrPostBody: string;OmitAccessToken: boolean): IdwlAPIResponse;
+begin
+  Result := TdwlAPIResponse.Create(InternalApiRequest(false, UriPart, Http_Command, URLEncodedParamsOrPostBody, true, OmitAccessToken, nil));
 end;
 
 function TdwlAPISession.InternalApiRequest(IsARetry: boolean; const UriPart, Http_Command, URLEncodedParamsOrPostBody: string; PostBodyIsJSON, OmitAccessToken: boolean; AOnProgress: TdwlHTTPProgressEvent): IdwlHTTPResponse;
 var
   lRequest: IdwlHTTPRequest;
-  lResponse: IdwlHTTPResponse;
 begin
   try
     lRequest := New_HTTPRequest(FApiBaseUrl + UriPart);
@@ -83,8 +147,8 @@ begin
     begin
       var AccessToken := FAuthorizer.GetAccesstoken;
       if AccessToken='' then
-        Exit;
-      lRequest.Header['Authorization'] := 'Bearer '+AccessToken;
+        Exit(Get_EmptyHTTPResponse(HTTP_STATUS_DENIED));
+       lRequest.Header['Authorization'] := 'Bearer '+AccessToken;
     end;
     if URLEncodedParamsOrPostBody<>'' then
     begin
@@ -99,9 +163,8 @@ begin
       else
         lRequest.URL := lRequest.URL+'?'+URLEncodedParamsOrPostBody;
     end;
-    lResponse := lRequest.Execute;
-    case lResponse.StatusCode of
-    200: Result := lResponse;
+    Result := lRequest.Execute;
+    case Result.StatusCode of
     401:
       begin
         if not IsARetry then

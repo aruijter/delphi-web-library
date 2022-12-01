@@ -130,6 +130,10 @@ type
 ///   thhrough its properties and call the Execute method
 /// </summary>
 function New_HTTPRequest(const URL: string=''): IdwlHTTPRequest;
+/// <summary>
+///   This function is used to create a respons to signal that request failed before actually executing it
+/// </summary>
+function Get_EmptyHTTPResponse(StatusCode: cardinal): IdwlHTTPResponse;
 
 /// <summary>
 ///   the amount of MaxConcurrentConnections defined in WinINet can be limiting, use this procedure to increase it
@@ -198,6 +202,13 @@ function New_HTTPRequest(const URL: string=''): IdwlHTTPRequest;
 begin
   Result := TdwlHTTPRequest.Create;
   Result.URL := URL;
+end;
+
+function Get_EmptyHTTPResponse(StatusCode: cardinal): IdwlHTTPResponse;
+begin
+  var Response := TdwlHTTPResponse.Create;
+  Response.FStatusCode := StatusCode;
+  Result := Response;
 end;
 
 procedure WinInet_SetMaxConcurrentConnections(MaxConcurrentConnections: cardinal);

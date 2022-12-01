@@ -21,9 +21,8 @@ object PublishForm: TPublishForm
     Align = alClient
     BevelOuter = bvNone
     TabOrder = 0
-    ExplicitTop = 69
-    ExplicitWidth = 487
-    ExplicitHeight = 134
+    ExplicitWidth = 493
+    ExplicitHeight = 362
     object Panel6: TPanel
       Left = 0
       Top = 0
@@ -34,14 +33,14 @@ object PublishForm: TPublishForm
       Color = clSkyBlue
       ParentBackground = False
       TabOrder = 0
-      ExplicitWidth = 487
+      ExplicitWidth = 493
     end
     object btnRelease: TButton
-      Left = 232
+      Left = 272
       Top = 320
-      Width = 155
+      Width = 115
       Height = 25
-      Caption = 'Publish Release Now!'
+      Caption = 'Publish Now!'
       Enabled = False
       TabOrder = 1
       OnClick = btnReleaseClick
