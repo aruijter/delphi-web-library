@@ -91,15 +91,17 @@ end;
 class operator TdwlFileVersionInfo.LessThan(VersionInfoA, VersionInfoB: TdwlFileVersionInfo): boolean;
 begin
   Result := (VersionInfoA.Major<VersionInfoB.Major);
-  if (not Result) and (VersionInfoA.Major>VersionInfoB.Major) then
+  if Result or (VersionInfoA.Major>VersionInfoB.Major) then
     Exit;
   Result := (VersionInfoA.Minor<VersionInfoB.Minor);
-  if (not Result) and (VersionInfoA.Minor>VersionInfoB.Minor) then
+  if Result  or (VersionInfoA.Minor>VersionInfoB.Minor) then
     Exit;
   Result := (VersionInfoA.Release<VersionInfoB.Release);
-  if Result or (VersionInfoA.Build=0) or (VersionInfoB.Build=0) then
+  if Result or (VersionInfoA.Release>VersionInfoB.Release)  then
     Exit;
-  Result := (VersionInfoA.Release=VersionInfoB.Release) and (VersionInfoA.Build<VersionInfoB.Build);
+  if (VersionInfoA.Build=0) or (VersionInfoB.Build=0) then
+    Exit;
+  Result := VersionInfoA.Build<VersionInfoB.Build;
 end;
 
 class operator TdwlFileVersionInfo.LessThanOrEqual(VersionInfoA, VersionInfoB: TdwlFileVersionInfo): boolean;
@@ -111,7 +113,9 @@ begin
   if (VersionInfoA.Minor<>VersionInfoB.Minor) then
     Exit;
   Result := (VersionInfoA.Release<=VersionInfoB.Release);
-  if (VersionInfoA.Release<>VersionInfoB.Release) or (VersionInfoA.Build=0) or (VersionInfoB.Build=0) then
+  if (VersionInfoA.Release<>VersionInfoB.Release) then
+    Exit;
+  if (VersionInfoA.Build=0) or (VersionInfoB.Build=0) then
     Exit;
   Result := VersionInfoA.Build<=VersionInfoB.Build;
 end;
@@ -137,16 +141,17 @@ end;
 class operator TdwlFileVersionInfo.GreaterThan(VersionInfoA, VersionInfoB: TdwlFileVersionInfo): boolean;
 begin
   Result := (VersionInfoA.Major>VersionInfoB.Major);
-  if (not Result) and (VersionInfoA.Major<VersionInfoB.Major) then
+  if Result or (VersionInfoA.Major<VersionInfoB.Major) then
     Exit;
   Result := (VersionInfoA.Minor>VersionInfoB.Minor);
-  if (not Result) and (VersionInfoA.Minor<VersionInfoB.Minor) then
+  if Result  or (VersionInfoA.Minor<VersionInfoB.Minor) then
     Exit;
   Result := (VersionInfoA.Release>VersionInfoB.Release);
+  if Result or (VersionInfoA.Release<VersionInfoB.Release)  then
+    Exit;
   if (VersionInfoA.Build=0) or (VersionInfoB.Build=0) then
     Exit;
-  if (not Result) and (VersionInfoA.Release=VersionInfoB.Release) then
-    Result := VersionInfoA.Build>VersionInfoB.Build;
+  Result := VersionInfoA.Build>VersionInfoB.Build;
 end;
 
 class operator TdwlFileVersionInfo.GreaterThanOrEqual(VersionInfoA, VersionInfoB: TdwlFileVersionInfo): boolean;
@@ -158,7 +163,9 @@ begin
   if (VersionInfoA.Minor<>VersionInfoB.Minor) then
     Exit;
   Result := (VersionInfoA.Release>=VersionInfoB.Release);
-  if (VersionInfoA.Release<>VersionInfoB.Release) or (VersionInfoA.Build=0) or (VersionInfoB.Build=0) then
+  if (VersionInfoA.Release<>VersionInfoB.Release) then
+    Exit;
+  if (VersionInfoA.Build=0) or (VersionInfoB.Build=0) then
     Exit;
   Result := VersionInfoA.Build>=VersionInfoB.Build;
 end;

@@ -13,7 +13,7 @@ type
     class var
       FApiSession: TdwlAPISession;
     class destructor Destroy;
-    class procedure Initialize(const Disco_BaseURL: string; Authorizer: IdwlAPIAuthorizer);
+    class procedure Initialize(const Disco_BaseURL: string; Authorizer: IdwlAPIAuthorizer); virtual;
   end;
 
   TdwlDiscoClient = class(TdwlDisCo)

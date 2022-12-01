@@ -3,7 +3,7 @@ unit DWL.DisCo.UIClient;
 interface
 
 uses
-  DWL.DisCo;
+  DWL.DisCo, DWL.HTTP.APIClient;
 
 type
   TdwlDisCoUIClient = class(TdwlDiscoClient)
@@ -11,7 +11,7 @@ type
     class var
       FProgressObject: TObject;
   public
-    class constructor Create;
+    class procedure Initialize(const Disco_BaseURL: string; Authorizer: IdwlAPIAuthorizer); override;
     class destructor Destroy;
   end;
 
@@ -34,18 +34,20 @@ type
 
 { TdwlDisCoUIClient }
 
-class constructor TdwlDisCoUIClient.Create;
-begin
-  inherited;
-  FProgressObject := TProgressObject.Create;
-  FProgressBytesFunc := TProgressObject(FProgressObject).ProgressBytes;
-  FProgressMsgFunc := TProgressObject(FProgressObject).ProgressMessage;
-end;
-
 class destructor TdwlDisCoUIClient.Destroy;
 begin
   FProgressObject.Free;
   inherited;
+end;
+
+class procedure TdwlDisCoUIClient.Initialize(const Disco_BaseURL: string;
+  Authorizer: IdwlAPIAuthorizer);
+begin
+  inherited Initialize(Disco_BaseURL, Authorizer);
+  FProgressObject.Free;
+  FProgressObject := TProgressObject.Create;
+  FProgressBytesFunc := TProgressObject(FProgressObject).ProgressBytes;
+  FProgressMsgFunc := TProgressObject(FProgressObject).ProgressMessage;
 end;
 
 { TProgressObject }
