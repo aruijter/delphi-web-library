@@ -5,7 +5,7 @@ interface
 uses
   Vcl.Forms, Vcl.StdCtrls, Vcl.Controls, System.Classes, Vcl.ExtCtrls,
   Vcl.ComCtrls, DWL.IOUtils, Vcl.AppEvnts, DWL.HTTP.APIClient.UserPw,
-  System.JSON, DWL.Logging, ToolsAPI, DWL.HTTP.APIClient;
+  System.JSON, DWL.Logging, ToolsAPI, DWL.HTTP.APIClient, Winapi.Windows;
 
 type
   TPublishForm = class(TForm)
@@ -13,11 +13,13 @@ type
     Panel6: TPanel;
     btnRelease: TButton;
     btnCancel: TButton;
-    reMsg: TRichEdit;
     ApplicationEvents1: TApplicationEvents;
+    lbMessages: TListBox;
     procedure ApplicationEvents1Idle(Sender: TObject; var Done: Boolean);
     procedure btnReleaseClick(Sender: TObject);
     procedure btnCancelClick(Sender: TObject);
+    procedure lbMessagesDrawItem(Control: TWinControl; Index: Integer;
+      Rect: TRect; State: TOwnerDrawState);
   strict private
     FCancelled: boolean;
     FHasError: boolean;
@@ -81,7 +83,7 @@ end;
 procedure TPublishForm.btnReleaseClick(Sender: TObject);
 begin
   FHasError := false;
-  reMsg.Clear;
+  lbMessages.Clear;
   btnRelease.Enabled := false;
   btnRelease.Caption := 'Close';
   btnRelease.OnClick := nil;
@@ -247,7 +249,7 @@ begin
           if Response.StatusCode<>HTTP_STATUS_OK then
           begin
             if Response.StatusCode=HTTP_STATUS_NO_CONTENT then
-              AddMessage(lsNotice, 'NO release on server, NEW PACKAGE WILL BE CREATED!')
+              AddMessage(lsWarning, 'NO release on server, NEW PACKAGE WILL BE CREATED!')
             else
               AddMessage(lsError, 'Error fetching current releaseinfo from server');
             VersionOnServer.Clear;
@@ -274,9 +276,11 @@ begin
               AddMessage(lsWarning, 'Be Aware: this is a production release!');
           end;
           // CHECKING ZIP REQUIREMENTS
+          if SevenzipLibraryName='' then
+            SevenzipLibraryName := '7z.dll';
           var ZipDLLFn := TDisCoIde_General.ModuleDirectory+'\'+ExtractFileName(SevenzipLibraryName);
           if not FileExists(ZipDLLFn) then
-            AddMessage(lsError, 'Missing DLL, please place the 32-bit 7z DLL at "'+ZipDLLFn + '"')
+            AddMessage(lsError, 'No DLL, put 32-bit 7z.ddl at "'+ZipDLLFn + '"')
           else
             SevenzipLibraryName := ZipDLLFn;
           // build the zipfilename
@@ -312,26 +316,34 @@ begin
     end);
 end;
 
-procedure TPublishForm.PutErrorInMemo(SeverityLevel: TdwlLogSeverityLevel; const ErrorStr: string);
+procedure TPublishForm.lbMessagesDrawItem(Control: TWinControl; Index: Integer;
+  Rect: TRect; State: TOwnerDrawState);
 begin
-  case SeverityLevel of
+  var LBox := TListBox(Control);
+  LBox.Canvas.FillRect(Rect);
+  case TdwlLogSeverityLevel(LBox.Items.Objects[Index]) of
   lsError:
     begin
-      reMsg.SelAttributes.Color := clRed;
-      reMsg.SelAttributes.Style := [fsBold];
+      LBox.Canvas.Font.Color := clRed;
+      LBox.Canvas.Font.Style := [fsBold];
     end;
   lsWarning:
     begin
-      reMsg.SelAttributes.Color := clBlue;
-      reMsg.SelAttributes.Style := [fsBold];
+      LBox.Canvas.Font.Color := clBlue;
+      LBox.Canvas.Font.Style := [fsBold];
     end;
   else
     begin
-      reMsg.SelAttributes.Color := clBlack;
-      reMsg.SelAttributes.Style := [];
+      LBox.Canvas.Font.Color := clBlack;
+      LBox.Canvas.Font.Style := [];
     end;
   end;
-  reMsg.Lines.Add(ErrorStr);
+  LBox.Canvas.TextOut(Rect.Left + 2, Rect.Top, lBox.Items[Index]);
+end;
+
+procedure TPublishForm.PutErrorInMemo(SeverityLevel: TdwlLogSeverityLevel; const ErrorStr: string);
+begin
+  lbMessages.Items.AddObject(ErrorStr, pointer(SeverityLevel));
 end;
 
 end.
