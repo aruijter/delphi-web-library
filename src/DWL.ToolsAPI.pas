@@ -69,22 +69,7 @@ class function TdwlToolsAPI.ActiveProject: IOTAProject;
 begin
   Result := nil;
   var Services := BorlandIDEServices as IOTAModuleServices;
-  for var i := 0 to Services.ModuleCount-1 do
-  begin
-    var Module := Services.Modules[i];
-    var ProjectGroup: IOTAProjectGroup;
-    if (Module.QueryInterface(IOTAProjectGroup, ProjectGroup) = S_OK) then
-    begin
-      Result := ProjectGroup.ActiveProject;
-      Exit;
-    end;
-    var Project: IOTAProject;
-    if (Module.QueryInterface(IOTAProject, Project) = S_OK) then
-    begin
-      Result := Project;
-      Exit;
-    end;
-  end;
+  Result := Services.GetActiveProject;
 end;
 
 class procedure TdwlToolsAPI.SetProjectOption(Project: IOTAProject; const Name: string; Value: variant);
