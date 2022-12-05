@@ -23,12 +23,12 @@ type
       FConfigParams: IdwlParams;
       FVersionParams: IdwlParams;
       FTempUpdateDir: string;
-      F7ZWasChecked: boolean;
     class procedure EmptyTempUpdateDir;
     class procedure Init_Params;
     class function VersionParams: IdwlParams;
     class function TempUpdateDir: string;
     class procedure ProgressMsg(const Msg: string; ProcessingFinished: boolean=false);
+    class function CheckDLL(const PackageName, FileVersion: string): boolean;
   protected
     class var
       FProgressBytesFunc: TdwlHTTPProgressEvent;
@@ -39,7 +39,9 @@ type
     class function CheckApplicationUpdate(ForceUpdate: boolean=false): boolean;
     class function CheckPreReleaseUpdate: TdwlResult;
     class function ConfigParams: IdwlParams;
-    class procedure CheckDLL_7Z;
+    class function CheckDLL_7Z: boolean;
+    class function CheckDLL_MySQL: boolean;
+    class function CheckDLL_OpenSSL3: boolean;
     class function GetReleaseInDir(const PackageName, DestinationDir: string; RequestPrerelease: boolean=false): boolean;
   end;
 
@@ -49,7 +51,7 @@ uses
   DWL.HTTP.Consts, DWL.IOUtils, System.SysUtils, System.JSON, System.IOUtils,
   Winapi.WinInet, System.Classes, DWL.Compression, DWL.DisCo.Consts,
   System.Math, DWL.OS, sevenzip, DWL.Params.Utils, DWL.Params.Consts,
-  System.StrUtils, DWL.StrUtils;
+  System.StrUtils, DWL.StrUtils, System.NetEncoding;
 
 
 { TdwlDisCo }
@@ -107,19 +109,40 @@ begin
   Result := true;
 end;
 
-class procedure TdwlDiscoClient.CheckDLL_7Z;
-const
-  Version7z = '18.5';
+class function TdwlDiscoClient.CheckDLL(const PackageName, FileVersion: string): boolean;
 begin
-  if F7ZWasChecked then
-    Exit;
-  // let the JCL know which dll we want to use...
   var ExeDir := ExtractFileDir(ParamStr(0));
-  var ZipDllFn := ExeDir+'\'+SevenZipLibraryName;
-  if not (FileExists(ZipDllFn) and
-    (TdwlFileVersionInfo.CreateFromFile(ZipDllFn)>=TdwlFileVersionInfo.CreateFromString(Version7Z))) then
-    GetReleaseInDir(TdwlFile.ExtractBareName(ZipDllFn), ExeDir);
-  F7ZWasChecked := true;
+  var Fn := ExeDir+'\'+PackageName+'.dll';
+  Result := FileExists(Fn) and (TdwlFileVersionInfo.CreateFromFile(Fn)>=TdwlFileVersionInfo.CreateFromString(FileVersion));
+  if not Result then
+    Result := GetReleaseInDir(PackageName, ExeDir);
+end;
+
+class function TdwlDiscoClient.CheckDLL_7Z: boolean;
+begin
+  {$IFDEF WIN64}
+  Result := CheckDLL('7z64', '18.5.0');
+  {$ELSE}
+  Result := CheckDLL('7z', '18.5.0');
+  {$ENDIF}
+end;
+
+class function TdwlDiscoClient.CheckDLL_MySQL: boolean;
+begin
+  {$IFDEF WIN64}
+  Result := CheckDLL('libmysql64', '5.6.24');
+  {$ELSE}
+  Result := CheckDLL('libmysql', '5.6.24');
+  {$ENDIF}
+end;
+
+class function TdwlDiscoClient.CheckDLL_OpenSSL3: boolean;
+begin
+  {$IFDEF WIN64}
+  Result := CheckDLL('libcrypto-3-x64', '3.0.0');
+  {$ELSE}
+  Result := false;
+  {$ENDIF}
 end;
 
 class function TdwlDiscoClient.CheckPreReleaseUpdate: TdwlResult;
@@ -196,7 +219,7 @@ begin
   try
     ProgressMsg('Downloading '+PackageName);
     try
-      var Response := FApiSession.ExecuteApiRequest('download/package', HTTP_COMMAND_GET, 'packagename='+PackageName+'&kind='+
+      var Response := FApiSession.ExecuteApiRequest('download/package', HTTP_COMMAND_GET, 'packagename='+TNetEncoding.URL.Encode(PackageName)+'&kind='+
         IfThen(RequestPrerelease, discoreleasekindPreRelease, discoreleasekindRelease).ToString, true, false, FProgressBytesFunc);
       if (Response=nil) or (Response.StatusCode<>HTTP_STATUS_OK) then
         Exit;

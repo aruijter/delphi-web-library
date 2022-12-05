@@ -18,6 +18,7 @@ type
     class procedure DoBuildRelease(Sender: TObject);
     class function GetSuitableproject: IOTAProject;
     class procedure OutputVersionInfo(Project: IOTAProject; IsADebug, IsAPreRelease, IsARelease: boolean);
+    class procedure SetDefines(Project: IOTAProject; IsRelease: boolean);
   public
     class constructor Create;
     class destructor Destroy;
@@ -85,6 +86,7 @@ begin
     TdwlToolsAPI.SetProjectOption(Project, 'StackFrames', 0);
     TdwlToolsAPI.SetProjectOption(Project, 'DebugInfo', true);
     TdwlToolsAPI.SetProjectOption(Project, 'MapFile', 0);
+    SetDefines(Project, false);
     OutputVersionInfo(Project, true, false, false);
     Project.ProjectBuilder.BuildProject(cmOTABuild, true);
   except
@@ -112,6 +114,7 @@ begin
     TdwlToolsAPI.SetProjectOption(Project, 'StackFrames', 0);
     TdwlToolsAPI.SetProjectOption(Project, 'DebugInfo', false);
     TdwlToolsAPI.SetProjectOption(Project, 'MapFile', 3);
+    SetDefines(Project, true);
     OutputVersionInfo(Project, false, true, false);
     Project.ProjectBuilder.BuildProject(cmOTABuild, true);
   except
@@ -139,6 +142,7 @@ begin
     TdwlToolsAPI.SetProjectOption(Project, 'StackFrames', 0);
     TdwlToolsAPI.SetProjectOption(Project, 'DebugInfo', false);
     TdwlToolsAPI.SetProjectOption(Project, 'MapFile', 3);
+    SetDefines(Project, true);
     OutputVersionInfo(Project, false, false, true);
     Project.ProjectBuilder.BuildProject(cmOTABuild, true);
   except
@@ -230,4 +234,88 @@ begin
     'false') + ';');
 end;
 
+class procedure TDisCoIde_BuildProfiles.SetDefines(Project: IOTAProject; IsRelease: boolean);
+begin
+  var Defines := TStringList.Create;
+  try
+    Defines.Delimiter := ';';
+    Defines.DelimitedText := Project.ProjectOptions.Values['Defines'];
+    var i := Defines.IndexOf('DEBUG');
+    if (i<0) and (not IsRelease) then
+      Defines.Add('DEBUG');
+    if (i>=0) and IsRelease then
+      Defines.Delete(i);
+    i := Defines.IndexOf('RELEASE');
+    if (i<0) and IsRelease then
+      Defines.Add('RELEASE' );
+    if (i>=0) and not IsRelease then
+      Defines.Delete(i);
+    Project.ProjectOptions.Values['Defines'] := Defines.DelimitedText;
+  finally
+    Defines.Free;
+  end;
+end;
+
 end.
+
+procedure TDExpert.CheckDefines(const WantedDefines: array of string);
+var
+  DefList: TDelimitedStrings;
+  procedure Check(const DeliDefine: string);
+  var
+    i: integer;
+    WeWantThisOne: boolean;
+  begin
+    WeWantThisOne := false;
+    for i := Low(WantedDefines) to High(WantedDefines) do
+      if DeliDefine=WantedDefines[i] then
+        WeWantThisOne := true;
+    i := DefList.IndexOf(DeliDefine);
+    if (i<0) and WeWantThisOne then
+      raise Exception.Create('Please add '+DeliDefine+' to '+GetCurrentProject.CurrentConfiguration);
+    if (i>=0) and not WeWantThisOne then
+      raise Exception.Create('Please remove '+DeliDefine+' from '+GetCurrentProject.CurrentConfiguration);
+  end;
+  procedure CheckAndSetOrRemove(const DeliDefine: string);
+  var
+    i: integer;
+    WeWantThisOne: boolean;
+  begin
+    WeWantThisOne := false;
+    for i := Low(WantedDefines) to High(WantedDefines) do
+      if DeliDefine=WantedDefines[i] then
+        WeWantThisOne := true;
+    i := DefList.IndexOf(DeliDefine);
+    if (i<0) and WeWantThisOne then
+    begin
+      DefList.Add(DeliDefine);
+      FLog.Add('Added ' + DeliDefine);
+    end;
+    if (i>=0) and not WeWantThisOne then
+    begin
+      DefList.Delete(i);
+      FLog.Add('Removed ' + DeliDefine);
+    end;
+  end;
+begin
+  DefList := TDelimitedStrings.Create;
+  try
+    DefList.Separator := ';';
+    DefList.DelimitedText := string(GetCurrentProject.ProjectOptions.Values['Defines']);
+    CheckAndSetOrRemove('DEBUGGING');
+    CheckAndSetOrRemove('PROOFING');
+    CheckAndSetOrRemove('TESTING');
+    GetCurrentProject.ProjectOptions.Values['Defines'] := DefList.DelimitedText;
+
+    DefList.Clear;
+
+    DefList.DelimitedText := string(GetCurrentProject.ProjectOptions.Values['Defines']);
+    Check('DEBUGGING');
+    Check('PROOFING');
+    Check('TESTING');
+
+  finally
+    DefList.Free;
+  end;
+end;
+
