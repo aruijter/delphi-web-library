@@ -326,9 +326,10 @@ end;
 
 function TdwlHTTPServer.BaseURI: string;
 begin
+  // The base uri is ALWAYS the standard port!!
+  // Listenport is not taken into account
   Result := IfThen(IsSecure, 'https', 'http')+'://'+
-    IfThen(FSSL_HostName='', 'localhost', FSSL_HostName)+
-    IfThen((Bindings.Count>0) and ((IsSecure and (Bindings[0].Port<>IdPORT_https)) or ((not IsSecure) and (Bindings[0].Port<>IdPORT_HTTP))), ':'+Bindings[0].Port.ToString);
+    IfThen(FSSL_HostName='', 'localhost', FSSL_HostName);
 end;
 
 procedure TdwlHTTPServer.ClearURIAliases;

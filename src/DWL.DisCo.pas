@@ -271,6 +271,7 @@ begin
   CacheFn := CacheFn+'\'+AppName+IfThen(Profile<>'', '_'+Profile)+'.json';
   var Response := FApiSession.ExecuteJSONRequest('phonehome', HTTP_COMMAND_GET, 'appname='+AppName.ToLower+IfThen(Profile<>'', '&profile='+Profile));
   var Data: TJSONObject;
+  var FreeData := false;
   if Response.Success then
   begin
     Data := Response.Data;
@@ -279,18 +280,26 @@ begin
   else
   begin
     if FileExists(CacheFn) then
-      Data := TJSONObject(TJSONValue.ParseJSONValue(TFile.ReadAllText(CacheFn)))
+    begin
+      Data := TJSONObject(TJSONValue.ParseJSONValue(TFile.ReadAllText(CacheFn)));
+      FreeData := true;
+    end
     else
-     Data := nil;
+      Data := nil;
   end;
   if Data<>nil then
   begin
-    var ParseData := Data.GetValue<TJSONObject>('parameters');
-    if ParseData<>nil then
-      FConfigParams.WriteJSON(ParseData);
-    ParseData := Data.GetValue<TJSONObject>('versions');
-    if ParseData<>nil then
-      FVersionParams.WriteJSON(ParseData);
+    try
+      var ParseData := Data.GetValue<TJSONObject>('parameters');
+      if ParseData<>nil then
+        FConfigParams.WriteJSON(ParseData);
+      ParseData := Data.GetValue<TJSONObject>('versions');
+      if ParseData<>nil then
+        FVersionParams.WriteJSON(ParseData);
+    finally
+      if FreeData then
+        Data.Free;
+    end;
   end;
   // Now add commandline params to configparams
   // Doing this at the end give the commandline the highest priority

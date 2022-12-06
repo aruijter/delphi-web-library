@@ -67,7 +67,9 @@ const
 
   procedure AddOrOverwritePair(JSON: TJSONObject; const Str, Val: string);
   begin
-    JSON.RemovePair(Str);
+    var Pair := JSON.RemovePair(Str);
+    if Pair<>nil then
+      Pair.Free;
     JSON.AddPair(Str, Val);
   end;
 begin

@@ -80,7 +80,7 @@ begin
   inherited Create;
   if Response.StatusCode=HTTP_STATUS_OK then
   begin
-    var JSONResult:= TJSONValue.ParseJSONValue(Response.AsString);
+    var JSONResult := TJSONValue.ParseJSONValue(Response.AsString);
     if JSONResult is TJSONObject then
     begin
       FJSON := TJSONObject(JSONResult);

@@ -156,9 +156,9 @@ begin
         LoadURIAliases(HTTPServer);
         HTTPServer.Open;
         HTTPServer.RegisterHandler(EndpointURI_Log,  FLogHandler);
-        HTTPServer.RegisterHandler(EndpointURI_Mail,  TdwlHTTPHandler_Mail.Create(FParams));
         HTTPServer.LogLevel := FParams.IntValue(Param_LogLevel, httplogLevelWarning);
         TdwlLogger.Log('Enabled Request logging (level '+HTTPServer.LogLevel.ToString+')', lsTrace);
+        HTTPServer.RegisterHandler(EndpointURI_Mail,  TdwlHTTPHandler_Mail.Create(FParams));
         if not HTTPServer.IsSecure then
           TdwlLogger.Log('SERVER IS NOT SECURE, please configure or review ACME parameters', lsWarning);
         TdwlLogger.Log('Opened HTTP Server', lsNotice);

@@ -190,7 +190,7 @@ begin
   FHandlingEndpoints := TObjectDictionary<string, THandlingEndpoints_Dictionary>.Create([doOwnsValues]);
   FConfigParams := New_Params;
   FConfigParams.WriteNameValueText(Params);
-  EnableLogDispatchingToAPI(FConfigParams.StrValue(Param_BaseURI)+EndpointURI_Log, FConfigParams.StrValue(Param_LogSecret), 'general');
+  EnableLogDispatchingToAPI(FConfigParams.StrValue(Param_BaseURI)+EndpointURI_Log, FConfigParams.StrValue(Param_LogSecret));
 end;
 
 class procedure TdwlDLLHandling.ProcessOptions(const State: PdwlHTTPHandlingState; var Success: boolean; Cmds: THandlingEndpoints_Dictionary);
