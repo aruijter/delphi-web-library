@@ -45,7 +45,7 @@ uses
 class function TdwlFile.ExtractBareName(const Path: string=''): string;
 begin
   if Path='' then
-    Result := ChangeFileExt(ExtractFileName(ParamStr(0)),'')
+    Result := ChangeFileExt(ExtractFileName(GetModuleName(HInstance)),'')
   else
     Result := ChangeFileExt(ExtractFileName(Path),'');
 end;

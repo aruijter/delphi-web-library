@@ -14,6 +14,7 @@ uses
 type
   TdwlHTTPHandler_DLL = class(TdwlHTTPHandler)
   strict private
+    FConfigOk: boolean;
     FEndPoint: string;
     FDLLHandle: HModule;
     FProcessProc: TDLL_ProcessRequestProc;
@@ -67,6 +68,7 @@ begin
     var Error := ConfigureProc(@serverProcs, PWideChar(Params.GetAsNameValueText));
     if Error<>'' then
       raise Exception.Create(Error);
+    FConfigOk := true;
   except
     On E: Exception do
       TdwlLogger.Log(FEndPoint+': error on configure: '+E.Message, lsError)
@@ -90,7 +92,7 @@ end;
 
 function TdwlHTTPHandler_DLL.ProcessRequest(const State: PdwlHTTPHandlingState): boolean;
 begin
-  if Assigned(FProcessProc) then
+  if FConfigOk and Assigned(FProcessProc) then
   begin
     Result := FProcessProc(State);
     if Result and FDoAllowOrigins then

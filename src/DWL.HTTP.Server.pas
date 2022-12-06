@@ -770,8 +770,11 @@ begin
     end
     else
     begin
-      State.StatusCode := HTTP_STATUS_DENIED;
-      State.SetContentText('<html>Not authorized.</html>');
+      // We issue a not found (instead of a denied), because this doesn't reveal unneeded information
+      // and if the url is temporary not available, giving a 401 will result in logging out
+      // in some clients which we want to prevent
+      State.StatusCode := HTTP_STATUS_NOT_FOUND;
+      State.SetContentText('<html>Not found.</html>');
       Result := true;
     end;
   end;
