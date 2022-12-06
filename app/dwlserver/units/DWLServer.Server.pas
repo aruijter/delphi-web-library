@@ -43,9 +43,9 @@ uses
 
 const
   SQL_CheckTable_Handlers =
-    'CREATE TABLE IF NOT EXISTS dwl_handlers (id int AUTO_INCREMENT, endpoint varchar(50), handler_uri varchar(255), `params` TEXT NULL, INDEX `primaryindex` (`id`))';
+    'CREATE TABLE IF NOT EXISTS dwl_handlers (id INT AUTO_INCREMENT, open_order SMALLINT, endpoint VARCHAR(50), handler_uri VARCHAR(255), `params` TEXT NULL, INDEX `primaryindex` (`id`))';
   SQL_CheckTable_UriAliases =
-    'CREATE TABLE IF NOT EXISTS dwl_urialiases (id int AUTO_INCREMENT, alias varchar(255), uri varchar(255), PRIMARY KEY (id))';
+    'CREATE TABLE IF NOT EXISTS dwl_urialiases (id INT AUTO_INCREMENT, alias VARCHAR(255), uri VARCHAR(255), PRIMARY KEY (id))';
   SQL_Get_UriAliases =
     'SELECT alias, uri FROM dwl_urialiases';
 
@@ -213,7 +213,7 @@ end;
 procedure TdwlServerCore.LoadDLLHandlers(HTTPServer: TdwlHTTPServer);
 const
   SQL_Get_Resthandlers =
-    'SELECT endpoint, handler_uri, params FROM dwl_handlers';
+    'SELECT endpoint, handler_uri, params FROM dwl_handlers ORDER BY open_order';
 var
   DLLHandle: HModule;
   ProcessProc: TDLL_ProcessRequestProc;
@@ -225,7 +225,6 @@ var
   EndPoint: string;
   L: integer;
   Handler: TdwlHTTPHandler_DLL;
-  CreatedHandlers: TList<TdwlHTTPHandler_DLL>;
 begin
   FParams.WriteValue(Param_BaseURI, HTTPServer.BaseURI);
   var Issuer := FParams.StrValue(Param_Issuer);
@@ -238,70 +237,59 @@ begin
   try
     Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Get_Resthandlers);
     Cmd.Execute;
-    CreatedHandlers := TList<TdwlHTTPHandler_DLL>.Create;
-    try
-      while Cmd.Reader.Read do
-      begin
+    while Cmd.Reader.Read do
+    begin
+      try
+        EndPoint := Cmd.Reader.GetString(0);
+        URI := Cmd.Reader.GetString(1);
+        HandlerParams := New_Params;
+        FParams.AssignTo(HandlerParams);
+        HandlerParams.WriteNameValueText(Cmd.Reader.GetString(2 ,true));
+        if not HandlerParams.BoolValue(Param_Enabled, true) then
+          Continue;
+        HandlerParams.WriteValue(Param_Endpoint, Endpoint);
         try
-          EndPoint := Cmd.Reader.GetString(0);
-          URI := Cmd.Reader.GetString(1);
-          HandlerParams := New_Params;
-          FParams.AssignTo(HandlerParams);
-          HandlerParams.WriteNameValueText(Cmd.Reader.GetString(2 ,true));
-          if not HandlerParams.BoolValue(Param_Enabled, true) then
+          if HTTPServer.UnRegisterHandler(EndPoint) then
+            TdwlLogger.Log('Unregistered DLL Handler at endpoint '+Endpoint, lsTrace);
+          if SameText(Copy(URI, 1, 17), 'file://localhost/') then
+            FileName := FDLLBasePath+ReplaceStr(Copy(URI, 17, MaxInt), '/', '\')
+          else
+          begin
+            L := MAX_PATH;
+            SetLength(FileName, L);
+            if PathCreateFromUrl(PChar(URI), PChar(FileName), @L, 0)<>S_OK then
+              raise Exception.Create('Invalid URI');
+            SetLength(FileName, L);
+          end;
+          if not FileExists(FileName) then
+          begin
+            TdwlLogger.Log('Missing DLL '+URI+' ('+FileName+') for endpoint '+Endpoint, lsError);
             Continue;
-          HandlerParams.WriteValue(Param_Endpoint, Endpoint);
-          HTTPServer.SuspendHandling;
-          try
-            try
-              if HTTPServer.UnRegisterHandler(EndPoint) then
-                TdwlLogger.Log('Unregistered DLL Handler at endpoint '+Endpoint, lsTrace);
-              if SameText(Copy(URI, 1, 17), 'file://localhost/') then
-                FileName := FDLLBasePath+ReplaceStr(Copy(URI, 17, MaxInt), '/', '\')
-              else
-              begin
-                L := MAX_PATH;
-                SetLength(FileName, L);
-                if PathCreateFromUrl(PChar(URI), PChar(FileName), @L, 0)<>S_OK then
-                  raise Exception.Create('Invalid URI');
-                SetLength(FileName, L);
-              end;
-              if not FileExists(FileName) then
-              begin
-                TdwlLogger.Log('Missing DLL '+URI+' ('+FileName+') for endpoint '+Endpoint, lsError);
-                Continue;
-              end;
-              DLLHandle := LoadLibrary(PChar(FileName));
-              if DLLHandle=0 then
-                raise Exception.Create('LoadLibrary failed');
-              ProcessProc := GetProcAddress(DLLHandle, 'ProcessRequest');
-              AuthorizeProc := GetProcAddress(DLLHandle, 'Authorize');
-              if Assigned(ProcessProc) and Assigned(AuthorizeProc) then
-              begin
-                Handler := TdwlHTTPHandler_DLL.Create(DLLHandle, ProcessProc, AuthorizeProc, EndPoint, HandlerParams);
-                HTTPServer.RegisterHandler(EndPoint, Handler);
-                CreatedHandlers.Add(Handler);
-                TdwlLogger.Log('Registered DLL Handler '+ExtractFileName(FileName)+' at endpoint '+Endpoint, lsTrace);
-              end
-              else
-              begin
-                FreeLibrary(DLLHandle);
-                raise Exception.Create('No ProcessRequest or Authorize function found.');
-              end;
-            except
-              on E: Exception do
-                TdwlLogger.Log('Failed loading DLL '+URI+'('+FileName+') on endpoint '+Endpoint+': '+E.Message, lsError);
-            end;
-          finally
-            HTTPServer.ResumeHandling;
+          end;
+          DLLHandle := LoadLibrary(PChar(FileName));
+          if DLLHandle=0 then
+            raise Exception.Create('LoadLibrary failed');
+          ProcessProc := GetProcAddress(DLLHandle, 'ProcessRequest');
+          AuthorizeProc := GetProcAddress(DLLHandle, 'Authorize');
+          if Assigned(ProcessProc) and Assigned(AuthorizeProc) then
+          begin
+            Handler := TdwlHTTPHandler_DLL.Create(DLLHandle, ProcessProc, AuthorizeProc, EndPoint, HandlerParams);
+            HTTPServer.RegisterHandler(EndPoint, Handler);
+            TdwlLogger.Log('Registered DLL Handler '+ExtractFileName(FileName)+' at endpoint '+Endpoint, lsTrace);
+          end
+          else
+          begin
+            FreeLibrary(DLLHandle);
+            raise Exception.Create('No ProcessRequest or Authorize function found.');
           end;
         except
           on E: Exception do
-            TdwlLogger.Log('Error loading DLL handler at '+EndPoint+': '+E.Message, lsError);
+            TdwlLogger.Log('Failed loading DLL '+URI+'('+FileName+') on endpoint '+Endpoint+': '+E.Message, lsError);
         end;
+      except
+        on E: Exception do
+          TdwlLogger.Log('Error loading DLL handler at '+EndPoint+': '+E.Message, lsError);
       end;
-    finally
-      CreatedHandlers.Free;
     end;
   except
     on E: Exception do

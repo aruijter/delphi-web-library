@@ -382,11 +382,11 @@ end;
 
 function TdwlHTTPServer.FindHandler(const URI: string): TdwlHTTPHandler;
 begin
-  FRootHandlerAccess.BeginWrite;
+  FRootHandlerAccess.BeginRead;
   try
     Result := TdwlHTTPHandler_PassThrough(FRootHandler).FindHandler(URI);
   finally
-    FRootHandlerAccess.EndWrite;
+    FRootHandlerAccess.EndRead;
   end;
 end;
 
