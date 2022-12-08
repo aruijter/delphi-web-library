@@ -38,10 +38,12 @@ type
     class function AppName: string;
     class function CheckApplicationUpdate(ForceUpdate: boolean=false): boolean;
     class function CheckPreReleaseUpdate: TdwlResult;
+    class function CheckPackageUpdate(const PackageName: string; const DestinationDir: string=''): boolean;
     class function ConfigParams: IdwlParams;
     class function CheckDLL_7Z: boolean;
     class function CheckDLL_MySQL: boolean;
     class function CheckDLL_OpenSSL3: boolean;
+    class function CheckDLL_WebView2: boolean;
     class function GetReleaseInDir(const PackageName, DestinationDir: string; RequestPrerelease: boolean=false): boolean;
   end;
 
@@ -145,6 +147,37 @@ begin
   {$ENDIF}
 end;
 
+class function TdwlDiscoClient.CheckDLL_WebView2: boolean;
+begin
+  {$IFDEF WIN64}
+  Result := CheckDLL('WebView2Loader', '1.0.664');
+  {$ELSE}
+  Result := false;
+  {$ENDIF}
+end;
+
+class function TdwlDiscoClient.CheckPackageUpdate(const PackageName: string; const DestinationDir: string=''): boolean;
+begin
+  Result := false;
+  var DestDir := DestinationDir;
+  if DestDir='' then
+    DestDir := ExtractFilePath(ParamStr(0))+PackageName;
+  var FnVersion := DestDir+'\version.info';
+  var CurrentIsOk := FileExists(FnVersion);
+  if CurrentIsOk then // check current version
+  begin
+    var CurrentVersion := TdwlFileVersionInfo.CreateFromString(TFile.ReadAllText(FnVersion));
+    var ConfigVersion := TdwlFileVersionInfo.CreateFromString(TdwlDiscoClient.VersionParams.StrValue(PackageName));
+    CurrentIsOk := ConfigVersion.IsEmpty or CurrentVersion.IsEmpty or (CurrentVersion>=ConfigVersion);
+  end;
+  if CurrentIsOk then
+    Exit;
+  if DirectoryExists(DestDir) then
+    TDirectory.Delete(DestDir, true);
+  GetReleaseInDir(PackageName, DestDir);
+  Result := true;
+end;
+
 class function TdwlDiscoClient.CheckPreReleaseUpdate: TdwlResult;
 begin
   var Response := TdwlDisco.FApiSession.ExecuteJSONRequest('release', HTTP_COMMAND_GET, 'packagename='+AppName);
@@ -234,6 +267,7 @@ begin
       end;
       if FileName='' then
         Exit;
+      ForceDirectories(DestinationDir);
       if SameText(ExtractFileExt(FileName), '.7z') then
       begin
         CheckDLL_7Z;

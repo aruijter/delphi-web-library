@@ -57,6 +57,7 @@ type
     constructor Create(ContentBuffer: pointer; ContentSize: NativeInt);
   end;
 
+  TdwlResultEvent = function: TdwlResult of object;
 
 implementation
 
