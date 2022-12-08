@@ -241,6 +241,10 @@ begin
         TFile.WriteAllBytes(ZipFn, Response.AsBytes);
         if not TdwlCompression.ExtractArchive(ZipFn, DestinationDir).Success then
           Exit;
+        try
+          TFile.Delete(ZipFn);
+        except
+        end;
       end
       else
         TFile.WriteAllBytes(DestinationDir+'\'+FileName, Response.AsBytes);
@@ -266,7 +270,7 @@ begin
   {$ENDIF}
   // seen the naming convention 'Path' you would expect a trailing backslash, but it comes withou
   // create a safe workaround for this:
-  var CacheFn := TPath.GetPublicPath.TrimRight(['\'])+'\DisCo\PhoneHome';
+  var CacheFn := TPath.GetCachePath.TrimRight(['\'])+'\DWL\DisCo\PhoneHome';
   ForceDirectories(CacheFn);
   CacheFn := CacheFn+'\'+AppName+IfThen(Profile<>'', '_'+Profile)+'.json';
   var Response := FApiSession.ExecuteJSONRequest('phonehome', HTTP_COMMAND_GET, 'appname='+AppName.ToLower+IfThen(Profile<>'', '&profile='+Profile));
