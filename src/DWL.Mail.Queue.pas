@@ -349,6 +349,7 @@ begin
     var AttemptCount := 0;
     while (not MailIsSent) and (AttemptCount<MAX_DIRECT_ATTEMPTS) do
     begin
+      inc(AttemptCount);
       var DomainContextParams: IdwlParams;
       if not TdwlMailQueue.FDomainContexts.TryGetValue(DomainFrom, DomainContextParams) then
         DomainContextParams := TdwlMailQueue.FDefaultDomainContextParams;
