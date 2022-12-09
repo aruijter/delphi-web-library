@@ -296,34 +296,53 @@ begin
   FConfigParams := New_Params;
   FVersionParams := New_Params;
   var CommandLineParams := New_Params;
-  TdwlParamsUtils.Import_CommandLine(CommandLineParams);
+  try
+    TdwlParamsUtils.Import_CommandLine(CommandLineParams);
+  except
+  end;
   var Profile := CommandLineParams.StrValue(Param_Profile);
   {$IFDEF DEBUG}
   if Profile='' then
     Profile := 'localhost';
   {$ENDIF}
-  // seen the naming convention 'Path' you would expect a trailing backslash, but it comes withou
-  // create a safe workaround for this:
-  var CacheFn := TPath.GetCachePath.TrimRight(['\'])+'\DWL\DisCo\PhoneHome';
-  ForceDirectories(CacheFn);
-  CacheFn := CacheFn+'\'+AppName+IfThen(Profile<>'', '_'+Profile)+'.json';
-  var Response := FApiSession.ExecuteJSONRequest('phonehome', HTTP_COMMAND_GET, 'appname='+AppName.ToLower+IfThen(Profile<>'', '&profile='+Profile));
-  var Data: TJSONObject;
+  var Response: IdwlAPIResponse := nil;
+  try
+    Response := FApiSession.ExecuteJSONRequest('phonehome', HTTP_COMMAND_GET, 'appname='+AppName.ToLower+IfThen(Profile<>'', '&profile='+Profile));
+  except
+    Response := nil;
+  end;
+  var Data: TJSONObject := nil;
   var FreeData := false;
-  if Response.Success then
+  var CacheFn: string;
+  try
+    // seen the naming convention 'Path' you would expect a trailing backslash, but it comes without
+    // create a safe workaround for this:
+    CacheFn := TPath.GetCachePath.TrimRight(['\'])+'\DWL\DisCo\PhoneHome';
+    ForceDirectories(CacheFn);
+    CacheFn := CacheFn+'\'+AppName+IfThen(Profile<>'', '_'+Profile)+'.json';
+  except
+    CacheFn := '';
+  end;
+  if (Response<>nil) and Response.Success then
   begin
     Data := Response.Data;
-    TFile.WriteAllText(CacheFn, Data.ToJSON);
+    try
+      if CacheFn<>'' then
+        TFile.WriteAllText(CacheFn, Data.ToJSON);
+    except
+      // Writing to cache never can lead to stopping the flow, resulting in a not updating application
+    end;
   end
   else
   begin
-    if FileExists(CacheFn) then
-    begin
-      Data := TJSONObject(TJSONValue.ParseJSONValue(TFile.ReadAllText(CacheFn)));
-      FreeData := true;
-    end
-    else
-      Data := nil;
+    try
+      if FileExists(CacheFn) then
+      begin
+        FreeData := true;
+        Data := TJSONObject(TJSONValue.ParseJSONValue(TFile.ReadAllText(CacheFn)));
+      end
+    except
+    end;
   end;
   if Data<>nil then
   begin
@@ -341,7 +360,10 @@ begin
   end;
   // Now add commandline params to configparams
   // Doing this at the end give the commandline the highest priority
-  CommandLineParams.AssignTo(FConfigParams);
+  try
+    CommandLineParams.AssignTo(FConfigParams);
+  except
+  end;
 end;
 
 class procedure TdwlDiscoClient.ProgressMsg(const Msg: string; ProcessingFinished: boolean=false);
