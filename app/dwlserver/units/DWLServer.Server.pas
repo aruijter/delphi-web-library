@@ -123,7 +123,7 @@ begin
     InitDatabase;
     FLogHandler := TdwlHTTPHandler_Log.Create(FParams); // init before activating DoLog!
     TdwlMailQueue.Configure(FParams, true);
-    EnableLogDispatchingToCallback(false, DoLog);
+    var CallBackLogDispatcher := EnableLogDispatchingToCallback(false, DoLog);
     ACMECLient := TdwlACMEClient.Create;
     try
       ACMECLient.Domain := FParams.StrValue(Param_ACMEDomain);
@@ -186,6 +186,7 @@ begin
         HTTPServer.Free;
       end;
     finally
+      TdwlLogger.UnregisterDispatcher(CallBackLogDispatcher);
       ACMECLient.Free;
     end;
   except

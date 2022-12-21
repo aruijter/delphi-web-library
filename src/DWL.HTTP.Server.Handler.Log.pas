@@ -9,7 +9,7 @@ interface
 
 uses
   DWL.HTTP.Server, DWL.HTTP.Server.Types, DWL.Params,
-  System.Generics.Collections, System.SysUtils;
+  System.Generics.Collections, System.SysUtils, System.SyncObjs;
 
 const
   logdestinationServerConsole='serverconsole';
@@ -33,6 +33,7 @@ type
     FTriggers: TList<TLogTrigger>;
     FLogSecret: string;
     FMySQL_Profile: IdwlParams;
+    FLogSubmitAccess: TCriticalSection;
     procedure InitializeDatabase;
     function Post_Log(const State: PdwlHTTPHandlingState): boolean;
     function Options_Log(const State: PdwlHTTPHandlingState): boolean;
@@ -65,6 +66,7 @@ begin
   inherited Create;
   FMySQL_Profile := New_Params;
   AParams.AssignTo(FMySQL_Profile, Params_SQLConnection);
+  FLogSubmitAccess := TCriticalSection.Create;
   FLogSecret := AParams.StrValue(param_LogSecret);
   FTriggers := TList<TLogTrigger>.Create;
   InitializeDatabase;
@@ -73,6 +75,7 @@ end;
 destructor TdwlHTTPHandler_Log.Destroy;
 begin
   FTriggers.Free;
+  FLogSubmitAccess.Free;
   inherited Destroy;
 end;
 
@@ -262,42 +265,47 @@ const
   SQL_Insert_Log=
     'INSERT INTO dwl_log_messages (IpAddress, Level, Source, Channel, Topic, Msg, ContentType, Content) values (?, ?, ?, ?, ?, ?, ?, ?)';
 begin
-  // only save notice and more severe to database
-  var Cmd: IdwlMySQLCommand;
-  if TdwlLogSeverityLevel(Level)<lsNotice then
-    Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Insert_Debug)
-  else
-    Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Insert_Log);
-  Cmd.Parameters.SetTextDataBinding(0, IpAddress);
-  Cmd.Parameters.SetIntegerDataBinding(1, Level);
-  Cmd.Parameters.SetTextDataBinding(2, Source);
-  Cmd.Parameters.SetTextDataBinding(3, Channel);
-  Cmd.Parameters.SetTextDataBinding(4, Topic);
-  Cmd.Parameters.SetTextDataBinding(5, Msg);
-  Cmd.Parameters.SetTextDataBinding(6, ContentType);
-  if Content=nil then
-    Cmd.Parameters.SetNullDataBinding(7)
-  else
-    Cmd.Parameters.SetBinaryRefDataBinding(7, @Content[0], Length(Content));
-  Cmd.Execute;
-  {$IFDEF DEBUG}
-  // Forward the logmessage to the server for debugging purposes
-  if Source<>TdwlLogger.Default_Source then
-  begin
-    var LogItem := TdwlLogger.PrepareLogitem;
-    LogItem.Msg := Msg;
-    LogItem.SeverityLevel := TdwlLogSeverityLevel(Level);
-    LogItem.Source := Source;
-    LogItem.Channel := Channel;
-    LogItem.Topic := Topic;
-    LogItem.ContentType := ContentType;
-    LogItem.Content := Content;
-    LogItem.Destination := logdestinationServerConsole;
-    TdwlLogger.Log(LogItem);
+  FLogSubmitAccess.Enter;
+  try
+    // only save notice and more severe to database
+    var Cmd: IdwlMySQLCommand;
+    if TdwlLogSeverityLevel(Level)<lsNotice then
+      Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Insert_Debug)
+    else
+      Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Insert_Log);
+    Cmd.Parameters.SetTextDataBinding(0, IpAddress);
+    Cmd.Parameters.SetIntegerDataBinding(1, Level);
+    Cmd.Parameters.SetTextDataBinding(2, Source);
+    Cmd.Parameters.SetTextDataBinding(3, Channel);
+    Cmd.Parameters.SetTextDataBinding(4, Topic);
+    Cmd.Parameters.SetTextDataBinding(5, Msg);
+    Cmd.Parameters.SetTextDataBinding(6, ContentType);
+    if Content=nil then
+      Cmd.Parameters.SetNullDataBinding(7)
+    else
+      Cmd.Parameters.SetBinaryRefDataBinding(7, @Content[0], Length(Content));
+    Cmd.Execute;
+    {$IFDEF DEBUG}
+    // Forward the logmessage to the server for debugging purposes
+    if Source<>TdwlLogger.Default_Source then
+    begin
+      var LogItem := TdwlLogger.PrepareLogitem;
+      LogItem.Msg := Msg;
+      LogItem.SeverityLevel := TdwlLogSeverityLevel(Level);
+      LogItem.Source := Source;
+      LogItem.Channel := Channel;
+      LogItem.Topic := Topic;
+      LogItem.ContentType := ContentType;
+      LogItem.Content := Content;
+      LogItem.Destination := logdestinationServerConsole;
+      TdwlLogger.Log(LogItem);
+    end;
+    {$ENDIF}
+    // Process the triggers
+    ProcessTriggers(IpAddress, Level, Source, Channel, Topic, Msg, ContentType, Content);
+  finally
+    FLogSubmitAccess.Leave;
   end;
-  {$ENDIF}
-  // Process the triggers
-  ProcessTriggers(IpAddress, Level, Source, Channel, Topic, Msg, ContentType, Content);
 end;
 
 end.
