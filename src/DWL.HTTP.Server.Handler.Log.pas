@@ -23,6 +23,7 @@ const
 type
   TLogTrigger = record
     MinLevel: byte;
+    MaxLevel: byte;
     Channel: string;
     Topic: string;
     Parameters: string;
@@ -111,13 +112,14 @@ const
   SQL_CheckTable_LogTriggers=
     'CREATE TABLE IF NOT EXISTS `dwl_log_triggers` ('+
     '`Id` INT(11) NOT NULL AUTO_INCREMENT, '+
-    '`Level` TINYINT  DEFAULT 0, '+
+    '`Level_From` TINYINT, '+
+    '`Level_To` TINYINT, '+
     '`Channel` VARCHAR(50), '+
     '`Topic` VARCHAR(50), '+
     '`Parameters` TEXT, '+
     'PRIMARY KEY (`ID`))';
   SQL_Get_Triggers=
-    'SELECT Level, Channel, Topic, Parameters FROM dwl_log_triggers';
+    'SELECT Level_From, Level_to, Channel, Topic, Parameters FROM dwl_log_triggers';
 begin
   FMySQL_Profile.WriteValue(Param_CreateDatabase, true);
   FMySQL_Profile.WriteValue(Param_TestConnection, true);
@@ -132,10 +134,11 @@ begin
   while Cmd.Reader.Read do
   begin
     var Trig: TLogTrigger;
-    Trig.MinLevel := Cmd.Reader.GetInteger(0, true);
-    Trig.Channel := Cmd.Reader.GetString(1, true, '*');
-    Trig.Topic := Cmd.Reader.GetString(2, true, '*');
-    Trig.Parameters := Cmd.Reader.GetString(3, true, '');
+    Trig.MinLevel := Cmd.Reader.GetInteger(0, true, integer(lsNotSet));
+    Trig.MaxLevel := Cmd.Reader.GetInteger(1, true, integer(lsFatal));
+    Trig.Channel := Cmd.Reader.GetString(2, true, '*');
+    Trig.Topic := Cmd.Reader.GetString(3, true, '*');
+    Trig.Parameters := Cmd.Reader.GetString(4, true, '');
     FTriggers.Add(Trig);
   end;
 end;
@@ -218,7 +221,7 @@ procedure TdwlHTTPHandler_Log.ProcessTriggers(const IpAddress: string; Level: By
 begin
   for var Trig in FTriggers do
   begin
-    if MatchesMask(Channel, Trig.Channel) and MatchesMask(Topic, Trig.Topic) and (Level>=Trig.MinLevel) then
+    if MatchesMask(Channel, Trig.Channel) and MatchesMask(Topic, Trig.Topic) and (Level>=Trig.MinLevel) and (Level<=Trig.MaxLevel) then
     begin
       var Parms := TStringList.Create;
       try
