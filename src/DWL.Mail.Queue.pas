@@ -319,9 +319,9 @@ begin
           Cmd.Parameters.SetIntegerDataBinding(2, Current_ID);
           Cmd.Execute;
           if Res.Success then
-            TdwlMailQueue.Log('Successfully sent mail to '+Msg.Recipients.EMailAddresses, lsTrace)
-          else
-            TdwlMailQueue.Log('Failed to sent mail to '+Msg.Recipients.EMailAddresses+' ['+TdwlStrUtils.Sanatize(Res.ErrorMsg, [soRemoveLineBreaks])+']', lsError);
+            TdwlMailQueue.Log('Successfully sent mail to '+Msg.Recipients.EMailAddresses, lsTrace);
+          // never Log a failed mail attempt, you can read it back in the ProcessingLog
+          // a log will most probably generate a new mail and an infinite loop is created!!!!
         finally
           Msg.Free;
         end;

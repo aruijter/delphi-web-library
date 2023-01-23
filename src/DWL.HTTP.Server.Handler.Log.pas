@@ -1,6 +1,6 @@
 /// <summary>
 ///   A specific handler that can be added to a TdwlHTTPServer for exposing the
-///   DWL logging API. Requests are handled triggers, fieltered etc and at the
+///   DWL logging API. Requests are handled triggered, filtered etc and at the
 ///   end saved in the database
 /// </summary>
 unit DWL.HTTP.Server.Handler.Log;
@@ -9,7 +9,7 @@ interface
 
 uses
   DWL.HTTP.Server, DWL.HTTP.Server.Types, DWL.Params,
-  System.Generics.Collections, System.SysUtils, System.SyncObjs;
+  System.Generics.Collections, System.SysUtils, System.SyncObjs, DWL.SyncObjs;
 
 const
   logdestinationServerConsole='serverconsole';
@@ -31,11 +31,13 @@ type
 
   TdwlHTTPHandler_Log = class(TdwlHTTPHandler)
   strict private
-    FTriggers: TList<TLogTrigger>;
+    FReloadTriggerTick: cardinal;
+    FTriggers: TdwlThreadList<TLogTrigger>;
     FLogSecret: string;
     FMySQL_Profile: IdwlParams;
     FLogSubmitAccess: TCriticalSection;
     procedure InitializeDatabase;
+    procedure CheckTriggers;
     function Post_Log(const State: PdwlHTTPHandlingState): boolean;
     function Options_Log(const State: PdwlHTTPHandlingState): boolean;
     procedure ProcessTriggers(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes);
@@ -54,7 +56,10 @@ uses
   DWL.Params.Consts, DWL.MySQL, DWL.HTTP.Consts, DWL.Logging,
   DWL.HTTP.Server.Globals, DWL.HTTP.Server.Utils, System.Masks, System.Classes,
   IdMessage, System.StrUtils, IdAttachmentMemory, DWL.Mail.Queue,
-  Winapi.WinInet;
+  Winapi.WinInet, Winapi.Windows, System.Math;
+
+const
+  TRIGGER_RELOAD_MSECS = 60000; // 1 minute
 
 { TdwlHTTPHandler_Log }
 
@@ -70,8 +75,9 @@ begin
   AParams.AssignTo(FMySQL_Profile, Params_SQLConnection);
   FLogSubmitAccess := TCriticalSection.Create;
   FLogSecret := AParams.StrValue(param_LogSecret);
-  FTriggers := TList<TLogTrigger>.Create;
+  FTriggers := TdwlThreadList<TLogTrigger>.Create;
   InitializeDatabase;
+  CheckTriggers;
 end;
 
 destructor TdwlHTTPHandler_Log.Destroy;
@@ -118,8 +124,6 @@ const
     '`Topic` VARCHAR(50), '+
     '`Parameters` TEXT, '+
     'PRIMARY KEY (`ID`))';
-  SQL_Get_Triggers=
-    'SELECT Level_From, Level_to, Channel, Topic, Parameters FROM dwl_log_triggers';
 begin
   FMySQL_Profile.WriteValue(Param_CreateDatabase, true);
   FMySQL_Profile.WriteValue(Param_TestConnection, true);
@@ -129,17 +133,43 @@ begin
   Session.CreateCommand(SQL_CheckTable_LogDebug).Execute;
   Session.CreateCommand(SQL_CheckTable_LogMessages).Execute;
   Session.CreateCommand(SQL_CheckTable_LogTriggers).Execute;
-  var Cmd := Session.CreateCommand(SQL_Get_Triggers);
-  Cmd.Execute;
-  while Cmd.Reader.Read do
-  begin
-    var Trig: TLogTrigger;
-    Trig.MinLevel := Cmd.Reader.GetInteger(0, true, integer(lsNotSet));
-    Trig.MaxLevel := Cmd.Reader.GetInteger(1, true, integer(lsFatal));
-    Trig.Channel := Cmd.Reader.GetString(2, true, '*');
-    Trig.Topic := Cmd.Reader.GetString(3, true, '*');
-    Trig.Parameters := Cmd.Reader.GetString(4, true, '');
-    FTriggers.Add(Trig);
+end;
+
+procedure TdwlHTTPHandler_Log.CheckTriggers;
+const
+  SQL_Get_Triggers=
+    'SELECT Level_From, Level_to, Channel, Topic, Parameters, SuppressDuplicateSeconds FROM dwl_log_triggers';
+begin
+  try
+    var T := GetTickCount64;
+    if T>FReloadTriggerTick then
+    begin
+      FReloadTriggerTick := T+TRIGGER_RELOAD_MSECS;
+      var TrigList := FTriggers.LockList;
+      try
+        TrigList.Clear;
+        var Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Get_Triggers);
+        Cmd.Execute;
+        while Cmd.Reader.Read do
+        begin
+          var Trig: TLogTrigger;
+          // never accept triggers for levels below lsNotice
+          // said in another way: triggering only acts on the items put in the dwl_log_messages table
+          // (ignore the items put in dwl_log_debug)
+          Trig.MinLevel := Max(integer(lsNotice), Cmd.Reader.GetInteger(0, true));
+          Trig.MaxLevel := Cmd.Reader.GetInteger(1, true, integer(lsFatal));
+          Trig.Channel := Cmd.Reader.GetString(2, true, '*');
+          Trig.Topic := Cmd.Reader.GetString(3, true, '*');
+          Trig.Parameters := Cmd.Reader.GetString(4, true);
+          TrigList.Add(Trig);
+        end;
+      finally
+        FTriggers.UnlockList;
+      end;
+    end;
+  except
+    on E:Exception do
+      SubmitLog('', integer(lsError), '', '', '', 'Error loading Triggers: '+E.Message, '', nil);
   end;
 end;
 
@@ -219,47 +249,58 @@ end;
 
 procedure TdwlHTTPHandler_Log.ProcessTriggers(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes);
 begin
-  for var Trig in FTriggers do
-  begin
-    if MatchesMask(Channel, Trig.Channel) and MatchesMask(Topic, Trig.Topic) and (Level>=Trig.MinLevel) and (Level<=Trig.MaxLevel) then
-    begin
-      var Parms := TStringList.Create;
-      try
-        Parms.Text := Trig.Parameters;
-        var MailMsg := TIdMessage.Create(nil);
-        try
-          MailMsg.Recipients.EMailAddresses := Parms.Values[Param_EMail_To];
-          MailMsg.From.Address := Parms.Values[Param_Email_From];
-          MailMsg.From.Name := Parms.Values[Param_EMail_FromName];
-          var Subject := parms.Values[Param_EMail_Subject];
-          Subject := ReplaceStr(Subject, '$(level)', TdwlLogger.GetSeverityLevelAsString(TdwlLogSeverityLevel(Level)));
-          Subject := ReplaceStr(Subject, '$(source)', Source);
-          Subject := ReplaceStr(Subject, '$(channel)', Channel);
-          Subject := ReplaceStr(Subject, '$(topic)', Topic);
-          Subject := ReplaceStr(Subject, '$(msg)', Msg.Substring(0, 100).Replace(#13, '').Replace(#10, ''));
-          MailMsg.Subject := Subject;
-          if SameText(Copy(trim(ContentType), 1, 5), 'text/') then
-          begin
-            MailMsg.Body.Text := TEncoding.UTF8.GetString(Content);
-            MailMsg.ContentType := ContentType;
-          end
-          else
-          begin
-            if Length(Content)>0 then
-            begin
-              var Attachment := TIdAttachmentMemory.Create(MailMsg.MessageParts);
-              Attachment.ContentType := ContentType;
-              Attachment.DataStream.WriteBuffer(Content[0], Length(Content));
+  CheckTriggers;
+  try
+    var TrigList := FTriggers.LockListRead;
+    try
+      for var Trig in TrigList do
+      begin
+        if MatchesMask(Channel, Trig.Channel) and MatchesMask(Topic, Trig.Topic) and (Level>=Trig.MinLevel) and (Level<=Trig.MaxLevel) then
+        begin
+          var Parms := TStringList.Create;
+          try
+            Parms.Text := Trig.Parameters;
+            var MailMsg := TIdMessage.Create(nil);
+            try
+              MailMsg.Recipients.EMailAddresses := Parms.Values[Param_EMail_To];
+              MailMsg.From.Address := Parms.Values[Param_Email_From];
+              MailMsg.From.Name := Parms.Values[Param_EMail_FromName];
+              var Subject := parms.Values[Param_EMail_Subject];
+              Subject := ReplaceStr(Subject, '$(level)', TdwlLogger.GetSeverityLevelAsString(TdwlLogSeverityLevel(Level)));
+              Subject := ReplaceStr(Subject, '$(source)', Source);
+              Subject := ReplaceStr(Subject, '$(channel)', Channel);
+              Subject := ReplaceStr(Subject, '$(topic)', Topic);
+              Subject := ReplaceStr(Subject, '$(msg)', Msg.Substring(0, 100).Replace(#13, '').Replace(#10, ''));
+              MailMsg.Subject := Subject;
+              if SameText(Copy(trim(ContentType), 1, 5), 'text/') then
+              begin
+                MailMsg.Body.Text := TEncoding.UTF8.GetString(Content);
+                MailMsg.ContentType := ContentType;
+              end
+              else
+              begin
+                if Length(Content)>0 then
+                begin
+                  var Attachment := TIdAttachmentMemory.Create(MailMsg.MessageParts);
+                  Attachment.ContentType := ContentType;
+                  Attachment.DataStream.WriteBuffer(Content[0], Length(Content));
+                end;
+              end;
+              TdwlMailQueue.QueueForSending(MailMsg);
+            finally
+              MailMsg.Free;
             end;
+          finally
+            Parms.Free;
           end;
-          TdwlMailQueue.QueueForSending(MailMsg);
-        finally
-          MailMsg.Free;
         end;
-      finally
-        Parms.Free;
       end;
+    finally
+      FTriggers.UnlockListRead;
     end;
+  except
+    on E: Exception do
+      SubmitLog('', integer(lsError), '', '', '', 'Error executing trigger: '+E.Message, '', nil);
   end;
 end;
 
