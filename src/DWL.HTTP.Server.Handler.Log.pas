@@ -21,17 +21,32 @@ const
   Param_EMail_Subject = 'email_subject';
 
 type
-  TLogTrigger = record
-    Id: integer;
-    MinLevel: byte;
-    MaxLevel: byte;
-    Channel: string;
-    Topic: string;
-    Parameters: string;
-    SuppressDuplicateMSecs: cardinal;
-    Hashes: TDictionary<integer, UInt64>;
-    CleanupCounter: cardinal;
+  TLogTrigger = class
+  strict private
+    FId: integer;
+    FMinLevel: byte;
+    FMaxLevel: byte;
+    FChannel: string;
+    FTopic: string;
+    FParameters: string;
+    FSuppressDuplicateMSecs: cardinal;
+    // suppresshash is a list of hashes and the tick when the hashed value should not longer be suppressed
+    FSuppressHashes: TDictionary<integer, UInt64>;
+    // cleanup is done every TRIGGER_CLEANUP_COUNT trigger events
+    FCleanupCounter: cardinal;
+    procedure SetSuppressDuplicateMSecs(const Value: cardinal);
+  private
+    property Id: integer read FId;
+    property MinLevel: byte read FMinLevel write FMinLevel;
+    property MaxLevel: byte read FMaxLevel write FMaxLevel;
+    property Channel: string read FChannel write FChannel;
+    property Topic: string read FTopic write FTopic;
+    property Parameters: string read FParameters write FParameters;
+    property SuppressDuplicateMSecs: cardinal read FSuppressDuplicateMSecs write SetSuppressDuplicateMSecs;
     function IsSuppressed(Level: Byte; const Source, Channel, Topic, Msg: string): boolean;
+  public
+    constructor Create(AId: integer);
+    destructor Destroy; override;
   end;
 
   TdwlHTTPHandler_Log = class(TdwlHTTPHandler)
@@ -42,7 +57,7 @@ type
     FMySQL_Profile: IdwlParams;
     FLogSubmitAccess: TCriticalSection;
     procedure InitializeDatabase;
-    procedure CheckTriggers;
+    procedure CheckTriggers(TrigList: TList<TLogTrigger>);
     function Post_Log(const State: PdwlHTTPHandlingState): boolean;
     function Options_Log(const State: PdwlHTTPHandlingState): boolean;
     procedure ProcessTriggers(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes);
@@ -65,6 +80,7 @@ uses
 
 const
   TRIGGER_RELOAD_MSECS = 60000; // 1 minute
+  TRIGGER_CLEANUP_COUNT = 1000;
 
 { TdwlHTTPHandler_Log }
 
@@ -82,7 +98,6 @@ begin
   FLogSecret := AParams.StrValue(param_LogSecret);
   FTriggers := TdwlThreadList<TLogTrigger>.Create;
   InitializeDatabase;
-  CheckTriggers;
 end;
 
 destructor TdwlHTTPHandler_Log.Destroy;
@@ -90,12 +105,12 @@ begin
   // dispose hashes from triggers
   var TrigList := FTriggers.LockList;
   try
-    FTriggers.Free;
-    for var Trig in TrigList do
-      Trig.Hashes.Free;
+    for var Trigger in TrigList do
+      Trigger.Free;
   finally
     FTriggers.UnlockList;
   end;
+  FTriggers.Free;
   FLogSubmitAccess.Free;
   inherited Destroy;
 end;
@@ -149,59 +164,48 @@ begin
   Session.CreateCommand(SQL_CheckTable_LogTriggers).Execute;
 end;
 
-procedure TdwlHTTPHandler_Log.CheckTriggers;
+procedure TdwlHTTPHandler_Log.CheckTriggers(TrigList: TList<TLogTrigger>);
 const
   SQL_Get_Triggers=
     'SELECT Id, Level_From, Level_to, Channel, Topic, Parameters, SuppressDuplicateSeconds FROM dwl_log_triggers';
 begin
   try
-    var T := GetTickCount64;
-    if T>FReloadTriggerTick then
-    begin
-      FReloadTriggerTick := T+TRIGGER_RELOAD_MSECS;
-      var TrigList := FTriggers.LockList;
-      try
-        var CurrentHashes := TDictionary<integer, TDictionary<integer, UInt64>>.Create;
-        try
-          // Keep hashes from current triggers
-          for var Trig in TrigList do
-            if Trig.Hashes<>nil then
-              CurrentHashes.Add(Trig.Id, Trig.Hashes);
-          TrigList.Clear;
-          var Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Get_Triggers);
-          Cmd.Execute;
-          while Cmd.Reader.Read do
-          begin
-            var Trig: TLogTrigger;
-            Trig.Id := Cmd.Reader.GetInteger(0);
-            // never have triggers for levels below lsNotice
-            // said in another way: triggering only acts on the items put in the dwl_log_messages table
-            // (ignore the items from dwl_log_debug)
-            Trig.MinLevel := Max(integer(lsNotice), Cmd.Reader.GetInteger(1, true));
-            Trig.MaxLevel := Cmd.Reader.GetInteger(2, true, integer(lsFatal));
-            Trig.Channel := Cmd.Reader.GetString(3, true, '*');
-            Trig.Topic := Cmd.Reader.GetString(4, true, '*');
-            Trig.Parameters := Cmd.Reader.GetString(5, true);
-            Trig.SuppressDuplicateMSecs := Max(0, Cmd.Reader.GetInteger(6, true))*1000;
-            if Trig.SuppressDuplicateMSecs>0 then
-            begin
-              Trig.CleanupCounter := 0;
-              if CurrentHashes.TryGetValue(Trig.Id, Trig.Hashes) then
-                CurrentHashes.Remove(Trig.Id)
-              else
-                Trig.Hashes := TDictionary<integer, UInt64>.Create;
-            end;
-            TrigList.Add(Trig);
-          end;
-          // dispose no longer used hases
-          for var Hashes in CurrentHashes.Values do
-            Hashes.Free;
-        finally
-          CurrentHashes.Free;
-        end;
-      finally
-        FTriggers.UnlockList;
+    var Tick := GetTickCount64;
+    if Tick<FReloadTriggerTick then
+      Exit;
+    FReloadTriggerTick := Tick+TRIGGER_RELOAD_MSECS;
+    var PreviousTriggers := TDictionary<integer, TLogTrigger>.Create;
+    try
+      // Keep current triggers
+      for var Trig in TrigList do
+        PreviousTriggers.Add(Trig.Id, Trig);
+      TrigList.Clear;
+      var Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Get_Triggers);
+      Cmd.Execute;
+      while Cmd.Reader.Read do
+      begin
+        var TriggerId := Cmd.Reader.GetInteger(0);
+        var Trigger: TLogTrigger;
+        if not PreviousTriggers.TryGetValue(TriggerId, Trigger) then
+          Trigger := TLogTrigger.Create(TriggerId)
+        else
+          PreviousTriggers.Remove(TriggerId);
+        // never have triggers for levels below lsNotice
+        // said in another way: triggering only acts on the items put in the dwl_log_messages table
+        // (ignore the items from dwl_log_debug)
+        Trigger.MinLevel := Max(integer(lsNotice), Cmd.Reader.GetInteger(1, true));
+        Trigger.MaxLevel := Cmd.Reader.GetInteger(2, true, integer(lsFatal));
+        Trigger.Channel := Cmd.Reader.GetString(3, true, '*');
+        Trigger.Topic := Cmd.Reader.GetString(4, true, '*');
+        Trigger.Parameters := Cmd.Reader.GetString(5, true);
+        Trigger.SuppressDuplicateMSecs := Max(0, Cmd.Reader.GetInteger(6, true))*1000;
+        TrigList.Add(Trigger);
       end;
+      // dispose no longer used triggers
+      for var Trig in PreviousTriggers.Values do
+        Trig.Free;
+    finally
+      PreviousTriggers.Free;
     end;
   except
     on E:Exception do
@@ -285,10 +289,10 @@ end;
 
 procedure TdwlHTTPHandler_Log.ProcessTriggers(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes);
 begin
-  CheckTriggers;
   try
     var TrigList := FTriggers.LockListRead;
     try
+      CheckTriggers(TrigList);
       for var Trig in TrigList do
       begin
         if MatchesMask(Channel, Trig.Channel) and MatchesMask(Topic, Trig.Topic) and
@@ -400,41 +404,69 @@ end;
 
 { TLogTrigger }
 
+constructor TLogTrigger.Create(AId: integer);
+begin
+  inherited Create;
+  FId := AId;
+  FCleanupCounter := TRIGGER_CLEANUP_COUNT;
+end;
+
+destructor TLogTrigger.Destroy;
+begin
+  FSuppressHashes.Free;
+  inherited Destroy;
+end;
+
 function TLogTrigger.IsSuppressed(Level: Byte; const Source, Channel, Topic, Msg: string): boolean;
 begin
-  if Hashes=nil then
+  if FSuppressHashes=nil then
     Exit(false);
-  var Tick := GetTickCount64;
+  var CurrentTick := GetTickCount64;
   // remove Old Hashes every thousand triggering moments
-  if CleanUpCounter=0 then
+  if FCleanUpCounter=0 then
   begin
-    var Enum := Hashes.GetEnumerator;
-    while ENum.MoveNext do
-    begin
-      if ENum.Current.Value<Tick then
-        Hashes.Remove(ENum.Current.Key);
+    var Enum := FSuppressHashes.GetEnumerator;
+    try
+      while ENum.MoveNext do
+      begin
+        if ENum.Current.Value<CurrentTick then
+          FSuppressHashes.Remove(ENum.Current.Key);
+      end;
+    finally
+      Enum.Free;
     end;
-    CleanUpCounter := 1000;
+    FCleanUpCounter := TRIGGER_CLEANUP_COUNT;
   end;
-  dec(CleanUpCounter);
+  dec(FCleanUpCounter);
+  // calculate hash
   var Hash := THashBobJenkins.Create;
   Hash.Update(Msg);
   Hash.Update(Level, SizeOf(Level));
   Hash.Update(Source);
   Hash.Update(Channel);
   Hash.Update(Topic);
-  var LogTick: UInt64;
-  Result := not Hashes.TryGetValue(Hash.HashAsInteger, LogTick);
-  if not Result then
+  // is hash present in
+  var SuppressUntilLogTick: UInt64;
+  Result := FSuppressHashes.TryGetValue(Hash.HashAsInteger, SuppressUntilLogTick);
+  if Result then
   begin
-    if LogTick<Tick then
+    if SuppressUntilLogTick<CurrentTick then
     begin
-      Result := true;
-      Hashes.Remove(Hash.HashAsInteger);
+      Result := false;
+      FSuppressHashes.Remove(Hash.HashAsInteger);
     end;
   end;
-  if Result then
-    Hashes.Add(Hash.HashAsInteger, Tick+SuppressDuplicateMSecs);
+  if not Result then
+    FSuppressHashes.Add(Hash.HashAsInteger, CurrentTick+FSuppressDuplicateMSecs);
+end;
+
+procedure TLogTrigger.SetSuppressDuplicateMSecs(const Value: cardinal);
+begin
+  FSuppressDuplicateMSecs := Value;
+  if (FSuppressDuplicateMSecs=0) and (FSuppressHashes<>nil) then
+    FreeAndNil(FSuppressHashes);
+  if (FSuppressDuplicateMSecs>0) and (FSuppressHashes=nil) then
+   FSuppressHashes := TDictionary<integer, UInt64>.Create;
 end;
 
 end.
