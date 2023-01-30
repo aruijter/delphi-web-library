@@ -1,0 +1,120 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{FCB1E971-C264-458F-B2E0-B772E87460A0}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="package\DWL\DWL.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="package\DiscoIDE\DisCoIde.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="app\dwlserver\dwlserver_sv\dwlserver_sv.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="app\dwlserver\dwlserver_debug\dwlserver_debug.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="app\dll\HelloWorld\HelloWorld.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="app\dll\OAuth2\OAuth2.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="app\dll\DisCo\DisCo.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="app\tools\cocon\CoCon.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="DWL">
+        <MSBuild Projects="package\DWL\DWL.dproj"/>
+    </Target>
+    <Target Name="DWL:Clean">
+        <MSBuild Projects="package\DWL\DWL.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DWL:Make">
+        <MSBuild Projects="package\DWL\DWL.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="DisCoIde">
+        <MSBuild Projects="package\DiscoIDE\DisCoIde.dproj"/>
+    </Target>
+    <Target Name="DisCoIde:Clean">
+        <MSBuild Projects="package\DiscoIDE\DisCoIde.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DisCoIde:Make">
+        <MSBuild Projects="package\DiscoIDE\DisCoIde.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="dwlserver_sv">
+        <MSBuild Projects="app\dwlserver\dwlserver_sv\dwlserver_sv.dproj"/>
+    </Target>
+    <Target Name="dwlserver_sv:Clean">
+        <MSBuild Projects="app\dwlserver\dwlserver_sv\dwlserver_sv.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="dwlserver_sv:Make">
+        <MSBuild Projects="app\dwlserver\dwlserver_sv\dwlserver_sv.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="dwlserver_debug">
+        <MSBuild Projects="app\dwlserver\dwlserver_debug\dwlserver_debug.dproj"/>
+    </Target>
+    <Target Name="dwlserver_debug:Clean">
+        <MSBuild Projects="app\dwlserver\dwlserver_debug\dwlserver_debug.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="dwlserver_debug:Make">
+        <MSBuild Projects="app\dwlserver\dwlserver_debug\dwlserver_debug.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="HelloWorld">
+        <MSBuild Projects="app\dll\HelloWorld\HelloWorld.dproj"/>
+    </Target>
+    <Target Name="HelloWorld:Clean">
+        <MSBuild Projects="app\dll\HelloWorld\HelloWorld.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="HelloWorld:Make">
+        <MSBuild Projects="app\dll\HelloWorld\HelloWorld.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="OAuth2">
+        <MSBuild Projects="app\dll\OAuth2\OAuth2.dproj"/>
+    </Target>
+    <Target Name="OAuth2:Clean">
+        <MSBuild Projects="app\dll\OAuth2\OAuth2.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="OAuth2:Make">
+        <MSBuild Projects="app\dll\OAuth2\OAuth2.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="DisCo">
+        <MSBuild Projects="app\dll\DisCo\DisCo.dproj"/>
+    </Target>
+    <Target Name="DisCo:Clean">
+        <MSBuild Projects="app\dll\DisCo\DisCo.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DisCo:Make">
+        <MSBuild Projects="app\dll\DisCo\DisCo.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="CoCon">
+        <MSBuild Projects="app\tools\cocon\CoCon.dproj"/>
+    </Target>
+    <Target Name="CoCon:Clean">
+        <MSBuild Projects="app\tools\cocon\CoCon.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="CoCon:Make">
+        <MSBuild Projects="app\tools\cocon\CoCon.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="DWL;DisCoIde;dwlserver_sv;dwlserver_debug;HelloWorld;OAuth2;DisCo;CoCon"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="DWL:Clean;DisCoIde:Clean;dwlserver_sv:Clean;dwlserver_debug:Clean;HelloWorld:Clean;OAuth2:Clean;DisCo:Clean;CoCon:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="DWL:Make;DisCoIde:Make;dwlserver_sv:Make;dwlserver_debug:Make;HelloWorld:Make;OAuth2:Make;DisCo:Make;CoCon:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>
