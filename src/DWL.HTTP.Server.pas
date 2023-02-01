@@ -39,6 +39,7 @@ type
   /// </summary>
   TdwlHTTPServer = class
   strict private
+    FOnlyLocalConnections: boolean;
     FRequestsInProgress: TDictionary<TIdContext, PdwlHTTPHandlingState>;
     FRequestsInProgressAccess: TCriticalSection;
     FRootHandlerAccess: TMultiReadExclusiveWriteSynchronizer;
@@ -73,6 +74,7 @@ type
     ///   consts for details about the levels
     /// </summary>
     property LogLevel: byte read FLogLevel write FLogLevel;
+    property OnlyLocalConnections: boolean read FOnlyLocalConnections write FOnlyLocalConnections;
     constructor Create;
     destructor Destroy; override;
     function BaseURI: string;
@@ -586,6 +588,14 @@ end;
 
 procedure TdwlHTTPServer.HTTPServerCommand(AContext: TIdContext; ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
 begin
+  if OnlyLocalConnections then
+  begin
+    if (AContext.Binding.PeerIP<>'127.0.0.1') then
+    begin
+      AResponseInfo.ResponseNo := HTTP_STATUS_FORBIDDEN;
+      Exit;
+    end;
+  end;
   var State: PdwlHTTPHandlingState := AllocMem(SizeOf(TdwlHTTPHandlingState));
   FRequestsInProgressAccess.Enter;
   try

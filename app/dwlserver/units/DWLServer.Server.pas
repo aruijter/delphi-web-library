@@ -160,10 +160,16 @@ begin
         TdwlLogger.Log('Enabled Request logging (level '+HTTPServer.LogLevel.ToString+')', lsTrace);
         HTTPServer.RegisterHandler(EndpointURI_Mail,  TdwlHTTPHandler_Mail.Create(FParams));
         if not HTTPServer.IsSecure then
-          TdwlLogger.Log('SERVER IS NOT SECURE, please configure or review ACME parameters', lsWarning);
+        begin
+          HTTPServer.OnlyLocalConnections := FParams.BoolValue(Param_TestMode);
+          if HTTPServer.OnlyLocalConnections then
+            TdwlLogger.Log('SERVER IS NOT SECURE, only allowing local connections', lsWarning)
+          else
+            TdwlLogger.Log('SERVER IS NOT SECURE, please configure or review ACME parameters', lsWarning);
+        end;
         TdwlLogger.Log('Opened HTTP Server', lsNotice);
         FDLLBasePath := FParams.StrValue('DLLBasePath', ExtractFileDir(ParamStr(0)));
-        if {$IFDEF DEBUG}true{$ELSE}HTTPServer.IsSecure{$ENDIF} then
+        if HTTPServer.IsSecure or HTTPServer.OnlyLocalConnections then
           LoadDLLHandlers(HTTPServer)
         else
           TdwlLogger.Log('Skipped loading of handlers because server is not secure', lsWarning);

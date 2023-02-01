@@ -14,6 +14,7 @@ const
   Param_Binding_IP = 'Binding_IP';
   Param_Binding_Port = 'Binding_Port';
   Param_DLLBasePath = 'DLLBasePath';
+  Param_TestMode = 'testmode';
 
   Param_FeedConfigProc = 'feedconfigproc';
 
