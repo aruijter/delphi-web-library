@@ -9,7 +9,7 @@ uses
 
 const
   Param_UserTable = 'usertable'; ParamDef_UserTable = 'dwl_oauth2_users';
-  Param_FieldMD5 = 'field_md5';
+  Param_Field_MD5 = 'field_md5';
   Param_NewUser_Scopes = 'newuser_scopes';
 
 { TODO : implement additional response types id_token, and the token id_token }
@@ -197,7 +197,7 @@ begin
   FAuthenticationSessions := TThreadList<TAuthenticationSession>.Create;
   // prepare database, errors will go to server log directly
   FUserTable := FConfigParams.StrValue(Param_UserTable, ParamDef_UserTable);
-  FField_MD5 := FConfigParams.StrValue(Param_FieldMD5);
+  FField_MD5 := FConfigParams.StrValue(Param_Field_MD5);
   FConfigParams.WriteValue(Param_CreateDatabase, true);
   FConfigParams.WriteValue(Param_TestConnection, true);
   var Session := New_MySQLSession(FConfigParams);
@@ -474,7 +474,8 @@ end;
 
 class function THandler_OAuth2.Post_authorize_reply(const State: PdwlHTTPHandlingState): boolean;
 const
-  SQL_Get_User_ByEmailAddress = 'SELECT id, salt, pwd$(field_md5) FROM $(usertable) WHERE emailaddress=?';
+  SQL_Get_User_ByEmailAddress = 'SELECT id, salt, pwd FROM $(usertable) WHERE emailaddress=?';
+  SQL_Get_User_Md5_ByEmailAddress = 'SELECT $(field_md5) FROM $(usertable) WHERE emailaddress=?';
   SQL_Update_User_Password = 'UPDATE $(usertable) SET salt=?, pwd=? WHERE id=?';
 begin
   Result := true;
@@ -516,7 +517,7 @@ begin
       end;
       // Check the provided credentials
       var Session := New_MySQLSession(FConfigParams);
-      var Cmd := Session.CreateCommand(StringReplace(ResolveSQL(SQL_Get_User_ByEmailAddress), '$(field_md5)', ', '+FField_MD5, [rfIgnoreCase]));
+      var Cmd := Session.CreateCommand(ResolveSQL(SQL_Get_User_ByEmailAddress));
       Cmd.Parameters.SetTextDataBinding(0, EmailAddress);
       Cmd.Execute;
       var Reader := Cmd.Reader;
@@ -529,20 +530,30 @@ begin
       var CheckPwd := Reader.GetString(2, true);
       if (Password='') or (Salt='') or (CheckPwd='') or (TdwlOpenSSL.DeriveKeyFromPassword(Salt, Password)<>Checkpwd) then
       begin
-        if FField_MD5<>'' then // do md5 migration
+        if (Salt='') and (CheckPwd='') and (FField_MD5<>'') then // do md5 migration
         begin
-          var CheckMd5 := Reader.GetString(3, true);
-          if not SameText(CheckMD5, TdwlCrypt.MD5(Password)) then
+          var Cmd_Migrate := Session.CreateCommand(StringReplace(ResolveSQL(SQL_Get_User_Md5_ByEmailAddress), '$(field_md5)', FField_MD5, [rfIgnoreCase]));
+          Cmd_Migrate.Parameters.SetTextDataBinding(0, EmailAddress);
+          Cmd_Migrate.Execute;
+          if Cmd_Migrate.Reader.Read then
+          begin
+            if not SameText(Cmd_Migrate.Reader.GetString(0, true), TdwlCrypt.MD5(Password)) then
+            begin
+              State.StatusCode := HTTP_STATUS_DENIED;
+              Exit;
+            end;
+            Salt := TNetEncoding.Base64URL.EncodeBytesToString(TdwlOpenSSL.RandomBytes(32));
+            var Cmd2 := Session.CreateCommand(ResolveSQL(SQL_Update_User_Password));
+            Cmd2.Parameters.SetTextDataBinding(0, Salt);
+            Cmd2.Parameters.SetTextDataBinding(1, TdwlOpenSSL.DeriveKeyFromPassword(Salt, Password));
+            Cmd2.Parameters.SetIntegerDataBinding(2, Reader.GetInteger(0));
+            Cmd2.Execute;
+          end
+          else
           begin
             State.StatusCode := HTTP_STATUS_DENIED;
             Exit;
           end;
-          Salt := TNetEncoding.Base64URL.EncodeBytesToString(TdwlOpenSSL.RandomBytes(32));
-          var Cmd2 := Session.CreateCommand(ResolveSQL(SQL_Update_User_Password));
-          Cmd2.Parameters.SetTextDataBinding(0, Salt);
-          Cmd2.Parameters.SetTextDataBinding(1, TdwlOpenSSL.DeriveKeyFromPassword(Salt, Password));
-          Cmd2.Parameters.SetIntegerDataBinding(2, Reader.GetInteger(0));
-          Cmd2.Execute;
         end
         else
         begin
