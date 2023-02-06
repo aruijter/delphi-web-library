@@ -16,6 +16,8 @@ type
     FParams: IdwlParams;
     FMailSendThread: TThread;
     class procedure ParamChanged(Sender: IdwlParams; const Key: string; const Value: TValue); static;
+    class procedure CreateMailSendThread; static;
+    class procedure CheckMailSendThread; static;
   private
   class var
     FMailAddedEvent: THandle;
@@ -59,6 +61,9 @@ uses
   IdAssignedNumbers, System.Math, IdExplicitTLSClientServerBase, DWL.Classes,
   DWL.StrUtils;
 
+const
+  MAILQUEUE_SLEEP_MSECS=120000{2 min};
+
 type
   TdwlMailStatus = (msQueued=0, msRetrying=2, msSent=5, msError=9);
 
@@ -73,6 +78,8 @@ type
     procedure Process;
     function ProcessMsg(Msg: TIdMessage): TdwlResult;
     procedure Refreshtoken_Callback(var Token: string; Action: TdwlAPIAuthorizerCallBackAction);
+  private
+    FLastActionTick: UInt64;
   protected
     procedure Execute; override;
   public
@@ -80,6 +87,28 @@ type
   end;
 
 { TdwlMailQueue }
+
+class procedure TdwlMailQueue.CheckMailSendThread;
+begin
+  // Check if Queue is not stalled....
+  // Sometimes Indy 'hangs'
+  // this is a very harsh method as a last resort
+  // and can lead to memory leaks, unreleased resources, etc
+  try
+    if (FMailSendThread<>nil) and (TMailSendThread(FMailSendThread).FLastActionTick<(GetTickCount-MAILQUEUE_SLEEP_MSECS*2)) then
+    begin
+      Log('Terminating Stalled MailSendThread (and creating new one)', lsError);
+      try
+        TerminateThread(FMailSendThread.Handle, 0);
+        FreeAndNil(FMailSendThread);
+      except
+        FMailSendThread := nil;
+      end;
+      CreateMailSendThread;
+    end;
+  except
+  end;
+end;
 
 class procedure TdwlMailQueue.Configure(Params: IdwlParams; EnableMailSending: boolean=false);
 const
@@ -146,14 +175,7 @@ begin
         JSON.Free;
       end;
     end;
-    if FDomainContexts.Count=0 then
-      Log('No domains configured, mail will not be processed', lsWarning)
-    else
-    begin
-      var ThreadParams := New_Params;
-      FParams.AssignTo(ThreadParams, Params_SQLConnection);
-      FMailSendThread := TMailSendThread.Create(ThreadParams);
-    end;
+    CreateMailSendThread;
   end;
 end;
 
@@ -161,6 +183,18 @@ class constructor TdwlMailQueue.Create;
 begin
   inherited;
   FMailAddedEvent := CreateEvent(nil, false, false, nil);
+end;
+
+class procedure TdwlMailQueue.CreateMailSendThread;
+begin
+  if FDomainContexts.Count=0 then
+    Log('No domains configured, mail will not be processed', lsWarning)
+  else
+  begin
+    var ThreadParams := New_Params;
+    FParams.AssignTo(ThreadParams, Params_SQLConnection);
+    FMailSendThread := TMailSendThread.Create(ThreadParams);
+  end;
 end;
 
 class destructor TdwlMailQueue.Destroy;
@@ -224,10 +258,9 @@ end;
 class procedure TdwlMailQueue.QueueForSending(Msg: TIdMessage);
 const
   SQL_InsertInQueue = 'INSERT INTO dwl_mailqueue (bccrecipients, eml) VALUES (?, ?)';
-var
-  Str: TStringStream;
 begin
-  Str := TStringStream.Create;
+  CheckMailSendThread;
+  var Str := TStringStream.Create;
   try
     Msg.SaveToStream(Str);
     Str.Seek(0, soBeginning);
@@ -245,8 +278,9 @@ end;
 
 constructor TMailSendThread.Create(Params: IdwlParams);
 begin
-  inherited Create;
   FParams := Params;
+  FLastActionTick := GetTickCount64;
+  inherited Create;
 end;
 
 procedure TMailSendThread.Execute;
@@ -255,7 +289,8 @@ begin
   while not Terminated do
   begin
     Process;
-    WaitForSingleObject(TdwlMailQueue.FMailAddedEvent, 300000{5 min});
+    FLastActionTick := GetTickCount64;
+    WaitForSingleObject(TdwlMailQueue.FMailAddedEvent, MAILQUEUE_SLEEP_MSECS);
   end;
 end;
 
