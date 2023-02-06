@@ -5,14 +5,15 @@ interface
 uses
   DWL.OpenID, DWL.Types, DWL.JOSE, DWL.HTTP.Server.Types,
   DWL.HTTP.Server.Handler.DLL.Classes, DWL.OpenSSL, System.Generics.Collections,
-  Winapi.WinInet, DWL.Logging;
+  Winapi.WinInet, DWL.Logging, System.Classes;
 
 const
   Param_UserTable = 'usertable'; ParamDef_UserTable = 'dwl_oauth2_users';
   Param_Field_MD5 = 'field_md5';
+  Param_Field_GivenName = 'field_givenname';
+  Param_Field_FamilyName = 'field_familyname';
   Param_NewUser_Scopes = 'newuser_scopes';
-
-{ TODO : implement additional response types id_token, and the token id_token }
+  Param_Assume_Offline_Scope = 'assume_offline_scope'; ParamDef_Assume_Offline_Scope = false;
 
 type
   TOIDC_Provider = class(TdwlOIDC_Client)
@@ -38,7 +39,16 @@ type
     authenticated_userid: integer;
     provider_session: TdwlOIDC_Client_Session;
     provider_idtoken: IdwlJWT;
+    replay_nonce: string;
     procedure UpdateState_CodeRedirection(const State: PdwlHTTPHandlingState);
+  end;
+
+  PUserInfo = ^TUserInfo;
+  TUserInfo = record
+    Subject: string;
+    EMail: string;
+    GivenName: string;
+    FamilyName: string;
   end;
 
   THandler_OAuth2 = class(TdwlDLLHandling)
@@ -52,26 +62,34 @@ type
     class var FIssuerUri: string;
     class var FUserTable: string;
     class var FField_MD5: string;
+    class var FField_GivenName: string;
+    class var FField_FamilyName: string;
     class var FNewUser_Scopes: TArray<string>;
+    class var FAssume_Offline_Scope: boolean;
     class function GetClientInfoFromHeader(const State: PdwlHTTPHandlingState; var client_id: string): string;
     class function ResolveSQL(const SQL: string): string;
-    class function ConvertScope(State: PdwlHTTPHandlingState; UserID: integer; var Scope: string): boolean;
+    class function ConvertScope(State: PdwlHTTPHandlingState; UserID: integer; Scopes: TStringList): string;
     class function CreateRefreshtoken(UserID, Refreshtoken_order: integer; const GrantToken: string; const Scope: string): string;
     class function CreateAccesstoken(UserID: integer; const ConvertedScope: string): string;
+    class function CreateIDToken(UserID: integer; Client_Id, Replay_Nonce: string; OutputEMail, OutputProfile: boolean): string;
     class function GetAuthenticationSessionByProviderState(const session_state: string): TAuthenticationSession;
     class function PopAuthenticationSessionByAuthorizationCode(const authorization_code: string): TAuthenticationSession;
     class procedure BuildLoginForm;
     class procedure HandlingError(const State: PdwlHTTPHandlingState; const ErrorMessage: string=''; const StatusCode: integer=HTTP_STATUS_BAD_REQUEST);
-    class function Post_token_handle_authorization_code(const State: PdwlHTTPHandlingState; var UserID: integer; var RequestedScope, GrantToken: string): boolean;
-    class function Post_token_handle_refresh_token(const State: PdwlHTTPHandlingState; var UserID, Refreshtoken_Order: integer; var RequestedScope, GrantToken: string): boolean;
-    class function Post_token_handle_client_credentials(const State: PdwlHTTPHandlingState; var UserID: integer; var RequestedScope: string): boolean;
+    class function Post_token_handle_authorization_code(const State: PdwlHTTPHandlingState; var UserID: integer; RequestedScopes: TStringList; var client_id, AuthorizeNonce, GrantToken: string): boolean;
+    class function Post_token_handle_refresh_token(const State: PdwlHTTPHandlingState; var UserID, Refreshtoken_Order: integer; RequestedScopes: TStringList; var GrantToken: string): boolean;
+    class function Post_token_handle_client_credentials(const State: PdwlHTTPHandlingState; var UserID: integer; RequestedScopes: TStringList): boolean;
     // processrequest procs
     class function Get_certs(const State: PdwlHTTPHandlingState): boolean;
     class function Get_wellknown_openidconfiguration(const State: PdwlHTTPHandlingState): boolean;
     class function Get_OIDC_Return_Path(const State: PdwlHTTPHandlingState): boolean;
     class function Post_authorize_reply(const State: PdwlHTTPHandlingState): boolean;
     class function GetPost_authorize(const State: PdwlHTTPHandlingState): boolean;
+    class function GetPost_userinfo(const State: PdwlHTTPHandlingState): boolean;
     class function Post_token(const State: PdwlHTTPHandlingState): boolean;
+    class procedure EnrichUserInfo(UserInfo: PUserInfo; FillEmail, FillProfile: boolean);
+  private
+    class function Subject_From_Authorization(const State: PdwlHTTPHandlingState): string; static;
   public
     class function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
     class procedure Configure(const Params: string); override;
@@ -82,23 +100,19 @@ implementation
 
 uses
   System.SysUtils, System.NetEncoding, DWL.Params.Consts, DWL.MySQL,
-  System.JSON, DWL.HTTP.Consts, System.Classes,
+  System.JSON, DWL.HTTP.Consts,
   DWL.Crypt, System.StrUtils, DWL.HTTP.Server.Utils;
 
 const
   OIDC_Return_Path = '/oidc_return';
 
-  keyREFRESH_TOKEN='refresh_token';
-  keyACCESS_TOKEN='access_token';
-  keyEXPIRES_IN='expires_in';
-  keySCOPE='scope';
-  keyTOKEN_TYPE='token_type';
-
-  tokentypeBEARER='Bearer';
+  jwtclaimGIVEN_NAME = 'given_name';
+  jwtclaimFAMILY_NAME = 'family_name';
 
   AUTHSESSION_DURATION = 5*60; // 5 minutes
   GRANT_DURATION = 90*24*60*60; //90 days
   ACCESS_DURATION = 60*60; // 1 hour
+  IDTOKEN_DURATION = 60*60; // 1 hour
 
 { THandler_OAuth2 }
 
@@ -198,6 +212,9 @@ begin
   // prepare database, errors will go to server log directly
   FUserTable := FConfigParams.StrValue(Param_UserTable, ParamDef_UserTable);
   FField_MD5 := FConfigParams.StrValue(Param_Field_MD5);
+  FField_GivenName := FConfigParams.StrValue(Param_Field_GivenName);
+  FField_FamilyName := FConfigParams.StrValue(Param_Field_FamilyName);
+  FAssume_Offline_Scope := FConfigParams.BoolValue(Param_Assume_Offline_Scope, ParamDef_Assume_Offline_Scope);
   FConfigParams.WriteValue(Param_CreateDatabase, true);
   FConfigParams.WriteValue(Param_TestConnection, true);
   var Session := New_MySQLSession(FConfigParams);
@@ -266,42 +283,38 @@ begin
   RegisterHandling(dwlhttpGET, '/certs', Get_certs, []);
   RegisterHandling(dwlhttpPOST, '/authorize_reply', Post_authorize_reply, []);
   RegisterHandling(dwlhttpPOST, '/token', Post_token, []);
+  RegisterHandling(dwlhttpGET, '/userinfo', GetPost_userinfo, []);
+  RegisterHandling(dwlhttpPOST, '/userinfo', GetPost_userinfo, []);
 end;
 
-class function THandler_OAuth2.ConvertScope(State: PdwlHTTPHandlingState; UserID: integer; var Scope: string): boolean;
+class function THandler_OAuth2.ConvertScope(State: PdwlHTTPHandlingState; UserID: integer; Scopes: TStringList): string;
 const
   SQL_Get_Scopes_for_User_And_UmbrellaScopes='SELECT us.scope, s.umbrella_scope FROM dwl_oauth2_userscopes us LEFT JOIN dwl_oauth2_scopes s on s.scope=us.scope WHERE (us.user_id=?) AND (s.umbrella_scope IN (?';
 begin
-  Result := false;
-  var Scopes := Scope.Split([' ']);
+  Result := '';
   var Q := SQL_Get_Scopes_for_User_And_UmbrellaScopes;
-  for var i := 1 to High(Scopes) do
+  for var i := 0 to Scopes.Count-2 do
     Q := Q + ', ?';
   Q := Q+'))';
   var Cmd := MySQLCommand(State, Q);
   Cmd.Parameters.SetIntegerDataBinding(0, UserId);
-  for var i := 0 to High(Scopes) do
+  for var i := 0 to Scopes.Count-1 do
     Cmd.Parameters.SetTextDataBinding(i+1, Scopes[i]);
   Cmd.Execute;
-  Scope := '';
   while Cmd.Reader.Read do
   begin
-    Result := true; // we at least found one scope
     var AddScope := Cmd.Reader.GetString(0);
-    if Pos(' '+AddScope, Scope)<1 then
-      Scope := Scope+' '+AddScope;
+    if Pos(' '+AddScope, Result)<1 then
+      Result := Result+' '+AddScope;
     // umbrella scope is also added
     AddScope := Cmd.Reader.GetString(1);
-    if Pos(' '+AddScope, Scope)<1 then
-      Scope := Scope+' '+AddScope;
+    if Pos(' '+AddScope, Result)<1 then
+      Result := Result+' '+AddScope;
   end;
   // This is a workaround for users without a scope at all: Just allow them anyway until I'm back from holidays and return first scope requested
-  if Scope='' then
-  begin
-    Scope := ' '+Scopes[0];
-    Result := true;
-  end;
-  Scope := Copy(Scope, 2, MaxInt);
+  if Result='' then
+    Result := ' '+Scopes[0];
+  Result := Copy(Result, 2, MaxInt);
 end;
 
 class function THandler_OAuth2.CreateAccesstoken(UserID: integer; const ConvertedScope: string): string;
@@ -315,6 +328,32 @@ begin
   Result := JWT.Serialize(FSignKey_Priv);
 end;
 
+class function THandler_OAuth2.CreateIDToken(UserID: integer; Client_Id, Replay_Nonce: string; OutputEMail, OutputProfile: boolean): string;
+begin
+  var UserInfo: TUserInfo;
+  UserInfo.Subject := UserID.ToString;
+  FillChar(UserInfo, SizeOf(UserInfo), 0);
+  if (FField_GivenName='') or (FField_FamilyName='') then
+    OutputProfile := false;
+  if OutputEmail or OutputProfile then
+  begin
+    EnrichUserInfo(@UserInfo, OutputEMail, OutputProfile);
+  end;
+  var JWT := New_JWT;
+  JWT.Header.Values[joseheaderKEYID] := FSign_KeyID;
+  JWT.Payload.Values[jwtclaimISSUER] := FIssuerUri;
+  JWT.Payload.Values[jwtclaimSUBJECT] := UserInfo.Subject;
+  JWT.Payload.Values[jwtclaimAUDIENCE] := Client_Id;
+  JWT.Payload.IntValues[jwtclaimISSUED_AT] :=  TUnixEpoch.Now; //seconds 'room';
+  JWT.Payload.IntValues[jwtclaimEXPIRATION_TIME] :=  TUnixEpoch.Now+IDTOKEN_DURATION+5; //seconds 'room';
+  JWT.Payload.Values[jwt_key_NONCE] :=  Replay_Nonce;
+  JWT.Payload.Values[jwtclaimEMAIL] := UserInfo.EMail;
+  JWT.Payload.Values[jwtclaimNAME] := trim(UserInfo.GivenName+' '+UserInfo.FamilyName);
+  JWT.Payload.Values[jwtclaimGIVEN_NAME] := UserInfo.GivenName;
+  JWT.Payload.Values[jwtclaimFAMILY_NAME] := UserInfo.FamilyName;
+  Result := JWT.Serialize(FSignKey_Priv);
+end;
+
 class function THandler_OAuth2.CreateRefreshtoken(UserID, Refreshtoken_order: integer; const GrantToken: string; const Scope: string): string;
 begin
   var JWT := New_JWT;
@@ -325,6 +364,36 @@ begin
   JWT.Payload.IntValues[jwt_key_ORDER] := Refreshtoken_order;
   JWT.Payload.Values[jwt_key_SCOPE] := Scope;
   Result := JWT.Serialize(FSignKey_Priv);
+end;
+
+class procedure THandler_OAuth2.EnrichUserInfo(UserInfo: PUserInfo; FillEmail, FillProfile: boolean);
+const
+  SQL_Get_EmailAddress = 'SELECT emailaddress FROM $(usertable) WHERE id=?';
+  SQL_Get_FirstLastName = 'SELECT $(field_givenname), $(field_familyname) FROM $(usertable) WHERE id=?';
+begin
+  var Session := New_MySQLSession(FConfigParams);
+  if FillEmail then
+  begin
+    var Cmd := Session.CreateCommand(ResolveSQL(SQL_Get_EmailAddress));
+    Cmd.Parameters.SetTextDataBinding(0, UserInfo.Subject);
+    Cmd.Execute;
+    if Cmd.Reader.Read then
+      UserInfo.EMail := Cmd.Reader.GetString(0, true);
+  end;
+  if FillProfile and (FField_GivenName<>'') and (FField_FamilyName<>'') then
+  begin
+    var SQL := ResolveSQL(SQL_Get_FirstLastName);
+    SQL := StringReplace(SQL, '$(field_givenname)', FField_GivenName, [rfIgnoreCase]);
+    SQL := StringReplace(SQL, '$(field_familyname)', FField_FamilyName, [rfIgnoreCase]);
+    var Cmd := Session.CreateCommand(SQL);
+    Cmd.Parameters.SetTextDataBinding(0,UserInfo.Subject);
+    Cmd.Execute;
+    if Cmd.Reader.Read then
+    begin
+      UserInfo.GivenName := Cmd.Reader.GetString(0, true);
+      UserInfo.FamilyName := Cmd.Reader.GetString(1, true);
+    end;
+  end;
 end;
 
 class procedure THandler_OAuth2.BuildLoginForm;
@@ -464,12 +533,33 @@ begin
   AuthSession.client_code_challenge := code_challenge;
   AuthSession.client_code_challenge_method := code_challenge_method;
   AuthSession.ExpirationTime :=  TUnixEpoch.Now+AUTHSESSION_DURATION;
+  if not TryGetRequestParamStr(State, 'nonce', AuthSession.replay_nonce) then
+    AuthSession.replay_nonce := '';
   FAuthenticationSessions.Add(AuthSession);
 
   var Page := StringReplace(FLoginPage, '$(displayname)', Cmd.Reader.GetString(3), [rfIgnoreCase]);
   Page := StringReplace(Page, '$(session_state)', AuthSession.session_state, [rfReplaceAll, rfIgnoreCase]);
 
   State.SetContentText(Page);
+end;
+
+class function THandler_OAuth2.GetPost_userinfo(const State: PdwlHTTPHandlingState): boolean;
+begin
+  Result := true;
+  State.StatusCode := HTTP_STATUS_DENIED;
+  var UserInfo: TUserInfo;
+  UserInfo.Subject := Subject_From_Authorization(State);
+  if UserInfo.Subject='' then
+    Exit;
+  EnrichUserInfo(@Userinfo, true, true);
+  var JSON := Response_JSON(State);
+  JSON.AddPair(jwtclaimSUBJECT, UserInfo.Subject);
+  JSON.AddPair(jwtclaimEMAIL, UserInfo.EMail);
+  JSON.AddPair(jwtclaimNAME, trim(UserInfo.GivenName+' '+UserInfo.FamilyName));
+  JSON.AddPair(jwtclaimGIVEN_NAME, UserInfo.GivenName);
+  JSON.AddPair(jwtclaimFAMILY_NAME, UserInfo.FamilyName);
+  // All ok!
+  State.StatusCode := HTTP_STATUS_OK;
 end;
 
 class function THandler_OAuth2.Post_authorize_reply(const State: PdwlHTTPHandlingState): boolean;
@@ -654,6 +744,7 @@ begin
   JSON.AddPair('issuer', FIssuerUri);
   JSON.AddPair('authorization_endpoint', FIssuerUri+'/authorize');
   JSON.AddPair('token_endpoint', FIssuerUri+'/token');
+  JSON.AddPair('userinfo_endpoint', FIssuerUri+'/userinfo');
   JSON.AddPair('jwks_uri', FIssuerUri+'/certs');
   var Arr := TJSONArray.Create;
   JSON.AddPair('response_types_supported', Arr);
@@ -708,39 +799,69 @@ begin
     GrantType := grant_type_client_credentials;
   if GrantType=grant_type_none then
   begin
-    HandlingError(State, 'currently only grant_type authorization_code is supported');
+    HandlingError(State, 'unsupported grant_type');
     Exit;
   end;
   var UserID := -1;
-  var RequestedScope := '';
+  var ClientID := '';
+  var AuthorizeNonce := '';
   var GrantToken := '';
   var Refreshtoken_Order := 1;
   var Success := false;
-  case GrantType of
-  grant_type_authorization_code: Success := Post_token_handle_authorization_code(State, UserID, RequestedScope, GrantToken);
-  grant_type_refresh_token: Success := Post_token_handle_refresh_token(State, UserID, Refreshtoken_Order, RequestedScope, GrantToken);
-  grant_type_client_credentials: Success := Post_token_handle_client_credentials(State, UserID, RequestedScope);
+  var RequestedScopes := TStringList.Create;
+  try
+    RequestedScopes.Delimiter := ' ';
+    case GrantType of
+    grant_type_authorization_code: Success := Post_token_handle_authorization_code(State, UserID, RequestedScopes, ClientID, AuthorizeNonce, GrantToken);
+    grant_type_refresh_token: Success := Post_token_handle_refresh_token(State, UserID, Refreshtoken_Order, RequestedScopes, GrantToken);
+    grant_type_client_credentials: Success := Post_token_handle_client_credentials(State, UserID, RequestedScopes);
+    end;
+    if not Success then
+      Exit;
+    // Scope openid
+    var ScopeIndex := RequestedScopes.IndexOf(Scope_openid);
+    var OutputIDToken := (GrantType=grant_type_authorization_code) and (ScopeIndex>=0);
+    if ScopeIndex>=0 then
+      RequestedScopes.Delete(ScopeIndex);
+    // scope offline_access
+    ScopeIndex := RequestedScopes.IndexOf(Scope_offline_access);
+    var OutputRefreshtoken := (GrantToken<>'') and ((GrantType=grant_type_refresh_token) or FAssume_Offline_Scope or (ScopeIndex>=0));
+    if ScopeIndex>=0 then
+      RequestedScopes.Delete(ScopeIndex);
+    // Scope email
+    ScopeIndex := RequestedScopes.IndexOf(Scope_email);
+    var OutputEmail := OutputIDToken and (ScopeIndex>=0);
+    if ScopeIndex>=0 then
+      RequestedScopes.Delete(ScopeIndex);
+    // scope profile
+    ScopeIndex := RequestedScopes.IndexOf(Scope_profile);
+    var OutputProfile := OutputIDToken and (ScopeIndex>=0);
+    if ScopeIndex>=0 then
+      RequestedScopes.Delete(ScopeIndex);
+    // Convert to Output Scope
+    var Accesstoken_ConvertedScope := ConvertScope(State, UserId, RequestedScopes);
+    if (Accesstoken_ConvertedScope='') then
+    begin
+      State.StatusCode := HTTP_STATUS_DENIED;
+      Exit;
+    end;
+    // all info is gathered, all is checked
+    // issue the result
+    var JSON := Response_JSON(State);
+    if OutputRefreshtoken then
+      JSON.AddPair(keyREFRESH_TOKEN, CreateRefreshtoken(UserID, Refreshtoken_Order, GrantToken, RequestedScopes.DelimitedText));
+    JSON.AddPair(keyACCESS_TOKEN, CreateAccesstoken(UserID, Accesstoken_ConvertedScope));
+    JSON.AddPair(keyEXPIRES_IN, ACCESS_DURATION.ToString);
+    JSON.AddPair(keySCOPE, Accesstoken_ConvertedScope);
+    JSON.AddPair(keyTOKEN_TYPE, tokentypeBearer);
+    if OutputIDToken then
+      JSON.AddPair(keyID_TOKEN, CreateIDToken(UserID, ClientID, AuthorizeNonce, OutputEmail, OutputProfile));
+  finally
+    RequestedScopes.Free;
   end;
-  if not Success then
-    Exit;
-  // all info is gathered, all is checked
-  // issue the result
-  var Accesstoken_ConvertedScope := RequestedScope;
-  if not ConvertScope(State, UserId, Accesstoken_ConvertedScope) then
-  begin
-    State.StatusCode := HTTP_STATUS_DENIED;
-    Exit;
-  end;
-  var JSON := Response_JSON(State);
-  if GrantToken<>'' then
-    JSON.AddPair(keyREFRESH_TOKEN, CreateRefreshtoken(UserID, Refreshtoken_Order, GrantToken, RequestedScope));
-  JSON.AddPair(keyACCESS_TOKEN, CreateAccesstoken(UserID, Accesstoken_ConvertedScope));
-  JSON.AddPair(keyEXPIRES_IN, ACCESS_DURATION.ToString);
-  JSON.AddPair(keySCOPE, Accesstoken_ConvertedScope);
-  JSON.AddPair(keyTOKEN_TYPE, tokentypeBearer);
 end;
 
-class function THandler_OAuth2.Post_token_handle_authorization_code(const State: PdwlHTTPHandlingState; var UserID: integer; var RequestedScope, GrantToken: string): boolean;
+class function THandler_OAuth2.Post_token_handle_authorization_code(const State: PdwlHTTPHandlingState; var UserID: integer; RequestedScopes: TStringList; var client_id, AuthorizeNonce, GrantToken: string): boolean;
 const
   SQL_Create_Grant = 'INSERT INTO dwl_oauth2_grants (token, user_id, client_id, expirationtime, refreshtoken_order, scope, id_token) VALUES (?, ?, ?, ?, ?, ?, ?)';
   SQL_Get_User_ByProviderAndSubject = 'SELECT id FROM $(usertable) WHERE oidc_provider=? and oidc_subject=?';
@@ -748,7 +869,6 @@ const
   SQL_Create_UserScope = 'INSERT INTO dwl_oauth2_userscopes (user_id, scope) VALUES (?, ?)';
 begin
   Result := false;
-  var client_id := '';
   var client_secret := '';
   if TryGetRequestParamStr(State, 'client_id', client_id) then
     TryGetRequestParamStr(State, 'client_secret', client_secret)
@@ -771,6 +891,7 @@ begin
     HandlingError(State, 'authentication state mismatch');
     Exit;
   end;
+  AuthorizeNonce := AuthSession.replay_nonce;
   try
     if client_id<>AuthSession.client_id then
     begin
@@ -852,7 +973,7 @@ begin
     end
     else
       UserID := AuthSession.authenticated_userid;
-    RequestedScope := AuthSession.client_scope;
+    RequestedScopes.DelimitedText := AuthSession.client_scope;
     // Now we have the userid, create a grant
     GrantToken := TNetEncoding.Base64URL.EncodeBytesToString(TdwlOpenSSL.RandomBytes(32));
     var Cmd := MySQLCommand(State, SQL_Create_Grant);
@@ -861,7 +982,7 @@ begin
     Cmd.Parameters.SetIntegerDataBinding(2, AuthSession.internal_clientid);
     Cmd.Parameters.SetBigIntegerDataBinding(3, TUnixEpoch.Now+GRANT_DURATION);
     Cmd.Parameters.SetIntegerDataBinding(4, 1); // refreshtoken order=1
-    Cmd.Parameters.SetTextDataBinding(5, RequestedScope);
+    Cmd.Parameters.SetTextDataBinding(5, AuthSession.client_scope);
     if AuthSession.provider_idtoken<>nil then
       Cmd.Parameters.SetTextDataBinding(6, AuthSession.provider_idtoken.Payload.ToJSON)
     else
@@ -873,7 +994,7 @@ begin
   Result := true;
 end;
 
-class function THandler_OAuth2.Post_token_handle_client_credentials(const State: PdwlHTTPHandlingState; var UserID: integer; var RequestedScope: string): boolean;
+class function THandler_OAuth2.Post_token_handle_client_credentials(const State: PdwlHTTPHandlingState; var UserID: integer; RequestedScopes: TStringList): boolean;
 const
   SQL_Get_User_By_Client_Credentials = 'SELECT user_id FROM dwl_oauth2_clients WHERE client_id=? and client_secret=?';
 begin
@@ -895,11 +1016,13 @@ begin
     HandlingError(State, 'missing client_id');
     Exit;
   end;
+  var RequestedScope: string;
   if (not TryGetRequestParamStr(State, 'scope', RequestedScope)) or (trim(RequestedScope)='') then
   begin
     HandlingError(State, 'missing scope parameter');
     Exit;
   end;
+  RequestedScopes.DelimitedText := RequestedScope;
   var Cmd := MySQLCommand(State, SQL_Get_User_By_Client_Credentials);
   Cmd.Parameters.SetTextDataBinding(0, client_id);
   Cmd.Parameters.SetTextDataBinding(1, client_secret);
@@ -913,7 +1036,7 @@ begin
     HandlingError(State, 'wrong credentials', HTTP_STATUS_DENIED);
 end;
 
-class function THandler_OAuth2.Post_token_handle_refresh_token(const State: PdwlHTTPHandlingState; var UserID, Refreshtoken_Order: integer; var RequestedScope, GrantToken: string): boolean;
+class function THandler_OAuth2.Post_token_handle_refresh_token(const State: PdwlHTTPHandlingState; var UserID, Refreshtoken_Order: integer; RequestedScopes: TStringList; var GrantToken: string): boolean;
 const
   SQL_Set_Grant_RefreshTokenOrderAndExpiration = 'UPDATE dwl_oauth2_grants SET refreshtoken_order=?, expirationtime=? WHERE id=?';
   SQL_Get_Grant = 'SELECT g.id, g.user_id, c.client_id, g.expirationtime, g.refreshtoken_order, g.scope FROM dwl_oauth2_grants g LEFT JOIN dwl_oauth2_clients c on c.id=g.client_id WHERE token=?';
@@ -969,7 +1092,7 @@ begin
       HandlingError(State, 'refresh_token expired', HTTP_STATUS_DENIED);
       Exit;
     end;
-    RequestedScope := JWT.Payload.Values[jwt_key_SCOPE];
+    RequestedScopes.DelimitedText := JWT.Payload.Values[jwt_key_SCOPE];
     RefreshToken_Order := Cmd.Reader.GetInteger(4);
     var GrantID := Cmd.Reader.GetInteger(0);
     if JWT.Payload.Values[jwt_key_SCOPE]<>Cmd.Reader.GetString(5) then
@@ -1007,6 +1130,32 @@ end;
 class function THandler_OAuth2.ResolveSQL(const SQL: string): string;
 begin
   Result := StringReplace(SQL, '$(usertable)', FUserTable, [rfIgnoreCase]);
+end;
+
+class function THandler_OAuth2.Subject_From_Authorization(const State: PdwlHTTPHandlingState): string;
+begin
+  Result := '';
+  try
+    var AuthStr: string;
+    if not TryGetHeaderValue(State, 'Authorization', AuthStr) then
+      Exit;
+    AuthStr := trim(AuthStr);
+    if not SameText(Copy(AuthStr, 1, 7), 'Bearer ') then
+      Exit;
+    var AccessToken := trim(Copy(AuthStr, 8, MaxInt));
+    var JWT := New_JWT_FromSerialization(AccessToken);
+    if JWT.Header.Values[joseheaderKEYID] <> FSign_KeyID then
+      Exit;
+    if not JWT.CheckSignature(FSignKey_Priv) then
+      Exit;
+    if not  (JWT.Payload.IntValues[jwtclaimEXPIRATION_TIME]>TUnixEpoch.Now) then
+      Exit;
+    if not SameText(JWT.Payload.Values[jwtclaimISSUER], FIssuerUri) then
+      Exit;
+    // All ok set result
+    Result := JWT.Payload.Values[jwtclaimSUBJECT];
+  except
+  end;
 end;
 
 class procedure THandler_OAuth2.WrapUp(const State: PdwlHTTPHandlingState);

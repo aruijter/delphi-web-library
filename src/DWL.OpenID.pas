@@ -11,6 +11,20 @@ uses
 const
   OIDC_Well_Known_Config_Path = '/.well-known/openid-configuration';
 
+  keyREFRESH_TOKEN='refresh_token';
+  keyACCESS_TOKEN='access_token';
+  keyID_TOKEN='id_token';
+  keyEXPIRES_IN='expires_in';
+  keySCOPE='scope';
+  keyTOKEN_TYPE='token_type';
+
+  tokentypeBEARER='Bearer';
+
+  Scope_openid = 'openid';
+  Scope_offline_access = 'offline_access';
+  Scope_email = 'email';
+  Scope_profile = 'profile';
+
 type
   PdwlOIDC_Client_Session = ^TdwlOIDC_Client_Session;
   /// <summary>
@@ -144,7 +158,7 @@ begin
   var Request := New_HTTPRequest(FToken_Endpoint);
   Request.Method := HTTP_COMMAND_POST;
   Request.Header['Content-Type'] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
-  Request.WritePostData('refresh_token='+TNetEncoding.URL.Encode(Refresh_Token)+
+  Request.WritePostData(keyREFRESH_TOKEN+'='+TNetEncoding.URL.Encode(Refresh_Token)+
     '&client_id='+TNetEncoding.URL.Encode(FClient_id)+
     '&grant_type=refresh_token');
   var Response := Request.Execute;
@@ -157,9 +171,9 @@ begin
   end;
   var JSON := TJSONObject.ParseJSONValue(Response.AsString);
   try
-    Access_Token := JSON.GetValue<string>('access_token');
-    Expires_In := JSON.GetValue<integer>('expires_in');
-    var RT := JSON.GetValue<string>('refresh_token', '');
+    Access_Token := JSON.GetValue<string>(keyACCESS_TOKEN);
+    Expires_In := JSON.GetValue<integer>(keyEXPIRES_IN);
+    var RT := JSON.GetValue<string>(keyREFRESH_TOKEN, '');
     if RT<>'' then
       Refresh_Token := RT;
   finally
