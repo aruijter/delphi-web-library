@@ -133,12 +133,14 @@ begin
       ACMEClient.CallBackPortNumber := FParams.IntValue(Param_ACMEPort, ParamDef_ACMEPort);
       HTTPServer := TdwlHTTPServer.Create;
       try
-        var IP := FParams.StrValue(Param_Binding_IP);
-        if IP<>'' then
+        var IP: string;
+        if FParams.TryGetStrValue(Param_Binding_IP, IP) then
         begin
           TdwlLogger.Log('Bound to specific IP '+IP, lsTrace);
           ACMECLient.ChallengeIP := IP;
-        end;
+        end
+        else
+          IP := '';
         CheckACME;
         var Port: integer;
         if not FParams.TryGetIntValue(Param_Binding_Port, Port) then

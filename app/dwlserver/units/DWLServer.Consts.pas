@@ -10,10 +10,9 @@ const
   Param_ACMECountry = 'ACMECountry';
   Param_ACMEState = 'ACMEState';
   Param_ACMECity = 'ACMECity';
-  Param_RestPort = 'RestPort'; ParamDef_RestPort = 443;
-  Param_Binding_IP = 'Binding_IP';
-  Param_Binding_Port = 'Binding_Port';
-  Param_DLLBasePath = 'DLLBasePath';
+  Param_Binding_IP = 'binding_ip';
+  Param_Binding_Port = 'binding_port';
+  Param_DLLBasePath = 'dllbasepath';
   Param_TestMode = 'testmode';
 
   Param_FeedConfigProc = 'feedconfigproc';

@@ -2,6 +2,9 @@ unit DWL.Params.Consts;
 
 interface
 
+uses
+  DWL.HTTP.Consts;
+
 const
   Param_Host = 'host'; ParamDef_Host = '127.0.0.1';
   Param_Username = 'username';
@@ -9,7 +12,7 @@ const
   Param_Port = 'port'; ParamDef_Port = 3306;
   Param_UseSSL = 'usessl'; ParamDef_UseSSL = false;
   Param_Db = 'db';
-  Param_LogLevel = 'loglevel';
+  Param_LogLevel = 'loglevel'; ParamDef_LogLevel = httplogLevelWarning;
   Param_Msg = 'msg';
   Param_CreateDatabase = 'createdatabase'; ParamDef_CreateDatabase = false;
   Param_TestConnection = 'testconnection'; ParamDef_TestConnection = false;

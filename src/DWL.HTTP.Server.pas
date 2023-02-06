@@ -13,14 +13,6 @@ uses
   DWL.HTTP.Server.Types, System.Generics.Collections, IdHTTPServer,
   IdSocketHandle;
 
-const
-  httpLogLevelEmergency = 0;
-  httplogLevelFailedRequests=3;
-  httplogLevelWarning=4;
-  httplogLevelAllRequests=6;
-  httplogLevelDebug=6;
-  httplogLevelEverything=9;
-
 type
   TdwlHTTPServer=class;
   TdwlHTTPHandler=class;
