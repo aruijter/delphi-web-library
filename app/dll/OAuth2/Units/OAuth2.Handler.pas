@@ -331,8 +331,8 @@ end;
 class function THandler_OAuth2.CreateIDToken(UserID: integer; Client_Id, Replay_Nonce: string; OutputEMail, OutputProfile: boolean): string;
 begin
   var UserInfo: TUserInfo;
-  UserInfo.Subject := UserID.ToString;
   FillChar(UserInfo, SizeOf(UserInfo), 0);
+  UserInfo.Subject := UserID.ToString;
   if (FField_GivenName='') or (FField_FamilyName='') then
     OutputProfile := false;
   if OutputEmail or OutputProfile then
