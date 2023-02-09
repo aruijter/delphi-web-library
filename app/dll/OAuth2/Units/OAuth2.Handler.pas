@@ -41,6 +41,7 @@ type
     provider_idtoken: IdwlJWT;
     replay_nonce: string;
     procedure UpdateState_CodeRedirection(const State: PdwlHTTPHandlingState);
+    procedure UpdateState_Error(const State: PdwlHTTPHandlingState; const ErrorString: string);
   end;
 
   PUserInfo = ^TUserInfo;
@@ -113,6 +114,9 @@ const
   GRANT_DURATION = 90*24*60*60; //90 days
   ACCESS_DURATION = 60*60; // 1 hour
   IDTOKEN_DURATION = 60*60; // 1 hour
+
+  RESPONSE_ERROR_INVALID_REQUEST = 'invalid_request';
+  RESPONSE_ERROR_ACCESS_DENIED = 'access_denied';
 
 { THandler_OAuth2 }
 
@@ -588,7 +592,7 @@ begin
     var P: integer;
     if not TryGetRequestParamInt(State, 'p', P) then
     begin
-      HandlingError(State);
+      AuthSession.UpdateState_Error(State, RESPONSE_ERROR_INVALID_REQUEST);
       Exit;
     end;
     if P<0 then
@@ -596,13 +600,14 @@ begin
       var EmailAddress: string;
       if not TryGetRequestParamStr(State, 'emailaddress', EmailAddress) then
       begin
-        HandlingError(State);
+        AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
         Exit;
       end;
       var Password: string;
       if not TryGetRequestParamStr(State, 'password', Password) then
       begin
         HandlingError(State);
+        AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
         Exit;
       end;
       // Check the provided credentials
@@ -613,7 +618,7 @@ begin
       var Reader := Cmd.Reader;
       if not Reader.Read then
       begin
-        State.StatusCode := HTTP_STATUS_DENIED;
+        AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
         Exit;
       end;
       var Salt := Reader.GetString(1, true);
@@ -641,13 +646,13 @@ begin
           end
           else
           begin
-            State.StatusCode := HTTP_STATUS_DENIED;
+            AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
             Exit;
           end;
         end
         else
         begin
-          State.StatusCode := HTTP_STATUS_DENIED;
+          AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
           Exit;
         end;
       end;
@@ -1181,6 +1186,12 @@ procedure TAuthenticationSession.UpdateState_CodeRedirection(const State: PdwlHT
 begin
   authorization_code := TNetEncoding.Base64URL.EncodeBytesToString(TdwlOpenSSL.RandomBytes(32));
   State.SetHeaderValue('Location', client_redirect_uri+'?code='+authorization_code+IfThen(client_state<>'', '&state='+client_state));
+  State.StatusCode := HTTP_STATUS_REDIRECT;
+end;
+
+procedure TAuthenticationSession.UpdateState_Error(const State: PdwlHTTPHandlingState; const ErrorString: string);
+begin
+  State.SetHeaderValue('Location', client_redirect_uri+'?error='+ErrorString);
   State.StatusCode := HTTP_STATUS_REDIRECT;
 end;
 
