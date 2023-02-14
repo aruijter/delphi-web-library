@@ -50,8 +50,7 @@ end;
 procedure TdwlLogDispatcher_API.DispatchLog(LogItem: PdwlLogItem);
 begin
   var Rq := New_HTTPRequest(FEndpoint+
-    '?timestamp='+LogItem.TimeStamp.ToString+
-    '&secret='+FLogSecret+
+    '?secret='+FLogSecret+
     '&msg='+TNetEncoding.URL.Encode(LogItem.Msg)+
     '&level='+integer(LogItem.SeverityLevel).ToString+
     '&source='+TNetEncoding.URL.Encode(LogItem.Source)+
