@@ -6,7 +6,7 @@ uses
   IdMessage, DWL.Classes;
 
 type
-  TdwlMailCheckOption=(mcEmptyStringIsValid, mcDoNotTrimSpaces, mcEvaluateCommaSeparatedList);
+  TdwlMailCheckOption=(mcEmptyStringIsValid, mcDoNotTrimSpaces, mcEvaluateCommaSeparatedList, mcEvaluateSemicolonSeparatedList);
   TdwlMailCheckOptions=set of TdwlMailCheckOption;
 
   TdwlMailUtils = record
@@ -37,12 +37,16 @@ begin
     EMail2Check := EMail2Check.Trim;
   if (EMail2Check='') then
     Exit(mcEmptyStringIsValid in Options);
-  if mcEvaluateCommaSeparatedList in Options then
+  if ([mcEvaluateCommaSeparatedList, mcEvaluateSemicolonSeparatedList]*Options<>[]) then
   begin
-    var NewOptions := Options - [mcEvaluateCommaSeparatedList];
+    var NewOptions := Options - [mcEvaluateCommaSeparatedList, mcEvaluateSemicolonSeparatedList];
     Result := true;
     repeat
-      var P := pos(',', EMail2Check);
+      var P := 0;
+      if mcEvaluateCommaSeparatedList in Options then
+        P := pos(',', EMail2Check);
+      if (P=0) and (mcEvaluateSemicolonSeparatedList in Options) then
+        P := pos(';', EMail2Check);
       if P>0 then
         Result := Result and TdwlMailUtils.IsValidEmailAddress(EMail2Check.Substring(0, P-1), NewOptions)
       else
