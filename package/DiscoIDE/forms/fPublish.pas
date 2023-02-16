@@ -101,8 +101,8 @@ procedure TPublishForm.GetUserNamePassword(var Username, Password, Token: string
 begin
   if Action=acapwGetUserNamePassword then
   begin
-    UserName := TDisCoIde_General.FConfigParams.StrValue('username');
-    Password := TDisCoIde_General.FConfigParams.StrValue('password');
+    UserName := TDisCoIde_General.FConfigParams.StrValue(paramUsername);
+    Password := TDisCoIde_General.FConfigParams.StrValue(paramPassword);
   end;
 end;
 
@@ -242,8 +242,8 @@ begin
           FPackageName := TdwlFile.ExtractBareName(FTargetName);
           //CHECKING  VERSIONINFO
           var VersionOnServer: TdwlFileVersionInfo;
-          FApiSession := TdwlAPISession.Create(TDisCoIde_General.FConfigParams.StrValue('disco_endpoint'),
-            New_UserPwAuthorizer(TDisCoIde_General.FConfigParams.StrValue('auth_endpoint'), GetUsernamePassword));
+          FApiSession := TdwlAPISession.Create(TDisCoIde_General.FConfigParams.StrValue(paramDisco_Endpoint),
+            New_UserPwAuthorizer(TDisCoIde_General.FConfigParams.StrValue(paramAuth_Endpoint), GetUsernamePassword));
           AddMessage(lsNotice, 'Fetching release info from '+FApiSession.ApiBaseUrl+'release');
           var Response := FApiSession.ExecuteApiRequest('release', HTTP_COMMAND_GET, 'packagename='+FPackageName);
           if Response.StatusCode<>HTTP_STATUS_OK then
@@ -291,10 +291,10 @@ begin
           if DirectoryExists(FZipToDir) then
             AddMessage(lsError, 'Folder already exists: '+FZipToDir);
           // CHECKING SIGN TOOL
-          FSignTool := TDisCoIde_General.FConfigParams.StrValue('signtool');
+          FSignTool := TDisCoIde_General.FConfigParams.StrValue(paramSigntool);
           if not FileExists(FSignTool) then
             AddMessage(lsError, 'Wrong signtool: "'+FSignTool);
-          FSignCmd := TDisCoIde_General.FConfigParams.StrValue('signcmd');
+          FSignCmd := TDisCoIde_General.FConfigParams.StrValue(paramSigncmd);
           if FSignCmd='' then
             AddMessage(lsError, 'Missing SignCmd');
           TThread.Queue(nil,

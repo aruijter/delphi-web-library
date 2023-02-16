@@ -19,7 +19,7 @@ type
 implementation
 
 uses
-  ToolsAPI, fPublish;
+  ToolsAPI, fPublish, DisCoIde.General, DisCoIde.Consts;
 
 { TDisCoIde_Publish }
 
@@ -27,16 +27,20 @@ class constructor TDisCoIde_Publish.Create;
 begin
   inherited;
   FMenuItems := TObjectList<TMenuItem>.Create(true);
-  var MainMenu := (BorlandIDEServices as INTAServices).MainMenu;
-  var ProjectMenu := MainMenu.Items.Find('Project');
-  if ProjectMenu<>nil then
+  // Show menu item only if authentication is configured
+  if TDisCoIde_General.FConfigParams.StrValue(paramDisco_Endpoint)<>'' then
   begin
-    var MI := TMenuItem.Create(ProjectMenu);
-    FMenuItems.Add(MI); // this will destroy the item when finalizing
-    MI.Caption := 'Publish to DisCo';
-    MI.Name := 'DisCoIde_MenuItem_Publish';
-    MI.OnClick := DoPublish;
-    ProjectMenu.Insert(0, MI);
+    var MainMenu := (BorlandIDEServices as INTAServices).MainMenu;
+    var ProjectMenu := MainMenu.Items.Find('Project');
+    if ProjectMenu<>nil then
+    begin
+      var MI := TMenuItem.Create(ProjectMenu);
+      FMenuItems.Add(MI); // this will destroy the item when finalizing
+      MI.Caption := 'Publish to DisCo';
+      MI.Name := 'DisCoIde_MenuItem_Publish';
+      MI.OnClick := DoPublish;
+      ProjectMenu.Insert(0, MI);
+    end;
   end;
 end;
 
