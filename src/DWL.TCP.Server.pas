@@ -1,285 +1,251 @@
 unit DWL.TCP.Server;
-// PLEASE NOTE THIS UNIT IS WIP (WORK IN PROGRESS)
+
 interface
 
 uses
-  System.Classes, DWL.SyncObjs, Winapi.Winsock2, System.SysUtils;
+  DWL.TCP, Winapi.WinSock, Winsock2, System.Classes, System.Generics.Collections,
+  DWL.SyncObjs;
 
 type
   TdwlTCPServer=class;
+  TdwlServerBinding=class;
+  TdwlServerBindings=class;
 
-  TdwlTCPServerClientThreadClass = class of TdwlTCPServerClientThread;
+  TdwlServerSocketClass = class of TdwlServerSocket;
+  TdwlServerSocket = class(TdwlSocket)
+  end;
 
-  TdwlTCPServerClientThread = class(TdwlThread)
+  TdwlServerBinding = class
   strict private
-    FReadBuffer: PByte;
-    FServer: TdwlTCPServer;
-    Fm_socket: TSocket;
-    FClientAddr: TSockAddrIn;
-    FSendRequests: TdwlThreadQueue<TBytes>;
-  protected
-    procedure Execute; override;
-    procedure DoRead; virtual;
-    procedure DoWrite; virtual;
-  public
-    constructor Create(Socket: TSocket; ClientAddr: TSockAddrIn; Server: TdwlTCPServer); virtual;
-    destructor Destroy; override;
-    procedure AddSendRequest(B: TBytes);
-  end;
-
-  TdwlTCPServerThread = class(TdwlThread)
-  private
-    FServer: TdwlTCPServer;
-  protected
-    procedure Execute; override;
-  public
-    constructor Create(Server: TdwlTCPServer);
-  end;
-
-  TdwlTCPServer = class
-  private
-    FServerThread: TdwlTCPServerThread;
     FPort: word;
-  protected
-    FClientThreads: TThreadList;
+    FListenSocket: TSocket;
+    FListenIndex: byte;
+  private
+    FBindings: TdwlServerBindings;
+    procedure CreateAcceptSocket;
+    procedure StartListening(ListenIndex: byte);
+    procedure StopListening;
   public
-    property ClientThreads: TThreadList read FClientThreads;
-    property Port: word read FPort write FPort;
-    constructor Create;
+    constructor Create(ABindings: TdwlServerBindings; APort: word);
+  end;
+
+  TdwlServerBindings = class
+  strict private
+  private
+    FBindings: TObjectList<TdwlServerBinding>;
+    FServer: TdwlTCPServer;
+  public
+    constructor Create(AServer: TdwlTCPServer);
     destructor Destroy; override;
+    function Add(APort: word): TdwlServerBinding;
     procedure StartListening;
     procedure StopListening;
+  end;
+
+  TdwlTCPServer = class(TdwlTCPService)
+  strict private
+    FBindings: TdwlServerBindings;
+  private
+    FSocketClass: TdwlServerSocketClass;
+    FAcceptIoCompletionPort: THandle;
+    FAcceptIoThreads: TdwlThreadList<TThread>;
+  protected
+    procedure InternalActivate; override;
+    procedure InternalDeActivate; override;
+    procedure IoCompleted(TransmitBuffer: PdwlTransmitBuffer; NumberOfBytesTransferred: cardinal);
+  public
+    property Bindings: TdwlServerBindings read FBindings;
+    constructor Create(SocketClass: TdwlServerSocketClass);
+    destructor Destroy; override;
   end;
 
 implementation
 
 uses
-  System.RTLConsts, Winapi.Windows, DWL.Logging, System.Win.ScktComp,
-  System.Types;
+  System.RTLConsts, DWL.Logging, System.Win.ScktComp,
+  System.Types, System.Math, Winapi.Windows, System.SysUtils;
 
 const
-  READ_BUFFER_SIZE = 65536;
+  ACCEPT_SOCKET_COUNT = 2;
 
-procedure RaiseWinsockError(WinSockErrorNo: integer; const Op: string);
-begin
-  raise Exception.CreateResFmt(@sWindowsSocketError,
-    [SysErrorMessage(WinSockErrorNo), WinSockErrorNo, Op]);
-end;
-
-function CheckSocketResult(ResultCode: Integer; const Op: string): Integer;
-begin
-  if ResultCode <> 0 then
-  begin
-    Result := WSAGetLastError;
-    if (Result<>integer(WSAEWOULDBLOCK)) and (Result<>integer(WSA_IO_PENDING))
-      and (Result<>integer(WSA_IO_INCOMPLETE)) then
-      RaiseWinSockError(Result, Op);
-  end
-  else
-    Result := 0;
-end;
-
-{ TdwlTCPServerThread }
-
-constructor TdwlTCPServerThread.Create(Server: TdwlTCPServer);
-begin
-  inherited Create;
-  FServer := Server;
-end;
-
-procedure TdwlTCPServerThread.Execute;
-var
-  lEvents: array[0..1] of THandle;
-begin
-  var clientaddrsize := SizeOf(TSockAddrIn);
-  var server_socket := WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
-  try
-    if (server_socket = INVALID_SOCKET) then
-      CheckSocketResult(1, 'WSASocket');
-    // zet adresgegegevens
-    var clientservice: TSockAddrIn;
-    clientservice.sin_family := AF_INET;
-    clientService.sin_addr.s_addr := INADDR_ANY;
-    clientService.sin_port := htons(FServer.Port);
-    CheckSocketResult(bind(server_socket, TSockAddr(clientservice), SizeOf(clientservice)), 'bind');
-    CheckSocketResult(listen(server_socket, SOMAXCONN), 'listen');
-    lEvents[0] := FWorkToDoEventHandle;
-    lEvents[1] := WSACreateEvent; //event for accepting sockets;
-    try
-      CheckSocketResult(WSAEventSelect(server_socket, lEvents[1], FD_ACCEPT), 'WSAEventSelect');
-      while not Terminated do
-      begin
-        WaitForMultipleObjectsEx(2, @lEvents[0], false, INFINITE, false);
-        var NetEvents: TWSANetworkEvents;
-        CheckSocketResult(WSAEnumNetworkEvents(server_socket, lEvents[1], NetEvents), 'WSAEnumNetworkEvents');
-        if (NetEvents.lNetworkEvents and FD_ACCEPT)>0 then
-        begin
-          var clientaddr: TSockAddrIn;
-          var conn_socket := accept(server_socket, @clientaddr, @clientaddrsize);
-          if conn_socket<>INVALID_SOCKET then
-            TdwlTCPServerClientThread.Create(conn_socket, clientaddr, FServer);
-        end;
-      end;
-    finally
-      WSACloseEvent(lEvents[1]);
-    end;
-  finally
-    CheckSocketResult(closesocket(server_socket), 'closesocket');
+type
+  TAcceptIoThread = class(TThread)
+  strict private
+    FServer: TdwlTCPServer;
+  protected
+    procedure Execute; override;
+  public
+    constructor Create(AServer: TdwlTCPServer);
   end;
-end;
 
 { TdwlTCPServer }
 
-constructor TdwlTCPServer.Create;
+constructor TdwlTCPServer.Create(SocketClass: TdwlServerSocketClass);
 begin
   inherited Create;
-  FClientThreads := TThreadList.Create;
+  FSocketClass := SocketClass;
+  FAcceptIoThreads := TdwlThreadList<TThread>.Create;
+  FBindings := TdwlServerBindings.Create(Self);
 end;
 
 destructor TdwlTCPServer.Destroy;
 begin
-  StopListening;
-  FClientThreads.Free;
-  inherited Destroy;
+  Active := false; // needed for my DeActivate actions
+  FBindings.Free;
+  FAcceptIoThreads.Free;
+  inherited Destroy; // does a deactivate etc, so irst inherited
 end;
 
-procedure TdwlTCPServer.StartListening;
+procedure TdwlTCPServer.InternalActivate;
 begin
-  if FServerThread=nil then
-  FServerThread := TdwlTCPServerThread.Create(Self);
+  inherited InternalActivate;
+  // Create IoCompletionPort
+	FAcceptIoCompletionPort := CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, 0);
+  TAcceptIOThread.Create(Self); // one is really enough, don't worry, but if really wanted create as much as you want...
+  FBindings.StartListening;
 end;
 
-procedure TdwlTCPServer.StopListening;
+procedure TdwlTCPServer.InternalDeActivate;
 begin
-  FreeAndNil(FServerThread);
-end;
-
-{ TdwlTCPServerClientThread }
-
-procedure TdwlTCPServerClientThread.AddSendRequest(B: TBytes);
-begin
-  FSendRequests.Push(B);
-  SetEvent(FWorkToDoEventHandle);
-end;
-
-constructor TdwlTCPServerClientThread.Create(Socket: TSocket; ClientAddr: TSockAddrIn; Server: TdwlTCPServer);
-begin
-  Fm_socket := Socket;
-  FClientAddr := ClientAddr;
-  FServer := Server;
-  GetMem(FReadBuffer, READ_BUFFER_SIZE);
-  FSendRequests := TdwlThreadQueue<TBytes>.Create;
-  inherited Create;
-  FreeOnTerminate := true;
-end;
-
-destructor TdwlTCPServerClientThread.Destroy;
-begin
-  FreeMem(FReadBuffer);
-  FSendRequests.Free;
-  inherited Destroy;
-end;
-
-procedure TdwlTCPServerClientThread.DoRead;
-begin
-  var ReceivedBytesCount: integer;
-  repeat
-    var Flags: integer := 0;
-    ReceivedBytesCount := recv(Fm_socket, FReadBuffer^, READ_BUFFER_SIZE, Flags);
-    if ReceivedBytesCount=SOCKET_ERROR then
-    begin
-      var Err := GetLastError;
-      if Err<>WSAEWOULDBLOCK then
-        raise Exception.Create(Err.ToString);
-    end;
-  until ReceivedBytesCount<=0;
-end;
-
-procedure TdwlTCPServerClientThread.DoWrite;
-begin
-  var BytesToSend: TBytes;
-  while FSendRequests.TryPop(BytesToSend) do
-  begin
-    var BytesToDo := Length(BytesToSend);
-    var BytesFinished := 0;
-    while BytesToDo>0 do
-    begin
-      var Res := send(Fm_socket, BytesToSend[BytesFinished], BytesToDo, 0);
-      if Res=SOCKET_ERROR then
-      begin
-        var Err := GetLastError;
-        if Err<>WSAEWOULDBLOCK then
-          raise Exception.Create(Err.ToString)
-      end;
-      inc(BytesFinished, Res);
-      dec(BytesToDo, Res);
-    end;
-  end;
-end;
-
-procedure TdwlTCPServerClientThread.Execute;
-var
-  lEvents: array[0..1] of THandle;
-begin
+  FBindings.StopListening;
+  // stop running threads and wait for them
+  var RunningThreads := FAcceptIoThreads.LockList;
   try
-    FServer.FClientThreads.Add(Self);
-    try
-      var SocketEvent := WSACreateEvent;
-      if SocketEvent=WSA_INVALID_EVENT then
-        CheckSocketResult(1, 'WSACreateEvent')
-      else
-      try
-        CheckSocketResult(WSAEventSelect(Fm_socket, SocketEvent, FD_READ or FD_CLOSE), 'WSAEventSelect');
-        lEvents[0] := FWorkToDoEventHandle;
-        lEvents[1] := SocketEvent;
-        while not Terminated do
-        begin
-          var NetEvents: TWSANetworkEvents;
-          if (NetEvents.lNetworkEvents and FD_READ)>0 then
-            DoRead;
-          DoWrite;
-          var Res:DWORD := WaitForMultipleObjects(2, @lEvents, false, INFINITE); // this call resets the FWorkToDoEvent if applicable
-          if (Res>WAIT_OBJECT_0+2) then
-            raise Exception.Create('Error on WaitForMultipleEvents: '+Res.ToHexString);
-          CheckSocketResult(WSAEnumNetworkEvents(Fm_socket, SocketEvent, NetEvents), 'WSAEnumNetworkEvents'); // This should reset the FSocketEvent
-          if (NetEvents.lNetworkEvents and FD_CLOSE)>0 then
-            Break;
-        end;
-        // close
-        CheckSocketResult(WSAEventSelect(Fm_socket, 0, 0), 'WSAEventSelect');
-        CheckSocketResult(shutdown(Fm_socket, SD_BOTH), 'shutdown');
-        CheckSocketResult(closesocket(Fm_socket), 'closesocket');
-      finally
-        WSACloseEvent(SocketEvent);
-      end;
-    finally
-      FServer.FClientThreads.Remove(Self);
-    end;
-  except
-    on E: Exception do
-    begin
-      if (E.Message<>'10053') and (E.Message<>'10054') then
-        TdwlLogger.Log('TCPThread Exception: '+E.Message+#13#10#13#10+E.StackTrace);
-    end;
+    // stop IoThreads
+    for var Thread in RunningThreads do
+      Thread.Terminate;  //FreeOnTerminate
+    // to be sure to wake up all threads post threadcount queuedcompletionstatus
+    for var i := 1 to  RunningThreads.Count do
+      PostQueuedCompletionStatus(FAcceptIoCompletionPort, 0, 0, nil);
+  finally
+    FAcceptIoThreads.UnlockList;
   end;
+  // wait untill all IoThreads are finshed
+  while FAcceptIoThreads.Count>0 do
+    Sleep(100);
+  // Close IoCompletionPort
+  CloseHandle(FAcceptIoCompletionPort);
+  inherited InternalDeActivate;
 end;
 
-initialization
-  // startup winsock
-  var WSAData: TWSAData;
-  var ErrorCode := WSAStartup(WINSOCK_VERSION, WSAData);
-  if ErrorCode <> 0 then
-    raise ESocketError.CreateResFmt(@sWindowsSocketError,
-      [SysErrorMessage(ErrorCode), ErrorCode, 'WSAStartup']);
+procedure TdwlTCPServer.IoCompleted(TransmitBuffer: PdwlTransmitBuffer; NumberOfBytesTransferred: cardinal);
+begin
+  var Socket := TdwlServerSocket(TransmitBuffer.Socket);
+  // create a new accept socket
+  FBindings.FBindings[TransmitBuffer.CompletionId].CreateAcceptSocket;
+  // start receiving on the socket
+  TransmitBuffer.Socket.StartReceiving;
+end;
 
-finalization
-  // cleanup winsock
-  var ErrorCode := WSACleanup;
-  if ErrorCode <> 0 then
-    raise ESocketError.CreateResFmt(@sWindowsSocketError,
-      [SysErrorMessage(ErrorCode), ErrorCode, 'WSACleanup']);
+{ TdwlServerBindings }
 
+function TdwlServerBindings.Add(APort: word): TdwlServerBinding;
+begin
+  Result := TdwlServerBinding.Create(Self, APort);
+  FBindings.Add(Result);
+end;
 
+constructor TdwlServerBindings.Create;
+begin
+  inherited Create;
+  FBindings := TObjectList<TdwlServerBinding>.Create(true);
+  FServer := AServer;
+end;
 
+destructor TdwlServerBindings.Destroy;
+begin
+  FBindings.Free;
+  inherited Destroy;
+end;
+
+procedure TdwlServerBindings.StartListening;
+begin
+  for var i := 0 to FBindings.Count-1 do
+    FBindings[i].StartListening(i);
+end;
+
+procedure TdwlServerBindings.StopListening;
+begin
+  for var Binding in FBindings do
+    Binding.StopListening;
+end;
+
+{ TdwlServerBinding }
+
+constructor TdwlServerBinding.Create(ABindings: TdwlServerBindings; APort: word);
+begin
+  inherited Create;
+  FPort := APort;
+  FBindings := ABindings;
+end;
+
+procedure TdwlServerBinding.CreateAcceptSocket;
+begin
+  // we use the sendtransmitbuffer for the AcceptEx call!
+  // if sendbuffer is not yet used when closing socket
+  // it will be freed by the socket self
+  var Socket := FBindings.FServer.FSocketClass.Create(FBindings.FServer);
+  Socket.FSendTransmitBuffer.CompletionId := FListenIndex;
+  var BytesReceived: cardinal;
+  // we made the choice not to receive the first part of the data in the AcceptEx call
+  CheckWSAResult(AcceptEx(FListenSocket, Socket.SocketHandle, Socket.FSendTransmitBuffer.WSABuf.buf, 0,
+    SizeOf(sockaddr_storage), SizeOf(sockaddr_storage), BytesReceived, POverlapped(Socket.FSendTransmitBuffer)), 'AcceptEx');
+end;
+
+procedure TdwlServerBinding.StartListening(ListenIndex: byte);
+begin
+  FListenIndex := ListenIndex;
+  FListenSocket := WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
+	if CreateIoCompletionPort(FListenSocket, FBindings.FServer.FAcceptIoCompletionPort, 0, 0)=0 then
+    CheckWSAResult(-1, 'CreateIoCompletionPort');
+  if (FListenSocket = INVALID_SOCKET) then
+    CheckWSAResult(1, 'WSASocket');
+  var sockaddr: TSockAddrIn;
+  sockaddr.sin_family := AF_INET;
+  sockaddr.sin_addr.s_addr := htonl(INADDR_ANY);
+  sockaddr.sin_port := htons(FPort);
+  CheckWSAResult(bind(FListenSocket, TSockAddr(sockaddr), SizeOf(sockaddr)), 'bind');
+  CheckWSAResult(listen(FListenSocket, SOMAXCONN), 'listen');
+  for var i := 1 to ACCEPT_SOCKET_COUNT do
+    CreateAcceptSocket;
+end;
+
+procedure TdwlServerBinding.StopListening;
+begin
+  shutdown(FListenSocket, SD_BOTH);
+  closesocket(FListenSocket);
+end;
+
+{ TAcceptIoThread }
+
+constructor TAcceptIoThread.Create(AServer: TdwlTCPServer);
+begin
+  FServer := AServer;
+  FServer.FAcceptIoThreads.Add(Self);
+  FreeOnTerminate := true;
+  inherited Create;
+end;
+
+procedure TAcceptIoThread.Execute;
+begin
+  while not Terminated do
+  begin
+    try
+      var NumberOfBytesTransferred: cardinal;
+      var CompletionKey: NativeUInt;
+      var TransmitBuffer: PdwlTransmitBuffer;
+      if not GetQueuedCompletionStatus(FServer.FAcceptIoCompletionPort, NumberOfBytesTransferred, CompletionKey, POverlapped(TransmitBuffer), INFINITE) then
+        Continue;
+      if TransmitBuffer=nil then
+        Continue;
+      FServer.IoCompleted(TransmitBuffer, NumberOfBytesTransferred);
+    except
+      on E: Exception do
+        TdwlLogger.Log('TAcceptIoThread.Execute error: '+E.Message, lsError);
+    end;
+  end;
+  FServer.FAcceptIoThreads.Remove(Self);
+end;
 
 end.
+
