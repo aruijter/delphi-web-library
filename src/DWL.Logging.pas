@@ -141,7 +141,7 @@ type
     /// <summary>
     ///   Deactives the given dispatcher
     /// </summary>
-    class procedure UnregisterDispatcher(Dispatcher: IdwlLogDispatcher); static;
+    class procedure UnregisterDispatcher(var Dispatcher: IdwlLogDispatcher); static;
     /// <summary>
     ///   When EnableExceptionLogging is called, literally all Exceptions in
     ///   the application will be logged with stack frames.
@@ -308,9 +308,10 @@ begin
   TLogEngine.FLogDispatchers.Add(Dispatcher);
 end;
 
-class procedure TdwlLogger.UnregisterDispatcher(Dispatcher: IdwlLogDispatcher);
+class procedure TdwlLogger.UnregisterDispatcher(var Dispatcher: IdwlLogDispatcher);
 begin
   TLogEngine.FLogDispatchers.Remove(Dispatcher);
+  Dispatcher := nil; // to remove reference
 end;
 
 procedure LoggedRaiseExceptObjProc(P: System.PExceptionRecord);
