@@ -99,6 +99,7 @@ type
     ///   The WMI Property to use
     /// </param>
     class function WMI_Value(const Win32Class, Win32Property: string): string; static;
+    class function NumberOfLogicalProcessors: cardinal; static;
   end;
 
 implementation
@@ -271,6 +272,11 @@ begin
       FreeMem(Sid);
     end;
   end;
+end;
+
+class function TdwlOS.NumberOfLogicalProcessors: cardinal;
+begin
+  Result := StrToIntDef(WMI_Value('Win32_Processor', 'NumberOfLogicalProcessors'), 1);
 end;
 
 class function TdwlOS.WMI_Value(const Win32Class, Win32Property: string): string;
