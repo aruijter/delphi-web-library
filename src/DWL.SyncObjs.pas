@@ -29,7 +29,10 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure Clear;
+    function Contains(const Value: T): boolean;
     function Count: integer;
+    procedure Insert(Index: Integer; const Value: T);
+    function First: T;
   end;
 
   /// <summary>
@@ -208,6 +211,16 @@ begin
   end;
 end;
 
+function TdwlCustomThreadList<T>.Contains(const Value: T): boolean;
+begin
+  FMREW.BeginRead;
+  try
+    Result := FList.Contains(Value);
+  finally
+    FMREW.EndRead;
+  end;
+end;
+
 function TdwlCustomThreadList<T>.Count: integer;
 begin
   FMREW.BeginRead;
@@ -228,6 +241,26 @@ destructor TdwlCustomThreadList<T>.Destroy;
 begin
   FList.Free;
   inherited Destroy;
+end;
+
+function TdwlCustomThreadList<T>.First: T;
+begin
+  FMREW.BeginRead;
+  try
+    Result := FList.First;
+  finally
+    FMREW.EndRead;
+  end;
+end;
+
+procedure TdwlCustomThreadList<T>.Insert(Index: Integer; const Value: T);
+begin
+  FMREW.BeginWrite;
+  try
+    FList.Insert(Index, Value);
+  finally
+    FMREW.EndWrite;
+  end;
 end;
 
 { TdwlThreadList<T> }
