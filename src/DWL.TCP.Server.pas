@@ -130,11 +130,12 @@ end;
 
 procedure TdwlTCPServer.IoCompleted(TransmitBuffer: PdwlTransmitBuffer; NumberOfBytesTransferred: cardinal);
 begin
-  var Socket := TdwlServerSocket(TransmitBuffer.Socket);
   // create a new accept socket
-  FBindings.FBindings[TransmitBuffer.CompletionId].CreateAcceptSocket;
+  FBindings.FBindings[TransmitBuffer.CompletionIndicator].CreateAcceptSocket;
+  IOHandler.SocketOnAccept(TransmitBuffer.Socket);
   // start receiving on the socket
   TransmitBuffer.Socket.StartReceiving;
+  ReleaseTransmitBuffer(TransmitBuffer);
 end;
 
 { TdwlServerBindings }
@@ -181,15 +182,15 @@ end;
 
 procedure TdwlServerBinding.CreateAcceptSocket;
 begin
-  // we use the sendtransmitbuffer for the AcceptEx call!
-  // if sendbuffer is not yet used when closing socket
+  // we use the writetransmitbuffer for the AcceptEx call
+  // if writebuffer is not yet used when closing socket
   // it will be freed by the socket self
   var Socket := FBindings.FServer.FSocketClass.Create(FBindings.FServer);
-  Socket.FSendTransmitBuffer.CompletionId := FListenIndex;
+  var TransmitBuffer := Socket.FService.AcquireTransmitBuffer(Socket, FListenIndex);
   var BytesReceived: cardinal;
   // we made the choice not to receive the first part of the data in the AcceptEx call
-  CheckWSAResult(AcceptEx(FListenSocket, Socket.SocketHandle, Socket.FSendTransmitBuffer.WSABuf.buf, 0,
-    SizeOf(sockaddr_storage), SizeOf(sockaddr_storage), BytesReceived, POverlapped(Socket.FSendTransmitBuffer)), 'AcceptEx');
+  CheckWSAResult(AcceptEx(FListenSocket, Socket.SocketHandle, TransmitBuffer.WSABuf.buf, 0,
+    SizeOf(sockaddr_storage), SizeOf(sockaddr_storage), BytesReceived, POverlapped(TransmitBuffer)), 'AcceptEx');
 end;
 
 procedure TdwlServerBinding.StartListening(ListenIndex: byte);

@@ -12,6 +12,10 @@ type
     function PublicExponent_e: TBytes;
   end;
 
+  IdwlX509Cert = interface
+    function X509(ThisCallTakesOwnerShip: boolean=false): pX509;
+  end;
+
   TdwlOpenSSL = record
   public
     class function New_PrivateKey: IdwlOpenSSLKey; static;
@@ -34,6 +38,7 @@ type
     /// </summary>
     class function DeriveKeyFromPassword(const Salt_b64utf, Password_plain: string): string; static;
     class function ASN1_StringToDateTime(x: pASN1_STRING): TDateTime; static;
+    class function New_Cert_FromPEMStr(const PEM: string): IdwlX509Cert; static;
   end;
 
 implementation
@@ -43,6 +48,7 @@ uses
 
 type
   TdwlOpenSSLKey = class(TInterfacedObject, IdwlOpenSSLKey)
+  strict private
     FKey: pEVP_PKEY;
   private
     function key: pEVP_PKEY;
@@ -50,6 +56,17 @@ type
     function PublicExponent_e: TBytes;
   public
     constructor Create(AKey: pEVP_PKEY);
+    destructor Destroy; override;
+  end;
+
+  TdwlX509Cert = class(TInterfacedObject, IdwlX509Cert)
+  strict private
+    FX509: pX509;
+    FSkipX509_free: boolean;
+  private
+    function X509(TransferOwnerShip: boolean=false): pX509;
+  public
+    constructor Create(AX509: pX509);
     destructor Destroy; override;
   end;
 
@@ -188,6 +205,20 @@ begin
   end;
 end;
 
+class function TdwlOpenSSL.New_Cert_FromPEMStr(const PEM: string): IdwlX509Cert;
+begin
+  var AnsiPem := ansistring(PEM);
+  var Bio := BIO_new_mem_buf(PAnsiChar(AnsiPem), length(AnsiPEM));
+  try
+    var X509 := PEM_read_bio_X509(Bio, nil, nil, nil);
+    if X509=nil then
+      raise Exception.Create('Error Message');
+    Result := TdwlX509Cert.Create(x509);
+  finally
+    BIO_free(Bio);
+  end;
+end;
+
 class function TdwlOpenSSL.New_PrivateKey: IdwlOpenSSLKey;
 begin
   Result := TdwlOpenSSLKey.Create(EVP_PKEY_Q_keygen(nil, nil, 'RSA', 4096));
@@ -299,6 +330,27 @@ begin
   finally
     BN_free(bn);
   end;
+end;
+
+{ TdwlX509Cert }
+
+constructor TdwlX509Cert.Create(AX509: pX509);
+begin
+  inherited Create;
+  FX509 := AX509;
+end;
+
+destructor TdwlX509Cert.Destroy;
+begin
+  if not FSkipX509_free then
+    X509_free(FX509);
+  inherited Destroy;
+end;
+
+function TdwlX509Cert.X509(TransferOwnerShip: boolean=false): pX509;
+begin
+  Result := FX509;
+  FSkipX509_free := TransferOwnerShip;
 end;
 
 end.
