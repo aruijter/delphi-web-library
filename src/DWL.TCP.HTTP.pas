@@ -15,7 +15,7 @@ type
 
   TdwlCustomHTTPServer = class(TdwlTCPServer)
   protected
-    procedure HandleRequest(Request: TdwlHTTPSocket);
+    function HandleRequest(Request: TdwlHTTPSocket): boolean;
   public
     constructor Create;
   end;
@@ -59,9 +59,9 @@ begin
   inherited Create(TdwlHTTPSocket);
 end;
 
-procedure TdwlCustomHTTPServer.HandleRequest(Request: TdwlHTTPSocket);
+function TdwlCustomHTTPServer.HandleRequest(Request: TdwlHTTPSocket): boolean;
 begin
-  Request.StatusCode := HTTP_STATUS_NOT_FOUND;
+  Result := false;
 end;
 
 { TdwlHTTPSocket }
@@ -267,14 +267,12 @@ begin
   end
   else
   begin
-//    TdwlCustomHTTPServer(FService).HandleRequest(Self);
-    FResponseHeaders.WriteValue(HTTP_HEADER_CONTENT_TYPE, CONTENT_TYPE_HTML);
-    var S: ansistring := '<html><body><h1>Arjen</h1></body></html>';
-    FResponseDataStream.WriteData(PAnsiChar(S), Length(S));
+    if not TdwlCustomHTTPServer(FService).HandleRequest(Self) then
+      StatusCode := HTTP_STATUS_NOT_FOUND;
   end;
-  if FResponseDataStream.Size>0 then
-    FResponseHeaders.WriteValue(HTTP_HEADER_CONTENT_LENGTH, FResponseDataStream.Size.ToString);
-  // Write First Protocol line
+  // Remember to not write Content-Length when Command CONNECT is added later
+  FResponseHeaders.WriteValue(HTTP_HEADER_CONTENT_LENGTH, FResponseDataStream.Size.ToString);
+  // Write HTTP protocol line
   WriteStr('HTTP/1.');
   case FProtocol of
     HTTP10: WriteStr('0');
