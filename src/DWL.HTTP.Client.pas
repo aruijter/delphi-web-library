@@ -151,6 +151,7 @@ var
 
 type
   TdwlHTTPRequest = class(TInterfacedObject, IdwlHTTPRequest)
+  private
     FURL: string;
     FMethod: string;
     FUserName: string;
@@ -182,6 +183,7 @@ type
   end;
 
   TdwlHTTPResponse = class(TInterfacedObject, IdwlHTTPResponse)
+  private
     FErrorMsg: string;
     FHeaderStr: string;
     FHeaderKeys: TStringList;
