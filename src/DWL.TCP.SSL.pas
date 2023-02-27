@@ -245,8 +245,9 @@ begin
     BytesRead := SSL_read(SslVars.opSSL, PByte(ReadBuf.buf), ReadBuf.NumberOfBytes);
     if BytesRead>0 then
     begin
-      Socket.DoRead(ReadBuf.Buf, BytesRead);
-      SslVars.ReadBuf := Socket.Service.AcquireHandlingBuffer(Socket);
+      ReadBuf.NumberOfBytes := BytesRead;
+      Socket.ReadHandlingBuffer(ReadBuf);
+      ReadBuf.NumberOfBytes := DWL_TCP_BUFFER_SIZE;
     end
     else
       Result := SslOnError_ShouldRetry(SSL_get_error(SslVars.opSSL, BytesRead));
@@ -258,7 +259,7 @@ begin
     if BytesRead>0 then
     begin
       SendBuf.WSABuf.len := BytesRead;
-      Socket.SendBuffer(SendBuf);
+      Socket.SendTransmitBuffer(SendBuf);
       SslVars.SendBuf := Socket.Service.AcquireTransmitBuffer(Socket, COMPLETIONINDICATOR_WRITE);
     end
     else

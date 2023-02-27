@@ -9,6 +9,7 @@ uses
 const
   COMPLETIONINDICATOR_READ = 1;
   COMPLETIONINDICATOR_WRITE = 2;
+  DWL_TCP_BUFFER_SIZE = 16384;
 
   type
   TdwlTCPService=class;
@@ -34,6 +35,7 @@ const
     1: (HandlingBuffer: TdwlHandlingBuffer);
   end;
 
+  TdwlSocketClass = class of TdwlSocket;
   TdwlSocket = class
   strict private
     FSocketVars: pointer;
@@ -48,7 +50,6 @@ const
     FWritesInProgress: cardinal;
     procedure CreateRecvRequest;
     procedure HandleCurrentWriteBuffer;
-    procedure Write(Buf: PByte; Size: integer);
     procedure WSA_ShutdownOnError(ResultCode: Integer; const Op: string);
   private
     FSocketCS: TCriticalSection;
@@ -64,13 +65,14 @@ const
     property SocketVars: pointer read FSocketVars;
     constructor Create(AService: TdwlTCPService); virtual;
     destructor Destroy; override;
-    procedure DoRead(FData: PByte; NumberOfBytes: cardinal); virtual;
+    procedure ReadHandlingBuffer(HandlingBuffer: PdwlHandlingBuffer); virtual;
     procedure FlushWrites(CloseConnection: boolean=false);
     procedure IoCompleted(TransmitBuffer: PdwlTransmitBuffer; NumberOfBytesTransferred: cardinal);
-    procedure SendBuffer(TransmitBuffer: PdwlTransmitBuffer);
+    procedure SendTransmitBuffer(TransmitBuffer: PdwlTransmitBuffer);
     procedure Shutdown;
     procedure ShutdownDetected;
     procedure StartReceiving;
+    procedure WriteBuf(Buf: PByte; Size: integer);
     procedure WriteLine(const Str: string);
     procedure WriteStr(const Str: string);
     procedure WriteUInt8(B: byte);
@@ -133,7 +135,6 @@ function WSARecv2; external 'ws2_32.dll' name 'WSARecv';
 function WSASend2; external 'ws2_32.dll' name 'WSASend';
 
 const
-  HANDLINGANDTRANSMIT_BUFFER_SIZE = 16384;
   RECV_REQUEST_COUNT = 3;
   CLEANUPTHREAD_SLEEP_MSECS = 300;
   CLEANUP_DELAY_MSECS = 750;
@@ -198,7 +199,7 @@ begin
     FService.ReleaseHandlingBuffer(FWriteBuffer);
 end;
 
-procedure TdwlSocket.SendBuffer(TransmitBuffer: PdwlTransmitBuffer);
+procedure TdwlSocket.SendTransmitBuffer(TransmitBuffer: PdwlTransmitBuffer);
 begin
   WSA_ShutdownOnError(WSASend2(SocketHandle, @TransmitBuffer.WSABuf, 1, nil, 0, LPWSAOVERLAPPED(TransmitBuffer), nil), 'WSASend');
 end;
@@ -237,7 +238,7 @@ begin
   end;
 end;
 
-procedure TdwlSocket.Write(Buf: PByte; Size: integer);
+procedure TdwlSocket.WriteBuf(Buf: PByte; Size: integer);
 begin
   var BytesToWrite := min(Size, FWriteBufLeft);
   while BytesToWrite>0 do
@@ -272,12 +273,12 @@ begin
   var Len := Str.Length;
   SetLength(StrAnsi, Len);
   SetLength(StrAnsi, WideCharToMultiByte(FService.CodePage_US_ASCII, 0, PWideChar(Str), Len, PAnsiChar(StrAnsi), Len, nil, nil));
-  Write(PByte(PAnsiChar(StrAnsi)), Len);
+  WriteBuf(PByte(PAnsiChar(StrAnsi)), Len);
 end;
 
 procedure TdwlSocket.WriteUInt8(B: byte);
 begin
-  Write(@B, 1);
+  WriteBuf(@B, 1);
 end;
 
 procedure TdwlSocket.WSA_ShutdownOnError(ResultCode: Integer; const Op: string);
@@ -347,7 +348,7 @@ begin
   FSocketCS.Free;
 end;
 
-procedure TdwlSocket.DoRead(FData: PByte; NumberOfBytes: cardinal);
+procedure TdwlSocket.ReadHandlingBuffer(HandlingBuffer: PdwlHandlingBuffer);
 begin
   // base socket does not need to read ;-)
 end;
@@ -355,9 +356,9 @@ end;
 procedure TdwlSocket.FlushWrites(CloseConnection: boolean=false);
 begin
   FCloseConnection := CloseConnection;
-  if FWriteBufLeft<HANDLINGANDTRANSMIT_BUFFER_SIZE then
+  if FWriteBufLeft<DWL_TCP_BUFFER_SIZE then
   begin
-    FWriteBuffer.NumberOfBytes := HANDLINGANDTRANSMIT_BUFFER_SIZE-FWriteBufLeft;
+    FWriteBuffer.NumberOfBytes := DWL_TCP_BUFFER_SIZE-FWriteBufLeft;
     HandleCurrentWriteBuffer;
     if not CloseConnection then
       CreateWriteBuffer
@@ -441,9 +442,9 @@ end;
 function TdwlTCPService.AcquireTransmitBuffer(Socket: TdwlSocket; CompletionIndicator: byte): PdwlTransmitBuffer;
 begin
   GetMem(Result, Sizeof(TdwlTransmitBuffer));
-  Getmem(Result.WSABuf.buf, HANDLINGANDTRANSMIT_BUFFER_SIZE);
+  Getmem(Result.WSABuf.buf, DWL_TCP_BUFFER_SIZE);
   Result.Socket := Socket;
-  Result.WSABuf.len := HANDLINGANDTRANSMIT_BUFFER_SIZE; // also for existing buffers, could have been changed while sending
+  Result.WSABuf.len := DWL_TCP_BUFFER_SIZE; // also for existing buffers, could have been changed while sending
   ZeroMemory(@Result.Overlapped, SizeOf(TOverlapped));
   Result.CompletionIndicator := CompletionIndicator;
   Socket.FTransmitBuffers.Add(Result);
@@ -548,8 +549,8 @@ end;
 function TdwlTCPService.AcquireHandlingBuffer(Socket: TdwlSocket): PdwlHandlingBuffer;
 begin
   GetMem(Result, Sizeof(TdwlHandlingBuffer));
-  Getmem(Result.Buf, HANDLINGANDTRANSMIT_BUFFER_SIZE);
-  Result.NumberOfBytes := HANDLINGANDTRANSMIT_BUFFER_SIZE; // also for existing buffers, could have been changed while sending
+  Getmem(Result.Buf, DWL_TCP_BUFFER_SIZE);
+  Result.NumberOfBytes := DWL_TCP_BUFFER_SIZE; // also for existing buffers, could have been changed while sending
   Result.Socket := Socket;
   Socket.FHandlingBuffers.Add(Result);
 end;
@@ -596,9 +597,7 @@ begin
       end;
     except
       on E: Exception do
-      begin
         TdwlLogger.Log('TIoThread.Execute error: '+E.Message, lsError);
-      end;
     end;
   end;
   FService.FIoThreads.Remove(Self);
@@ -659,7 +658,7 @@ end;
 
 function TPlainIoHandler.SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
 begin
-  TransmitBuffer.Socket.DoRead(PByte(TransmitBuffer.WSABuf.buf), TransmitBuffer.WSABuf.len);
+  TransmitBuffer.Socket.ReadHandlingBuffer(@TransmitBuffer.HandlingBuffer);
   Result := true;
 end;
 
@@ -667,7 +666,7 @@ function TPlainIoHandler.SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffe
 begin
   var TransmitBuffer := HandlingBuffer.Socket.FService.AcquireTransmitBuffer(HandlingBuffer, COMPLETIONINDICATOR_WRITE);
   HandlingBuffer := nil; // to signal we took it
-  TransmitBuffer.Socket.SendBuffer(TransmitBuffer);
+  TransmitBuffer.Socket.SendTransmitBuffer(TransmitBuffer);
   Result := true;
 end;
 

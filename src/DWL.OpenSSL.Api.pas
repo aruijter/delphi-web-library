@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows;
 
-{.$DEFINE DELAYED}
+{$DEFINE DELAYED}
 
 {$I dwl.inc}
 

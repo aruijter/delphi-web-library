@@ -3,10 +3,13 @@ unit DWL.HTTP.Consts;
 interface
 
 const
+  HTTP_HEADER_CONNECTION = 'Connection';
   HTTP_HEADER_CONTENT_TYPE = 'Content-Type';
+  HTTP_HEADER_CONTENT_LENGTH = 'Content-Length';
   HTTP_HEADER_CONTENT_DISPOSITION = 'Content-Disposition';
   HTTP_HEADER_REPLAY_NONCE = 'Replay-Nonce';
   HTTP_HEADER_LOCATION = 'Location';
+  HTTP_HEADER_TRANSFER_ENCODING = 'Transfer-Encoding';
 
   HTTP_COMMAND_UNKNOWN = 'UNKNOWN';
   HTTP_COMMAND_HEAD = 'HEAD';
@@ -24,7 +27,12 @@ const
   CONTENT_TYPE_IMAGE_PNG = 'image/png';
   CONTENT_TYPE_7Z = 'application/x-7z-compressed';
 
+  CONNECTION_KEEP_ALIVE = 'Keep-Alive';
+  CONNECTION_CLOSE = 'Close';
+
   CHARSET_UTF8 = 'utf-8';
+
+  TRANSFER_ENCODING_CHUNCKED = 'chuncked';
 
   Param_BaseURI= 'baseuri';
   Param_Endpoint= 'endpoint';

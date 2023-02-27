@@ -11,10 +11,6 @@ type
   TdwlServerBinding=class;
   TdwlServerBindings=class;
 
-  TdwlServerSocketClass = class of TdwlServerSocket;
-  TdwlServerSocket = class(TdwlSocket)
-  end;
-
   TdwlServerBinding = class
   strict private
     FPort: word;
@@ -46,7 +42,7 @@ type
   strict private
     FBindings: TdwlServerBindings;
   private
-    FSocketClass: TdwlServerSocketClass;
+    FSocketClass: TdwlSocketClass;
     FAcceptIoCompletionPort: THandle;
     FAcceptIoThreads: TdwlThreadList<TThread>;
   protected
@@ -55,7 +51,7 @@ type
     procedure IoCompleted(TransmitBuffer: PdwlTransmitBuffer; NumberOfBytesTransferred: cardinal);
   public
     property Bindings: TdwlServerBindings read FBindings;
-    constructor Create(SocketClass: TdwlServerSocketClass);
+    constructor Create(SocketClass: TdwlSocketClass);
     destructor Destroy; override;
   end;
 
@@ -80,7 +76,7 @@ type
 
 { TdwlTCPServer }
 
-constructor TdwlTCPServer.Create(SocketClass: TdwlServerSocketClass);
+constructor TdwlTCPServer.Create(SocketClass: TdwlSocketClass);
 begin
   inherited Create;
   FSocketClass := SocketClass;
@@ -186,7 +182,7 @@ begin
   // if writebuffer is not yet used when closing socket
   // it will be freed by the socket self
   var Socket := FBindings.FServer.FSocketClass.Create(FBindings.FServer);
-  var TransmitBuffer := Socket.FService.AcquireTransmitBuffer(Socket, FListenIndex);
+  var TransmitBuffer := Socket.Service.AcquireTransmitBuffer(Socket, FListenIndex);
   var BytesReceived: cardinal;
   // we made the choice not to receive the first part of the data in the AcceptEx call
   CheckWSAResult(AcceptEx(FListenSocket, Socket.SocketHandle, TransmitBuffer.WSABuf.buf, 0,
