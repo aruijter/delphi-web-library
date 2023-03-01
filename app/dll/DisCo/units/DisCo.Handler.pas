@@ -12,6 +12,7 @@ type
     class function Get_phonehome(const State: PdwlHTTPHandlingState): boolean;
     class function Get_download_package(const State: PdwlHTTPHandlingState): boolean;
     class function Get_release(const State: PdwlHTTPHandlingState): boolean;
+    class function Get_releases(const State: PdwlHTTPHandlingState): boolean;
     class function Post_profileip(const State: PdwlHTTPHandlingState): boolean;
     class function Post_upload_package(const State: PdwlHTTPHandlingState): boolean;
   public
@@ -53,6 +54,7 @@ begin
   RegisterHandling(dwlhttpGET, '/phonehome', Get_phonehome, []);
   RegisterHandling(dwlhttpGET, '/download/package', Get_download_package, []);
   RegisterHandling(dwlhttpGET, '/release', Get_release, []);
+  RegisterHandling(dwlhttpGET, '/releases', Get_releases, [AdminScope]);
   RegisterHandling(dwlhttpPOST, '/profileip', Post_profileip, [AdminScope]);
   RegisterHandling(dwlhttpPOST, '/upload/package', Post_upload_package, [AdminScope]);
 end;
@@ -157,20 +159,55 @@ begin
     State.StatusCode := HTTP_STATUS_NO_CONTENT;
 end;
 
-class function THandler_DisCo.Get_download_package(const State: PdwlHTTPHandlingState): boolean;
+class function THandler_DisCo.Get_releases(const State: PdwlHTTPHandlingState): boolean;
 const
-  SQl_GetRelease = 'SELECT data, fileextension FROM dwl_disco_releases WHERE (packagename=?) AND (Kind=?) ORDER BY ReleaseMoment DESC LIMIT 1';
+  SQL_GetReleases = 'SELECT id, packagename, version, releasemoment, kind, fileextension FROM dwl_disco_releases';
 begin
   Result := true;
-  var PackageName: string;
-  if not TryGetRequestParamStr(State, 'packagename', PackageName, true) then
-    Exit;
-  var Kind: integer;
-  if not TryGetRequestParamInt(State, 'kind', Kind) then
-    Kind := discoreleasekindRelease;
-  var Cmd := MySQLCommand(State, SQl_GetRelease);
-  Cmd.Parameters.SetTextDataBinding(0, PackageName);
-  Cmd.Parameters.SetIntegerDataBinding(1, Kind);
+  var Cmd := MySQLCommand(State, SQL_GetReleases);
+  Cmd.Execute;
+  var JSON:= JSON_Data(State);
+  var Releases := TJSONArray.Create;
+  JSON.AddPair('releases', Releases);
+  while Cmd.Reader.Read do
+  begin
+    var Release := TJSONObject.Create;
+    Releases.Add(Release);
+    Release.AddPair('id', Cmd.Reader.GetString(0, true));
+    Release.AddPair('packagename', Cmd.Reader.GetString(1, true));
+    Release.AddPair('version', Cmd.Reader.GetString(2, true));
+    Release.AddPair('releasemoment', DateToISO8601(Cmd.Reader.GetDateTime(3, true)));
+    Release.AddPair('kind', TJSONNumber.Create(Cmd.Reader.GetInteger(4, true)));
+    Release.AddPair('fileextension', Cmd.Reader.GetString(5, true));
+  end;
+  JSON_Set_Success(State);
+end;
+
+class function THandler_DisCo.Get_download_package(const State: PdwlHTTPHandlingState): boolean;
+const
+  SQL_GetRelease = 'SELECT data, fileextension, packagename FROM dwl_disco_releases WHERE (packagename=?) AND (Kind=?) ORDER BY ReleaseMoment DESC LIMIT 1';
+  SQL_GetReleaseById = 'SELECT data, fileextension, packagename FROM dwl_disco_releases WHERE (id=?)';
+begin
+  Result := true;
+  var Id: integer;
+  var Cmd: IdwlMySQLCommand;
+  if TryGetRequestParamInt(State, 'id', Id) then
+  begin
+    Cmd := MySQLCommand(State, SQL_GetReleaseById);
+    Cmd.Parameters.SetIntegerDataBinding(0, Id);
+  end
+  else
+  begin
+    var PackageName: string;
+    if not TryGetRequestParamStr(State, 'packagename', PackageName, true) then
+      Exit;
+    var Kind: integer;
+    if not TryGetRequestParamInt(State, 'kind', Kind) then
+      Kind := discoreleasekindRelease;
+    Cmd := MySQLCommand(State, SQl_GetRelease);
+    Cmd.Parameters.SetTextDataBinding(0, PackageName);
+    Cmd.Parameters.SetIntegerDataBinding(1, Kind);
+  end;
   Cmd.Execute;
   if Cmd.Reader.Read then
   begin
@@ -183,7 +220,7 @@ begin
           serverProcs.ArrangeContentBufferProc(State, ContentBuffer, Size);
           Move(pBuffer^, ContentBuffer^, Size);
           State.SetContentType(CONTENT_TYPE_OCTET_STREAM);
-          State.SetHeaderValue(HTTP_HEADER_CONTENT_DISPOSITION, 'filename='+PackageName+'.'+Cmd.Reader.GetString(1));
+          State.SetHeaderValue(HTTP_HEADER_CONTENT_DISPOSITION, 'filename='+Cmd.Reader.GetString(2, true)+'.'+Cmd.Reader.GetString(1));
         end
         else
           State.StatusCode := HTTP_STATUS_NO_CONTENT;
