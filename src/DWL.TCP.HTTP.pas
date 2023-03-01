@@ -50,7 +50,7 @@ implementation
 
 uses
   Winapi.Windows, System.SysUtils, System.NetEncoding, Winapi.WinInet,
-  System.StrUtils, Access2000, DWL.HTTP.Utils, DWL.HTTP.Consts;
+  System.StrUtils, DWL.HTTP.Utils, DWL.HTTP.Consts;
 
 { TdwlCustomHTTPServer }
 

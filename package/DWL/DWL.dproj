@@ -192,6 +192,9 @@
         <DCCReference Include="..\..\src\DWL.Compression.pas"/>
         <DCCReference Include="..\..\src\DWL.DisCo.pas"/>
         <DCCReference Include="..\..\src\DWL.DisCo.Consts.pas"/>
+        <DCCReference Include="..\..\src\DWL.TCP.pas"/>
+        <DCCReference Include="..\..\src\DWL.TCP.SSL.pas"/>
+        <DCCReference Include="..\..\src\DWL.TCP.HTTP.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

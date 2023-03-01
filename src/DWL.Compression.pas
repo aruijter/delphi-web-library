@@ -10,6 +10,7 @@ type
   public
     class constructor Create;
     class function ExtractArchive(const ArchiveFileName: string; const DestinationDir: string=''; const Password: string=''; OnProgress: TJclCompressionProgressEvent=nil): TdwlResult; static;
+    class function ZipFile(const ArchiveFileName, FileToZip: string): TdwlResult; static;
   end;
 
 implementation
@@ -41,6 +42,22 @@ begin
       Archive.ExtractAll(DestinationDir, True);
     finally
       Archive.Free;
+    end;
+  except
+    on E: Exception do
+      Result.AddErrorMsg(E.Message);
+  end;
+end;
+
+class function TdwlCompression.ZipFile(const ArchiveFileName, FileToZip: string): TdwlResult;
+begin
+  try
+    var CompressArchive :=  TJcl7ZCompressArchive.Create(ArchiveFileName);
+    try
+      CompressArchive.AddFile(ExtractFilename(FileToZip), FileToZip);
+      CompressArchive.Compress;
+    finally
+      CompressArchive.Free;
     end;
   except
     on E: Exception do

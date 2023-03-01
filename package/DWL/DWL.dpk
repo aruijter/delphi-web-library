@@ -92,6 +92,9 @@ contains
   DWL.ToolsAPI in '..\..\src\DWL.ToolsAPI.pas',
   DWL.Compression in '..\..\src\DWL.Compression.pas',
   DWL.DisCo in '..\..\src\DWL.DisCo.pas',
-  DWL.DisCo.Consts in '..\..\src\DWL.DisCo.Consts.pas';
+  DWL.DisCo.Consts in '..\..\src\DWL.DisCo.Consts.pas',
+  DWL.TCP in '..\..\src\DWL.TCP.pas',
+  DWL.TCP.SSL in '..\..\src\DWL.TCP.SSL.pas',
+  DWL.TCP.HTTP in '..\..\src\DWL.TCP.HTTP.pas';
 
 end.
