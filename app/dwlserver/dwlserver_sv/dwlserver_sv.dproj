@@ -126,9 +126,7 @@
             <Form>DWL_Server</Form>
             <DesignClass>TService</DesignClass>
         </DCCReference>
-        <DCCReference Include="..\units\DWLServer.Consts.pas"/>
         <DCCReference Include="..\units\DWLServer.Section.pas"/>
-        <DCCReference Include="..\units\DWLServer.Server.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

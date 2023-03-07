@@ -1,8 +1,8 @@
 library HelloWorld;
 
 uses
-  DWL.HTTP.Server.Globals,
-  DWL.HTTP.Server.Types,
+  DWL.Server.Globals,
+  DWL.Server.Types,
   System.SysUtils,
   HelloWorld.Handler in 'units\HelloWorld.Handler.pas';
 

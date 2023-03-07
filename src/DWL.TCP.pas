@@ -56,10 +56,18 @@ const
     FShutdownTick: UInt64;
     FTransmitBuffers: TdwlThreadList<PdwlTransmitBuffer>;
     FHandlingBuffers: TdwlThreadList<PdwlHandlingBuffer>;
+    FIp_Local: string;
+    FIp_Remote: string;
+    FPort_Local: word;
+    FPort_Remote: word;
   protected
     FService: TdwlTCPService;
     procedure CreateWriteBuffer;
   public
+    property Ip_Local: string read FIp_Local;
+    property Ip_Remote: string read FIp_Remote;
+    property Port_Local: word read FPort_Local;
+    property Port_Remote: word read FPort_Remote;
     property Service: TdwlTCPService read FService;
     property SocketHandle: TSocket read FSocketHandle;
     property SocketVars: pointer read FSocketVars;
@@ -73,7 +81,7 @@ const
     procedure ShutdownDetected;
     procedure StartReceiving;
     procedure WriteBuf(Buf: PByte; Size: integer);
-    procedure WriteLine(const Str: string);
+    procedure WriteLine(const Str: string='');
     procedure WriteStr(const Str: string);
     procedure WriteUInt8(B: byte);
   end;
@@ -103,6 +111,7 @@ const
   protected
     procedure InternalActivate; virtual;
     procedure InternalDeActivate; virtual;
+    procedure SetSocketAddresses(Socket: TdwlSocket; const Ip_Local: string; Port_Local: word; const Ip_Remote: string; Port_Remote: word);
   public
     property Active: boolean read FActive write SetActive;
     property CodePage_US_ASCII: integer read FCodePage_US_ASCII;
@@ -202,6 +211,8 @@ end;
 procedure TdwlSocket.SendTransmitBuffer(TransmitBuffer: PdwlTransmitBuffer);
 begin
   WSA_ShutdownOnError(WSASend2(SocketHandle, @TransmitBuffer.WSABuf, 1, nil, 0, LPWSAOVERLAPPED(TransmitBuffer), nil), 'WSASend');
+  TdwlLogger.Log('Sent '+TransmitBuffer.WSABuf.len.ToString+' '+NativeUInt(TransmitBuffer).ToString);
+  AtomicIncrement(FWritesInProgress);
 end;
 
 procedure TdwlSocket.Shutdown;
@@ -260,7 +271,7 @@ begin
   end;
 end;
 
-procedure TdwlSocket.WriteLine(const Str: string);
+procedure TdwlSocket.WriteLine(const Str: string='');
 begin
   WriteStr(Str);
   WriteUInt8(13);
@@ -426,6 +437,7 @@ begin
       end;
     COMPLETIONINDICATOR_WRITE:
       begin
+        TdwlLogger.Log('Compl '+NumberOfBytesTransferred.ToString+' van '+TransmitBuffer.WSABuf.len.ToString+' '+NativeUInt(TransmitBuffer).ToString);
         FService.ReleaseTransmitBuffer(TransmitBuffer);
         AtomicDecrement(FWritesInProgress);
       end;
@@ -444,7 +456,7 @@ begin
   GetMem(Result, Sizeof(TdwlTransmitBuffer));
   Getmem(Result.WSABuf.buf, DWL_TCP_BUFFER_SIZE);
   Result.Socket := Socket;
-  Result.WSABuf.len := DWL_TCP_BUFFER_SIZE; // also for existing buffers, could have been changed while sending
+  Result.WSABuf.len := DWL_TCP_BUFFER_SIZE;
   ZeroMemory(@Result.Overlapped, SizeOf(TOverlapped));
   Result.CompletionIndicator := CompletionIndicator;
   Socket.FTransmitBuffers.Add(Result);
@@ -541,16 +553,24 @@ end;
 
 procedure TdwlTCPService.ReleaseTransmitBuffer(TransmitBuffer: PdwlTransmitBuffer);
 begin
+  try
+  if not TransmitBuffer.Socket.FTransmitBuffers.Contains(TransmitBuffer) then
+    TdwlLogger.Log('NOT FOUND')
+  else
+  begin
   TransmitBuffer.Socket.FTransmitBuffers.Remove(TransmitBuffer);
   FreeMem(TransmitBuffer.WSABuf.buf);
   FreeMem(TransmitBuffer);
+  end;
+  except
+  end;
 end;
 
 function TdwlTCPService.AcquireHandlingBuffer(Socket: TdwlSocket): PdwlHandlingBuffer;
 begin
   GetMem(Result, Sizeof(TdwlHandlingBuffer));
   Getmem(Result.Buf, DWL_TCP_BUFFER_SIZE);
-  Result.NumberOfBytes := DWL_TCP_BUFFER_SIZE; // also for existing buffers, could have been changed while sending
+  Result.NumberOfBytes := DWL_TCP_BUFFER_SIZE;
   Result.Socket := Socket;
   Socket.FHandlingBuffers.Add(Result);
 end;
@@ -564,6 +584,14 @@ begin
   else
     InternalDeActivate;
   FActive := Value;
+end;
+
+procedure TdwlTCPService.SetSocketAddresses(Socket: TdwlSocket; const IP_Local: string; Port_Local: word; const IP_Remote: string; Port_Remote: word);
+begin
+  Socket.FIp_Local := Ip_Local;
+  Socket.FPort_Local := Port_Local;
+  Socket.FIp_Remote := Ip_Remote;
+  Socket.FPort_Remote := Port_Remote;
 end;
 
 { TIoThread }

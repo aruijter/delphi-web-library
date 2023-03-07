@@ -9,12 +9,12 @@
 //      This makes it possible to share state manupilation code between modules
 ///   </para>
 /// </summary>
-unit DWL.HTTP.Server.Globals;
+unit DWL.Server.Globals;
 
 interface
 
 uses
-  DWL.HTTP.Server.Types;
+  DWL.Server.Types;
 
 var
   serverProcs: TdwlCallBackProcs;

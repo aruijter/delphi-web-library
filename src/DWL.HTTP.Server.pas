@@ -10,35 +10,19 @@ interface
 
 uses
   IdCustomHTTPServer, System.SysUtils, IdContext, System.SyncObjs,
-  DWL.HTTP.Server.Types, System.Generics.Collections, IdHTTPServer,
-  IdSocketHandle;
+  System.Generics.Collections, IdHTTPServer,
+  IdSocketHandle, DWL.Server.Types;
 
 type
   TdwlHTTPServer=class;
-  TdwlHTTPHandler=class;
 
-  /// <summary>
-  ///   <para>
-  ///     A HTTP server specifically designed to be able to server content by self
-  ///     developed handlers. All basic requirements to be able to quickly
-  ///     have a self developed Web or Rest server running are centralized in
-  ///     this object.
-  ///   </para>
-  ///   <para>
-  ///     Although it can function completely on its own, the main usage of
-  ///     this class is the app dwlserver.
-  ///   </para>
-  /// </summary>
   TdwlHTTPServer = class
   strict private
+    FServer: TObject;
     FOnlyLocalConnections: boolean;
     FRequestsInProgress: TDictionary<TIdContext, PdwlHTTPHandlingState>;
     FRequestsInProgressAccess: TCriticalSection;
-    FRootHandlerAccess: TMultiReadExclusiveWriteSynchronizer;
-    FRootHandler: TdwlHTTPHandler;
     FHTTPServer: TIdHTTPServer;
-    FURIAliases: TDictionary<string, string>;
-    FLogLevel: byte;
     // SSL fields
     FSSL_HostName: string;
     FSSL_CertificateFileName: string;
@@ -49,13 +33,7 @@ type
     procedure HTTPServerDisconnect(AContext: TIdContext);
     procedure HTTPServerParseAuthentication(AContext: TIdContext; const AAuthType, AAuthData: String; var VUsername, VPassword: String; var VHandled: Boolean);
     procedure QuerySSLPort(APort: Word; var VUseSSL: boolean);
-    function GetActive: boolean;
   public
-    /// <summary>
-    ///   Set Active to true to have the server to bootstrap and start
-    ///   listening to requests
-    /// </summary>
-    property Active: boolean read GetActive;
     /// <summary>
     ///   user Bindings to bind to physical ip/port combinations. This directly
     ///   refers to the Binding property of th Indy HTTP server
@@ -65,11 +43,9 @@ type
     ///   The minimum loglevel to use when logging requests. See loglevel
     ///   consts for details about the levels
     /// </summary>
-    property LogLevel: byte read FLogLevel write FLogLevel;
     property OnlyLocalConnections: boolean read FOnlyLocalConnections write FOnlyLocalConnections;
-    constructor Create;
+    constructor Create(Server: TObject);
     destructor Destroy; override;
-    function BaseURI: string;
     /// <summary>
     ///   <para>
     ///     Adds an hostname by providing certificate details.
@@ -87,88 +63,12 @@ type
     /// </summary>
     procedure AddHostName(const HostName, CertificateFileName, RootCertificateFileName, PrivateKeyFileName: string);
     /// <summary>
-    ///   By adding and URL alias, in the case the alias URI is called by a
-    ///   client, the traffice is rerouted to the given URI Handler
-    /// </summary>
-    procedure AddURIAlias(const Alias, Uri: string);
-    /// <summary>
-    ///   Removes all currentley know URI aliases
-    /// </summary>
-    procedure ClearURIAliases;
-    /// <summary>
-    ///   if an Hostname including certificates is added through AddHostName
-    ///   the SSL protocol is activated and this function returns true
-    /// </summary>
-    function IsSecure: boolean;
-    /// <summary>
-    ///   Get the handler bound to the given URI
-    /// </summary>
-    function FindHandler(const URI: string): TdwlHTTPHandler;
-    /// <summary>
-    ///   register a handler bound to a URI. All requests starting with this
-    ///   specific URI will be routed through this handler
-    /// </summary>
-    procedure RegisterHandler(const URI: string; Handler: TdwlHTTPHandler);
-    /// <summary>
-    ///   Unregister the handler bound to a specific URI
-    /// </summary>
-    function UnRegisterHandler(const URI: string): boolean;
-    /// <summary>
-    ///   This will suspend handling, the server will stay active, but the
-    ///   handling of the requests will be delayed until ResumeHandling is
-    ///   called. Do not suspend handling for a long time.
-    /// </summary>
-    procedure SuspendHandling;
-    /// <summary>
-    ///   Resumes handling after it was delayed by Suspendhandling
-    /// </summary>
-    procedure ResumeHandling;
-    /// <summary>
     ///   Active the server and start processing requests
     /// </summary>
     procedure Open;
-    /// <summary>
-    ///   FinalizeSessions will wait until all pending requests have been
-    ///   processed.
-    /// </summary>
-    procedure FinalizeSessions;
   end;
 
-  /// <summary>
-  ///   The TdwlHTTPHandler class is the base class from which you can derive
-  ///   you own handler to process requests
-  /// </summary>
-  TdwlHTTPHandler = class
-  private
-    FHTTPServer: TdwlHTTPServer;
-    FURI: string;
-  protected
-    /// <summary>
-    ///   If the variable FWrapupProc is assigned, it will be called everything a process has finished
-    ///   The handler then can free request specific resources
-    ///   When the handler is destroyed, this function will be called with nil parameter
-    ///   to indicate that globals resources can be freed
-    /// </summary>
-    FWrapupProc: TdwlWrapupProc;
-    /// <summary>
-    ///   The HTTPServer from which this request originated
-    /// </summary>
-    property HTTPServer: TdwlHTTPServer read FHTTPServer;
-    /// <summary>
-    ///   Override this abstract function and implement the actual process in
-    ///   this function
-    /// </summary>
-    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; virtual; abstract;
-    function LogDescription: string; virtual;
-  public
-    destructor Destroy; override;
-    /// <summary>
-    ///   When authorizing clients, the handler that will actual handle the
-    ///   request will first be asked to authorize the user and allow this
-    ///   user to execute the functions implemented in this handler
-    /// </summary>
-    function Authorize(const State: PdwlHTTPHandlingState): boolean; virtual;
-  end;
+procedure AssignServerProcs;
 
 implementation
 
@@ -176,38 +76,22 @@ uses
   System.Classes, Winapi.Windows, Winapi.WinInet,
   IdGlobal, IdHashSHA,
   System.NetEncoding, IdSSLOpenSSL, DWL.Logging, DWL.HTTP.Consts,
-  IdAssignedNumbers, System.StrUtils, DWL.HTTP.Server.Utils,
-  DWL.HTTP.Server.Globals, DWL.HTTP.Utils, DWL.Classes;
+  IdAssignedNumbers, System.StrUtils, DWL.Server.Utils,
+  DWL.Server.Globals, DWL.HTTP.Utils, DWL.Classes, DWL.Server;
 
 type
-  TdwlHTTPHandler_PassThrough = class(TdwlHTTPHandler)
-  strict private
-    FHandlers: TObjectDictionary<string, TdwlHTTPHandler>;
-  private
-    function FindHandler(const URI: string): TdwlHTTPHandler;
-    procedure RegisterHandler(const URI: string; Handler: TdwlHTTPHandler);
-    function UnRegisterHandler(const URI: string): boolean;
-  protected
-    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
-  public
-    constructor Create;
-    destructor Destroy; override;
-    function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
-  end;
-
   PServerStructure = ^TServerStructure;
   TServerStructure = record
     State_URI: string;
+    FinalHandler: TdwlHTTPHandler;
+    Tick: UInt64;
+    WebSocketsReceiveProc: TdwlHTTPWebSocket_OnData;
     ContentBuffer: pointer;
     ContentLength: cardinal;
     ContentOwned: boolean;
-    HTTPServer: TdwlHTTPServer;
     Context: TIdContext;
     RequestInfo: TIdHTTPRequestInfo;
     ResponseInfo: TIdHTTPResponseInfo;
-    Tick: UInt64;
-    FinalHandler: TdwlHTTPHandler;
-    WebSocketsReceiveProc: TdwlHTTPWebSocket_OnData;
   end;
 
 { TdwlHTTPServer }
@@ -217,7 +101,7 @@ procedure TdwlHTTPServer.HTTPServerDisconnect(AContext: TIdContext);
   begin
     var FinalHandler := PServerStructure(State._InternalServerStructure).FinalHandler;
     if FinalHandler<>nil then
-      Result := FinalHandler.FURI
+      Result := FinalHandler.URI
     else
       Result := '';
     Result := 'Rq '+AContext.Binding.PeerIP+':'+AContext.Binding.Port.ToString+' '+
@@ -247,18 +131,18 @@ begin
         TdwlLogger.Log(GetLogLine(State)+' (websocket closed)', lsTrace)
       else
       begin
-        if (State.StatusCode<>HTTP_STATUS_OK) and (LogLevel>=httplogLevelFailedRequests) then
+        if (State.StatusCode<>HTTP_STATUS_OK) and (TDWLServer(FServer).LogLevel>=httplogLevelFailedRequests) then
           TdwlLogger.Log(GetLogLine(State), lsNotice)
         else
         begin
-          if LogLevel>=httplogLevelAllRequests then
+          if TDWLServer(FServer).Loglevel>=httplogLevelAllRequests then
             TdwlLogger.Log(GetLogLine(State), lsTrace)
         end;
       end;
     end
     else
     begin
-      if LogLevel>=httplogLevelEverything then
+      if TDWLServer(FServer).LogLevel>=httplogLevelEverything then
         TdwlLogger.Log(GetLogLine(State), lsTrace);
     end;
     // for safety: feed zero bytes to signal we're finished! (if connection thread was stopped this has never been done in the thread)
@@ -270,8 +154,8 @@ begin
     if  PServerStructure(State._InternalServerStructure).ContentOwned then
       FreeMem(PServerStructure(State._InternalServerStructure).ContentBuffer);
     if Assigned(PServerStructure(State._InternalServerStructure).FinalHandler) and
-      Assigned(PServerStructure(State._InternalServerStructure).FinalHandler.FWrapupProc) then
-      PServerStructure(State._InternalServerStructure).FinalHandler.FWrapupProc(State);
+      Assigned(PServerStructure(State._InternalServerStructure).FinalHandler.WrapupProc) then
+      PServerStructure(State._InternalServerStructure).FinalHandler.WrapupProc(State);
     PServerStructure(State._InternalServerStructure).State_URI := ''; // dispose string
     Freemem(State._InternalServerStructure);
     FreeMem(State);
@@ -283,26 +167,6 @@ begin
   VHandled := true; // This is to let a bearer token come through without error, this is handled by the server internally
 end;
 
-function TdwlHTTPServer.IsSecure: boolean;
-begin
-  Result := FSSL_HostName<>'';
-end;
-
-procedure TdwlHTTPServer.SuspendHandling;
-begin
-  FRootHandlerAccess.BeginWrite;
-end;
-
-function TdwlHTTPServer.UnRegisterHandler(const URI: string): boolean;
-begin
-  FRootHandlerAccess.BeginWrite;
-  try
-    Result := TdwlHTTPHandler_PassThrough(FRootHandler).UnRegisterHandler(URI);
-  finally
-    FRootHandlerAccess.EndWrite;
-  end;
-end;
-
 procedure TdwlHTTPServer.AddHostName(const HostName, CertificateFileName, RootCertificateFileName, PrivateKeyFileName: string);
 begin
   FSSL_HostName := HostName;
@@ -311,31 +175,10 @@ begin
   FSSL_PrivateKeyFileName := PrivateKeyFileName;
 end;
 
-procedure TdwlHTTPServer.AddURIAlias(const Alias, Uri: string);
-begin
-  if FURIAliases=nil then
-    FURIAliases := TDictionary<string, string>.Create;
-  FURIAliases.Add(Alias, Uri);
-end;
-
-function TdwlHTTPServer.BaseURI: string;
-begin
-  // The base uri is ALWAYS the standard port!!
-  // Listenport is not taken into account
-  Result := IfThen(IsSecure, 'https', 'http')+'://'+
-    IfThen(FSSL_HostName='', 'localhost', FSSL_HostName);
-end;
-
-procedure TdwlHTTPServer.ClearURIAliases;
-begin
-  if FURIAliases<>nil then
-    FURIAliases.Clear;
-end;
-
-constructor TdwlHTTPServer.Create;
+constructor TdwlHTTPServer.Create(Server: TObject);
 begin
   inherited Create;
-  FRootHandlerAccess := TMultiReadExclusiveWriteSynchronizer.Create;
+  FServer := Server;
   FRequestsInProgressAccess := TCriticalSection.Create;
   FRequestsInProgress := TDictionary<TIDContext, PdwlHTTPHandlingState>.Create;
   FHTTPServer := TIdHTTPServer.Create(nil);
@@ -343,51 +186,14 @@ begin
   FHTTPServer.OnCommandGet := HTTPServerCommand;
   FHTTPServer.OnDisconnect := HTTPServerDisconnect;
   FHTTPServer.OnParseAuthentication := HTTPServerParseAuthentication;
-  FRootHandler := TdwlHTTPHandler_PassThrough.Create;
-  FRootHandler.FHTTPServer := Self;
 end;
 
 destructor TdwlHTTPServer.Destroy;
 begin
   FHTTPServer.Free;
-  FRootHandler.Free;
-  FRootHandlerAccess.Free;
   FRequestsInProgress.Free;
   FRequestsInProgressAccess.Free;
-  FURIAliases.Free;
   inherited Destroy;
-end;
-
-procedure TdwlHTTPServer.FinalizeSessions;
-  function GetCount: word;
-  begin
-    FRequestsInProgressAccess.Enter;
-    try
-      Result := FRequestsInProgress.Count;
-    finally
-      FRequestsInProgressAccess.Leave;
-    end;
-  end;
-begin
-  while GetCount>0 do
-  begin
-    Sleep(200);
-  end;
-end;
-
-function TdwlHTTPServer.FindHandler(const URI: string): TdwlHTTPHandler;
-begin
-  FRootHandlerAccess.BeginRead;
-  try
-    Result := TdwlHTTPHandler_PassThrough(FRootHandler).FindHandler(URI);
-  finally
-    FRootHandlerAccess.EndRead;
-  end;
-end;
-
-function TdwlHTTPServer.GetActive: boolean;
-begin
-  Result := FHTTPServer.Active;
 end;
 
 function TdwlHTTPServer.GetBindings: TIdSocketHandles;
@@ -596,37 +402,13 @@ begin
     FRequestsInProgressAccess.Leave;
   end;
   try
-    // all strings that are put in State as PWiderChar should 'live'
-    // until State will be freed
-    // We arranged this by putting the strings that are referenced in the state
-    // are kept in the serverstructure
     State._InternalServerStructure := AllocMem(SizeOf(TServerStructure));
     State.Command := TdwlHTTPUtils.StringTodwlhttpCommand(ARequestInfo.Command);
-    if (FURIAliases=nil) or not FURIAliases.TryGetValue(ARequestInfo.URI, PServerStructure(State._InternalServerStructure).State_URI) then
-      PServerStructure(State._InternalServerStructure).State_URI := ARequestInfo.URI;
-    State.URI := PWideChar(PServerStructure(State._InternalServerStructure).State_URI);
-    State.Flags := 0;
-    PServerStructure(State._InternalServerStructure).HTTPServer := Self;
     PServerStructure(State._InternalServerStructure).RequestInfo := ARequestInfo;
     PServerStructure(State._InternalServerStructure).ResponseInfo := AResponseInfo;
     PServerStructure(State._InternalServerStructure).Context := AContext;
-    if (LogLevel>=httplogLevelFailedRequests) then
-      PServerStructure(State._InternalServerStructure).Tick := GetTickCount64;
-
-    AResponseInfo.CustomHeaders.AddValue('Cache-Control', 'no-cache');
-    State.StatusCode := HTTP_STATUS_OK;
-    FRootHandlerAccess.BeginRead;
-    try
-      // RootHandler never needs Authentication Control
-      // So no need to check here, just process request
-      if (not FRootHandler.ProcessRequest(State)) then
-      begin
-        State.StatusCode := HTTP_STATUS_NOT_FOUND;
-        State.SetContentText('<!DOCTYPE html><html lang=""><head><title>Not Found</title></head><body>Not Found</body></html>');
-      end;
-    finally
-      FRootHandlerAccess.EndRead;
-    end;
+    PServerStructure(State._InternalServerStructure).State_URI := ARequestInfo.URI;
+    TDWLServer(FServer).ProcessRequest(State);
   except
     on E: Exception do
     begin
@@ -667,8 +449,6 @@ end;
 
 procedure TdwlHTTPServer.Open;
 begin
-  if Active then
-    Exit;
   if FSSL_CertificateFileName<>'' then
   begin
     var HandleSSL := TIdServerIOHandlerSSLOpenSSL.Create(FHTTPServer);
@@ -684,194 +464,17 @@ end;
 
 procedure TdwlHTTPServer.QuerySSLPort(APort: Word; var VUseSSL: boolean);
 begin
-  VUseSSL := IsSecure;
+  VUseSSL := FSSL_HostName<>'';
 end;
 
-procedure TdwlHTTPServer.RegisterHandler(const URI: string; Handler: TdwlHTTPHandler);
+procedure AssignServerProcs;
 begin
-  FRootHandlerAccess.BeginWrite;
-  try
-    TdwlHTTPHandler_PassThrough(FRootHandler).RegisterHandler(URI, Handler);
-  finally
-    FRootHandlerAccess.EndWrite;
-  end;
-end;
-
-procedure TdwlHTTPServer.ResumeHandling;
-begin
-  FRootHandlerAccess.EndWrite;
-end;
-
-{ TdwlHTTPHandler_PassThrough }
-
-function TdwlHTTPHandler_PassThrough.Authorize(const State: PdwlHTTPHandlingState): boolean;
-begin
-  // Authorization is always passed through, so for me its ok now!
-  Result := true;
-end;
-
-constructor TdwlHTTPHandler_PassThrough.Create;
-begin
-  FHandlers := TObjectDictionary<string, TdwlHTTPHandler>.Create([doOwnsValues]);
-end;
-
-destructor TdwlHTTPHandler_PassThrough.Destroy;
-begin
-  FHandlers.Free;
-  inherited Destroy;
-end;
-
-function TdwlHTTPHandler_PassThrough.FindHandler(const URI: string): TdwlHTTPHandler;
-begin
-  Result := nil;
-  if Copy(URI, 1, 1)<>'/' then
-    Exit;
-  var S := Copy(URI, 2, MaxInt);
-  var P := Pos('/', S);
-  var URISegment: string;
-  if P>1 then
-    URISegment := Copy(S, 1, P-1)
-  else
-    URISegment := S;
-  var Handler: TdwlHTTPHandler;
-  if not FHandlers.TryGetValue(URISegment, Handler) then
-    Exit;
-  if P<1 then // we reached the end: found
-    Result := Handler
-  else
-  begin
-    if (Handler is TdwlHTTPHandler_PassThrough) then
-      Result := TdwlHTTPHandler_PassThrough(Handler).FindHandler(Copy(S, P, MaxInt));
-  end;
-end;
-
-function TdwlHTTPHandler_PassThrough.ProcessRequest(const State: PdwlHTTPHandlingState): boolean;
-begin
-  Result := false;
-  var New_URI := PServerStructure(State._InternalServerStructure).State_URI;
-  if Copy(New_URI, 1, 1)<>'/' then
-    Exit;
-  var S := Copy(New_URI, 2, MaxInt);
-  var P := Pos('/', S);
-  var P2 := Pos('?' , S);
-  if (P2>0) and (P2<P) then
-    P := P2;
-  if P=0 then
-    P := MaxInt;
-  var Handler: TdwlHTTPHandler;
-  if FHandlers.TryGetValue(Copy(S, 1, P-1), Handler) then
-  begin
-    New_URI := Copy(S, P, MaxInt);
-    PServerStructure(State._InternalServerStructure).State_URI := New_URI;
-    State.URI := PWideChar(PServerStructure(State._InternalServerStructure).State_URI);
-    // Do a security check
-    // Before passing request to the found handler
-    if Handler.Authorize(State) then
-    begin
-      PServerStructure(State._InternalServerStructure).FinalHandler := Handler;
-      Result := Handler.ProcessRequest(State)
-    end
-    else
-    begin
-      // We issue a not found (instead of a denied), because this doesn't reveal unneeded information
-      // and if the url is temporary not available, giving a 401 will result in logging out
-      // in some clients which we want to prevent
-      State.StatusCode := HTTP_STATUS_NOT_FOUND;
-      State.SetContentText('<html>Not found.</html>');
-      Result := true;
-    end;
-  end;
-end;
-
-procedure TdwlHTTPHandler_PassThrough.RegisterHandler(const URI: string; Handler: TdwlHTTPHandler);
-begin
-  if Copy(URI, 1, 1)<>'/' then
-    raise Exception.Create('URI does not start with a slash');
-  var S := Copy(URI, 2, MaxInt);
-  var P := Pos('/', S);
-  if P>1 then
-  begin
-    var URISegment := Copy(S, 1, P-1);
-    var PassThroughHandler: TdwlHTTPHandler;
-    if FHandlers.TryGetValue(URISegment, PassThroughHandler) then
-    begin
-      if not (PassThroughHandler is TdwlHTTPHandler_PassThrough) then
-        raise Exception.Create('URI '+URI+' is already associated with another handler');
-    end
-    else
-    begin
-      PassThroughHandler := TdwlHTTPHandler_PassThrough.Create;
-      PassThroughHandler.FHTTPServer := HTTPServer;
-      PassThroughHandler.FURI := FURI+URISegment;
-      FHandlers.Add(URISegment, PassThroughHandler);
-    end;
-    TdwlHTTPHandler_PassThrough(PassThroughHandler).RegisterHandler(Copy(S, P, MaxInt), Handler);
-  end
-  else
-  begin
-    FHandlers.Add(S, Handler);
-    Handler.FHTTPServer := HTTPServer;
-    Handler.FURI := FURI+URI;
-  end;
-end;
-
-function TdwlHTTPHandler_PassThrough.UnRegisterHandler(const URI: string): boolean;
-begin
-  Result := false;
-  if Copy(URI, 1, 1)<>'/' then
-    Exit;
-  var S := Copy(URI, 2, MaxInt);
-  var P := Pos('/', S);
-  var URISegment: string;
-  if P>1 then
-    URISegment := Copy(S, 1, P-1)
-  else
-    URISegment := S;
-  var Handler: TdwlHTTPHandler;
-  if not FHandlers.TryGetValue(URISegment, Handler) then
-    Exit;
-  if P<1 then
-  begin  // we reached the end: Do the actual unregister
-    FHandlers.Remove(URISegment);
-    Result := true;
-  end
-  else
-  begin
-    if (Handler is TdwlHTTPHandler_PassThrough) then
-      Result := TdwlHTTPHandler_PassThrough(Handler).UnRegisterHandler(Copy(S, P, MaxInt));
-  end;
-end;
-
-{ TdwlHTTPHandler }
-
-function TdwlHTTPHandler.Authorize(const State: PdwlHTTPHandlingState): boolean;
-begin
-  Result := false;
-end;
-
-destructor TdwlHTTPHandler.Destroy;
-begin
-  if Assigned(FWrapUpProc) then
-  try
-    FWrapUpProc(nil);
-  except
-    On E: Exception do
-      TdwlLogger.Log(LogDescription+': exception on wrapup: '+E.Message, lsError)
-  end;
-  inherited Destroy;
-end;
-
-function TdwlHTTPHandler.LogDescription: string;
-begin
-  Result := Classname;
-end;
-
-initialization
   serverProcs.ArrangeContentBufferProc := State_ArrangeContentBuffer;
   serverProcs.GetRequestParamProc := State_GetRequestParam;
   serverProcs.GetHeaderValueProc := State_GetHeaderValue;
   serverProcs.GetPayloadPtrProc := State_GetPostDataPtr;
   serverProcs.SetHeaderValueProc := State_SetHeaderValue;
   serverProcs.ActivateWebSocketproc := State_ActivateWebSocket;
+end;
 
 end.

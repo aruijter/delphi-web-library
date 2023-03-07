@@ -140,10 +140,6 @@
         <DCCReference Include="vclie.dcp"/>
         <DCCReference Include="vcledge.dcp"/>
         <DCCReference Include="Jcl.dcp"/>
-        <DCCReference Include="..\..\src\DWL.HTTP.Server.Handler.Log.pas"/>
-        <DCCReference Include="..\..\src\DWL.HTTP.Server.pas"/>
-        <DCCReference Include="..\..\src\DWL.HTTP.Server.Types.pas"/>
-        <DCCReference Include="..\..\src\DWL.HTTP.Server.Utils.pas"/>
         <DCCReference Include="..\..\src\DWL.HTTP.Utils.pas"/>
         <DCCReference Include="..\..\src\DWL.JOSE.pas"/>
         <DCCReference Include="..\..\src\DWL.Logging.API.pas"/>
@@ -169,9 +165,6 @@
         <DCCReference Include="..\..\src\DWL.Crypt.pas"/>
         <DCCReference Include="..\..\src\DWL.HTTP.Client.pas"/>
         <DCCReference Include="..\..\src\DWL.HTTP.Consts.pas"/>
-        <DCCReference Include="..\..\src\DWL.HTTP.Server.Globals.pas"/>
-        <DCCReference Include="..\..\src\DWL.HTTP.Server.Handler.DLL.Classes.pas"/>
-        <DCCReference Include="..\..\src\DWL.HTTP.Server.Handler.DLL.pas"/>
         <DCCReference Include="..\..\src\DWL.Imports.WbemScripting_TLB.pas"/>
         <DCCReference Include="..\..\src\DWL.Rtti.Utils.pas"/>
         <DCCReference Include="..\..\src\DWL.HTTP.APIClient.pas"/>
@@ -183,7 +176,6 @@
         <DCCReference Include="..\..\src\DWL.TCP.Server.pas"/>
         <DCCReference Include="..\..\src\DWL.ConvUtils.pas"/>
         <DCCReference Include="..\..\src\DWL.HTTP.APIClient.UserPw.pas"/>
-        <DCCReference Include="..\..\src\DWL.HTTP.Server.Handler.Mail.pas"/>
         <DCCReference Include="..\..\src\DWL.IOUtils.pas"/>
         <DCCReference Include="..\..\src\DWL.Logging.TextFile.pas"/>
         <DCCReference Include="..\..\src\DWL.Mail.SASL.pas"/>
@@ -195,6 +187,15 @@
         <DCCReference Include="..\..\src\DWL.TCP.pas"/>
         <DCCReference Include="..\..\src\DWL.TCP.SSL.pas"/>
         <DCCReference Include="..\..\src\DWL.TCP.HTTP.pas"/>
+        <DCCReference Include="..\..\src\DWL.Server.Handler.DLL.pas"/>
+        <DCCReference Include="..\..\src\DWL.Server.Handler.Log.pas"/>
+        <DCCReference Include="..\..\src\DWL.Server.Handler.Mail.pas"/>
+        <DCCReference Include="..\..\src\DWL.Server.pas"/>
+        <DCCReference Include="..\..\src\DWL.Server.Types.pas"/>
+        <DCCReference Include="..\..\src\DWL.Server.Utils.pas"/>
+        <DCCReference Include="..\..\src\DWL.Server.Consts.pas"/>
+        <DCCReference Include="..\..\src\DWL.Server.Globals.pas"/>
+        <DCCReference Include="..\..\src\DWL.Server.Handler.DLL.Classes.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

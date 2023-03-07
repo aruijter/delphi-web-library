@@ -3,8 +3,8 @@ unit OAuth2.Handler;
 interface
 
 uses
-  DWL.OpenID, DWL.Types, DWL.JOSE, DWL.HTTP.Server.Types,
-  DWL.HTTP.Server.Handler.DLL.Classes, DWL.OpenSSL, System.Generics.Collections,
+  DWL.OpenID, DWL.Types, DWL.JOSE, DWL.Server.Types,
+  DWL.Server.Handler.DLL.Classes, DWL.OpenSSL, System.Generics.Collections,
   Winapi.WinInet, DWL.Logging, System.Classes;
 
 const
@@ -102,7 +102,7 @@ implementation
 uses
   System.SysUtils, System.NetEncoding, DWL.Params.Consts, DWL.MySQL,
   System.JSON, DWL.HTTP.Consts,
-  DWL.Crypt, System.StrUtils, DWL.HTTP.Server.Utils;
+  DWL.Crypt, System.StrUtils, DWL.Server.Utils;
 
 const
   OIDC_Return_Path = '/oidc_return';

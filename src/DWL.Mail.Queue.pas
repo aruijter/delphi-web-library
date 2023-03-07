@@ -18,6 +18,7 @@ type
     class procedure ParamChanged(Sender: IdwlParams; const Key: string; const Value: TValue); static;
     class procedure CreateMailSendThread; static;
     class procedure CheckMailSendThread; static;
+    class procedure KillMailSendThread; static;
   private
   class var
     FMailAddedEvent: THandle;
@@ -125,7 +126,11 @@ const
     'PRIMARY KEY (Id), ' +
     'INDEX `StatusDelayedUntilIndex` (`Status`, `DelayedUntil`))';
 begin
-  FParams := Params;
+  KillMailSendThread;
+  FDomainContexts.Clear;
+  FParams := New_Params;
+  if Params<>nil then
+    Params.AssignTo(FParams);
   if EnableMailSending then
   begin
     FParams.WriteValue(Param_CreateDatabase, true);
@@ -134,7 +139,6 @@ begin
     FParams.ClearKey(Param_CreateDatabase);
     FParams.ClearKey(Param_TestConnection);
     SeSsion.CreateCommand(SQL_CheckTable).Execute;
-    FDomainContexts := TDictionary<string, IdwlParams>.Create;
     var DomainContextStr := FParams.StrValue(Param_mailQueue_Domains);
     if DomainContextStr<>'' then
     begin
@@ -182,6 +186,7 @@ end;
 class constructor TdwlMailQueue.Create;
 begin
   inherited;
+  FDomainContexts := TDictionary<string, IdwlParams>.Create;
   FMailAddedEvent := CreateEvent(nil, false, false, nil);
 end;
 
@@ -199,17 +204,20 @@ end;
 
 class destructor TdwlMailQueue.Destroy;
 begin
-  // terminate thread
-  if FMailSendThread<>nil then
-  begin
-    FMailSendThread.Terminate;
-    SetEvent(FMailAddedEvent); {To wake up thread for termination}
-    FMailSendThread.WaitFor;
-    FMailSendThread.Free;
-  end;
+  KillMailSendThread;
   CloseHandle(FMailAddedEvent);
   FDomainContexts.Free;
   inherited;
+end;
+
+class procedure TdwlMailQueue.KillMailSendThread;
+begin
+  if FMailSendThread=nil then
+    Exit;
+  FMailSendThread.Terminate;
+  SetEvent(FMailAddedEvent); {To wake up thread for termination}
+  FMailSendThread.WaitFor;
+  FreeAndNil(FMailSendThread);
 end;
 
 class procedure TdwlMailQueue.Log(const Msg: string; SeverityLevel: TdwlLogSeverityLevel=lsNotice);

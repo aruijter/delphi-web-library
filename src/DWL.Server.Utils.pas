@@ -1,12 +1,12 @@
 /// <summary>
 ///   Utils to cnetralize common server functionality
 /// </summary>
-unit DWL.HTTP.Server.Utils;
+unit DWL.Server.Utils;
 
 interface
 
 uses
-  DWL.HTTP.Server.Types, DWL.HTTP.Consts;
+  DWL.Server.Types, DWL.HTTP.Consts;
 
 type
   /// <summary>
@@ -34,7 +34,7 @@ type
 implementation
 
 uses
-  System.SysUtils, Winapi.Windows, DWL.HTTP.Server.Globals;
+  System.SysUtils, Winapi.Windows, DWL.Server.Globals;
 
 { TdwlHTTPHandlingStateHelper }
 

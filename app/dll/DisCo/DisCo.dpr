@@ -1,8 +1,8 @@
 library DisCo;
 
 uses
-  DWL.HTTP.Server.Globals,
-  DWL.HTTP.Server.Types,
+  DWL.Server.Globals,
+  DWL.Server.Types,
   System.SysUtils,
   DisCo.Handler in 'units\DisCo.Handler.pas',
   DWL.DisCo.Consts in '..\..\..\src\DWL.DisCo.Consts.pas';

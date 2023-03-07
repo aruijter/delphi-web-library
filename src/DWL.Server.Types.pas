@@ -2,7 +2,7 @@
 ///   THESE STRUCTURES ARE SHARED BETWEEN SERVER AND DLL's <br />YOU CANNOT
 ///   CHANGE THESE UNLESS YOU RECOMPILE THE SERVER AND ALL DLL's <br /><br />
 /// </summary>
-unit DWL.HTTP.Server.Types;
+unit DWL.Server.Types;
 
 interface
 

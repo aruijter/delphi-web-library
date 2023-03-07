@@ -1,5 +1,7 @@
 unit DWL.OpenSSL.Api;
 
+{$I DWL.inc}
+
 interface
 
 uses
@@ -7,7 +9,6 @@ uses
 
 {$DEFINE DELAYED}
 
-{$I dwl.inc}
 
 // Please note: no library init is required anymore starting with OpenSSL version 1.1.0
 
@@ -141,6 +142,7 @@ function EVP_DigestVerifyFinal(ctx: pEVP_MD_CTX; const sig: PAnsiChar; siglen: s
 function PEM_read_bio_PrivateKey(bp: pBIO; x: ppEVP_PKEY; cb: ppem_password_cb; u: pointer): pEVP_PKEY; cdecl;
 function PEM_write_bio_PrivateKey(bp : PBIO; x : pEVP_PKEY; const enc : pEVP_CIPHER; kstr: pointer; klen: int; cb: ppem_password_cb; u: pointer) : int cdecl;
 function PEM_read_bio_X509(bp: pBIO; x: ppX509; cb: ppem_password_cb; u: pointer): pX509 cdecl;
+function PEM_write_bio_X509(bp : PBIO; x : pX509) : int cdecl;
 // X509 functions
 function X509_REQ_new: pX509_REQ cdecl;
 function X509_REQ_get_subject_name(x: pX509_REQ):pX509_NAME; cdecl;
@@ -257,6 +259,7 @@ function EVP_DigestVerifyFinal; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} del
 function PEM_read_bio_PrivateKey; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function PEM_write_bio_PrivateKey; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function PEM_read_bio_X509; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
+function PEM_write_bio_X509; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 //
 function X509_NAME_add_entry_by_txt; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function X509_REQ_new; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}

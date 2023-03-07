@@ -3,7 +3,7 @@ unit DisCo.Handler;
 interface
 
 uses
-  DWL.HTTP.Server.Handler.DLL.Classes, DWL.HTTP.Server.Types;
+  DWL.Server.Handler.DLL.Classes, DWL.Server.Types;
 
 type
   THandler_DisCo = class(TdwlDLLHandling_OpenID)
@@ -23,9 +23,9 @@ type
 implementation
 
 uses
-  DWL.HTTP.Consts, DWL.HTTP.Server.Utils, DWL.MySQL, DWL.Params.Consts,
+  DWL.HTTP.Consts, DWL.Server.Utils, DWL.MySQL, DWL.Params.Consts,
   System.JSON, DWL.Resolver, System.StrUtils, System.SysUtils, Winapi.WinInet,
-  DWL.HTTP.Server.Globals, DWL.DisCo.Consts, System.DateUtils;
+  DWL.Server.Globals, DWL.DisCo.Consts, System.DateUtils;
 
 const
   Param_Additional_parameters_SQL = 'additional_parameters_sql';

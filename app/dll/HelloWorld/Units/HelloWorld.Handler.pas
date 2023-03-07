@@ -3,7 +3,7 @@ unit HelloWorld.Handler;
 interface
 
 uses
-  DWL.HTTP.Server.Handler.DLL.Classes, DWL.HTTP.Server.Types;
+  DWL.Server.Handler.DLL.Classes, DWL.Server.Types;
 
 type
   THandler_HelloWorld = class(TdwlDLLHandling)
@@ -18,7 +18,7 @@ type
 implementation
 
 uses
-  DWL.HTTP.Consts, DWL.HTTP.Server.Utils;
+  DWL.HTTP.Consts, DWL.Server.Utils;
 
 { THandler_HelloWorld }
 

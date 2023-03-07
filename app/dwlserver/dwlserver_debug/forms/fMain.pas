@@ -29,8 +29,7 @@ var
 implementation
 
 uses
-  System.SysUtils, System.DateUtils, DWL.HTTP.Server.Handler.Log,
-  DWL.Logging.Callback;
+  System.SysUtils, System.DateUtils, DWL.Server.Handler.Log, DWL.Logging.Callback;
 
 {$R *.dfm}
 

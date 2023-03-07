@@ -4,12 +4,13 @@
 /// </summary>
 unit DWL.HTTP.Client;
 
+{$I DWL.inc}
+
 interface
 
 uses
   System.Classes, System.SysUtils, DWL.HTTP.Types;
 
-{$I dwl.inc}
 
 type
   IdwlHTTPResponse = interface

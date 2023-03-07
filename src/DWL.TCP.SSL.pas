@@ -10,12 +10,16 @@ type
 
   TdwlSslContext = class
   strict private
+    FHostName: string;
     FEnvironment: TdwlSslEnvironment;
     FopSSL_CTX: pSSL_CTX;
+  private
+    FBindingIP: string;
   public
     property Environment: TdwlSslEnvironment read FEnvironment;
+    property HostName: string read FHostName;
     property opSSL_CTX: pSSL_CTX read FopSSL_CTX;
-    constructor Create(AEnvironment: TdwlSslEnvironment; const RootCert, Cert, Key: string);
+    constructor Create(AEnvironment: TdwlSslEnvironment; const AHostName, RootCert, Cert, Key: string; const ABindingIP: string='');
     destructor Destroy; override;
   end;
 
@@ -24,13 +28,14 @@ type
     FMainContext: TdwlSslContext;
     FMREW: TLightweightMREW;
     FContexts: TDictionary<string, TdwlSslContext>;
+    FDeprecatedContexts: TObjectList<TdwlSslContext>;
   public
     property MainContext: TdwlSslContext read FMainContext;
     constructor Create;
     destructor Destroy; override;
     procedure AddContext(const HostName, RootCert, Cert, Key: string);
     function ContextCount: cardinal;
-    function GetContext(const HostName: string): TdwlSslContext;
+    function GetContext(const HostName: string; const BindingIP: string=''): TdwlSslContext;
   end;
 
   IdwlSslIoHandler = interface
@@ -60,7 +65,7 @@ type
 implementation
 
 uses
-  Winapi.Windows, DWL.OpenSSL, System.SysUtils;
+  Winapi.Windows, DWL.OpenSSL, System.SysUtils, DWL.Logging, System.StrUtils;
 
 const
   SSL_EX_DATA_SELF_INDEX = 0;
@@ -108,13 +113,15 @@ end;
 
 { TdwlSslContext }
 
-constructor TdwlSslContext.Create(AEnvironment: TdwlSslEnvironment; const RootCert, Cert, Key: string);
+constructor TdwlSslContext.Create(AEnvironment: TdwlSslEnvironment; const AHostName, RootCert, Cert, Key: string; const ABindingIP: string='');
 const
   HDR_BEGIN = '-----BEGIN ';
   HDR_END = '-----END ';
 begin
   inherited Create;
+  FBindingIP := ABindingIP;
   FEnvironment := AEnvironment;
+  FHostName := AHostName;
   FopSSL_CTX := SSL_CTX_new(TLS_method);
   var CertBegin := pos(HDR_BEGIN, Cert);
   var MainDone := false;
@@ -168,14 +175,18 @@ procedure TdwlSslEnvironment.AddContext(const HostName, RootCert, Cert, Key: str
 begin
   FMREW.BeginWrite;
   try
+    var NewCtx := TdwlSslContext.Create(Self, HostName, RootCert, Cert, Key);
     var DeprCtx: TdwlSslContext;
     if not FContexts.TryGetValue(HostName.ToLower, DeprCtx) then
       DeprCtx := nil;
-    FContexts.Remove(HostName.ToLower);
-    var NewCtx := TdwlSslContext.Create(Self, RootCert, Cert, Key);
-    FContexts.Add(HostName, NewCtx);
     if FMainContext=DeprCtx then // initially nil=nil ;-)
       FMainContext := NewCtx;
+    if DeprCtx<>nil then
+      FContexts.Remove(HostName.ToLower);
+    FContexts.Add(HostName, NewCtx);
+    if DeprCtx<>nil then
+      FDeprecatedContexts.Add(DeprCtx); // keep for now (current connections), will be disposed in destroy of environment
+    TdwlLogger.Log(IfThen(DeprCtx=nil, 'Added', 'Replaced')+' SSL Certificate for hostname '+HostName)
   finally
     FMREW.EndWrite;
   end;
@@ -194,16 +205,25 @@ end;
 constructor TdwlSslEnvironment.Create;
 begin
   inherited Create;
-  FContexts := TObjectDictionary<string, TdwlSslContext>.Create([doOwnsValues]);
+  FContexts := TDictionary<string, TdwlSslContext>.Create;
+  FDeprecatedContexts := TObjectList<TdwlSslContext>.Create;
 end;
 
 destructor TdwlSslEnvironment.Destroy;
 begin
+  var ENum := FContexts.GetEnumerator;
+  try
+    while ENum.MoveNext do
+      ENum.Current.Value.Free;
+  finally
+    ENum.Free;
+  end;
   FContexts.Free;
+  FDeprecatedContexts.Free;
   inherited Destroy;
 end;
 
-function TdwlSslEnvironment.GetContext(const HostName: string): TdwlSslContext;
+function TdwlSslEnvironment.GetContext(const HostName: string; const BindingIP: string=''): TdwlSslContext;
 begin
   FMREW.BeginRead;
   try
@@ -212,6 +232,9 @@ begin
   finally
     FMREW.EndRead;
   end;
+  // check if only specific binding is allowed
+  if (BindingIP<>'') and (Result<>nil) and (Result.FBindingIP<>'') and (Result.FBindingIP<>BindingIP) then
+    Result := nil;
 end;
 
 { TdwlSslIoHandler }
@@ -253,13 +276,12 @@ begin
       Result := SslOnError_ShouldRetry(SSL_get_error(SslVars.opSSL, BytesRead));
   until BytesRead<=0;
   // Try to send out bytes to winsock
-  var SendBuf := sslVars.SendBuf;
   repeat
-    BytesRead := BIO_read(SslVars.bioSend, SendBuf.WSABuf.buf, SendBuf.WSABuf.len);
+    BytesRead := BIO_read(SslVars.bioSend, SslVars.SendBuf.WSABuf.buf, SslVars.SendBuf.WSABuf.len);
     if BytesRead>0 then
     begin
-      SendBuf.WSABuf.len := BytesRead;
-      Socket.SendTransmitBuffer(SendBuf);
+      SslVars.SendBuf.WSABuf.len := BytesRead;
+      Socket.SendTransmitBuffer(SslVars.SendBuf);
       SslVars.SendBuf := Socket.Service.AcquireTransmitBuffer(Socket, COMPLETIONINDICATOR_WRITE);
     end
     else

@@ -1,4 +1,4 @@
-unit DWLServer.Consts;
+unit DWL.Server.Consts;
 
 interface
 
@@ -10,13 +10,11 @@ const
   Param_ACMECountry = 'ACMECountry';
   Param_ACMEState = 'ACMEState';
   Param_ACMECity = 'ACMECity';
+  Param_ACME_Account_Key = 'acme_account_key';
   Param_Binding_IP = 'binding_ip';
   Param_Binding_Port = 'binding_port';
   Param_DLLBasePath = 'dllbasepath';
   Param_TestMode = 'testmode';
-
-  Param_FeedConfigProc = 'feedconfigproc';
-
 
 implementation
 

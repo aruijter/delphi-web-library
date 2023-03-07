@@ -3,8 +3,8 @@ unit DWL.HTTP.APIClient;
 interface
 
 uses
-  DWL.HTTP.Consts, DWL.HTTP.Types, System.SysUtils, DWL.HTTP.Client,
-  System.JSON;
+  DWL.HTTP.Consts, DWL.Server.Types, System.SysUtils, DWL.HTTP.Client,
+  System.JSON, DWL.HTTP.Types;
 
 type
   TdwlAPIAuthorizerCallBackAction = (acaGetRefreshtoken, acaNewRefreshtoken, acaNewAccessToken, acaInvalidateAuthorization);

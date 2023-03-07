@@ -4,12 +4,12 @@
 ///   in DLL's. These DLL's can dymanically replaced are added to a running server
 ///   See the DLL bootstrap project to start a DLL implementation
 /// </summary>
-unit DWL.HTTP.Server.Handler.DLL;
+unit DWL.Server.Handler.DLL;
 
 interface
 
 uses
-  System.Classes, DWL.HTTP.Server, DWL.HTTP.Server.Types, DWL.Params;
+  System.Classes, DWL.Server.Types, DWL.Params, DWL.Server;
 
 type
   TdwlHTTPHandler_DLL = class(TdwlHTTPHandler)
@@ -23,19 +23,19 @@ type
     FAllowAllOrigins: boolean;
     FDoAllowOrigins: boolean;
   protected
-    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
     function LogDescription: string; override;
   public
     constructor Create(DLLHandle: HModule; ProcessProc: TDLL_ProcessRequestProc; AuthorizeProc: TDLL_AuthorizeProc; const Endpoint: string; Params: IdwlParams);
     destructor Destroy; override;
     function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
+    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
   end;
 
 implementation
 
 uses
-  Winapi.Windows, DWL.Logging, System.SysUtils, DWL.HTTP.Server.Globals,
-  DWL.HTTP.Server.Utils;
+  Winapi.Windows, DWL.Logging, System.SysUtils, DWL.Server.Globals,
+  DWL.Server.Utils;
 
 const
   Param_AllowOrigin = 'AllowOrigin';
@@ -78,7 +78,6 @@ end;
 
 destructor TdwlHTTPHandler_DLL.Destroy;
 begin
-  HTTPServer.FinalizeSessions;
   FAllowOrigins.Free;
   inherited Destroy;
   // inherited destroy will call the FWrapUpProc(nil) that's inside the DLL, so FreeLibary after inherited

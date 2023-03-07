@@ -3,8 +3,8 @@ library OAuth2;
 {$R *.dres}
 
 uses
-  DWL.HTTP.Server.Types,
-  DWL.HTTP.Server.Globals,
+  DWL.Server.Types,
+  DWL.Server.Globals,
   System.SysUtils,
   OAuth2.Handler in 'units\OAuth2.Handler.pas';
 

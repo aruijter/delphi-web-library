@@ -3,12 +3,12 @@
 ///   DWL logging API. Requests are handled triggered, filtered etc and at the
 ///   end saved in the database
 /// </summary>
-unit DWL.HTTP.Server.Handler.Log;
+unit DWL.Server.Handler.Log;
 
 interface
 
 uses
-  DWL.HTTP.Server, DWL.HTTP.Server.Types, DWL.Params,
+  DWL.Server, DWL.Server.Types, DWL.Params,
   System.Generics.Collections, System.SysUtils, System.SyncObjs, DWL.SyncObjs;
 
 const
@@ -61,12 +61,11 @@ type
     function Post_Log(const State: PdwlHTTPHandlingState): boolean;
     function Options_Log(const State: PdwlHTTPHandlingState): boolean;
     procedure ProcessTriggers(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes);
-  protected
-    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
   public
     constructor Create(AParams: IdwlParams);
     destructor Destroy; override;
     function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
+    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
     function SubmitLog(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes): boolean;
   end;
 
@@ -74,7 +73,7 @@ implementation
 
 uses
   DWL.Params.Consts, DWL.MySQL, DWL.HTTP.Consts, DWL.Logging,
-  DWL.HTTP.Server.Globals, DWL.HTTP.Server.Utils, System.Masks, System.Classes,
+  DWL.Server.Globals, DWL.Server.Utils, System.Masks, System.Classes,
   IdMessage, System.StrUtils, IdAttachmentMemory, DWL.Mail.Queue,
   Winapi.WinInet, Winapi.Windows, System.Math, System.Hash;
 

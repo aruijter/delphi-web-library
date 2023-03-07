@@ -15,17 +15,18 @@ type
 
   TdwlCustomHTTPServer = class(TdwlTCPServer)
   protected
-    function HandleRequest(Request: TdwlHTTPSocket): boolean;
+    function HandleRequest(Request: TdwlHTTPSocket): boolean; virtual;
   public
     constructor Create;
   end;
 
   TdwlHTTPSocket = class(TdwlSocket)
   strict private
-    FCommand: string;
+    FCommand: byte;
     FUri: string;
     FState: TdwlHTTPServerConnectionState;
     FPendingLine: string;
+    FRequestParams: TStringList;
     FRequestHeaders: IdwlParams;
     FResponseHeaders: IdwlParams;
     FRequestBodyStream: TMemoryStream;
@@ -39,8 +40,16 @@ type
     procedure ReadFinishHeader;
     procedure ReadPendingLine;
     procedure ReadProcessRequest;
+    procedure ReadProcessURI;
   public
+    property Command: byte read FCommand;
+    property RequestBodyStream: TMemoryStream read FRequestBodyStream;
+    property RequestHeaders: IdwlParams read FRequestHeaders;
+    property RequestParams: TStringList read FRequestParams;
+    property ResponseHeaders: IdwlParams read FResponseHeaders;
     property StatusCode: integer read FStatusCode write FStatusCode;
+    property Uri: string read FUri;
+    property ResponseDataStream: TMemoryStream read FResponseDataStream;
     constructor Create(AService: TdwlTCPService); override;
     destructor Destroy; override;
     procedure ReadHandlingBuffer(HandlingBuffer: PdwlHandlingBuffer); override;
@@ -117,6 +126,7 @@ begin
   Assert(AService is TdwlCustomHTTPServer);
   FState := hcsReadRequest;
   FRequestHeaders := New_Params;
+  FRequestParams := TStringList.Create;
   FResponseHeaders := New_Params;
   FStatusCode := HTTP_STATUS_OK;
 end;
@@ -125,7 +135,43 @@ destructor TdwlHTTPSocket.Destroy;
 begin
   FRequestBodyStream.Free;
   FResponseDataStream.Free;
+  FRequestParams.Free;
   inherited Destroy;
+end;
+
+procedure TdwlHTTPSocket.ReadProcessURI;
+begin
+  var P := Pos('?', FUri);
+  if P>0 then
+  begin
+    var Query := Copy(FUri, p+1, MaxInt).Split(['&']);
+    FUri := Copy(FUri, 1, P-1);
+    for var Param in Query do
+    begin
+      P := pos('=', Param);
+      if P>1 then
+        RequestParams.Add(Copy(Param, 1, P)+TNetEncoding.URL.Decode(Copy(Param, P+1, MaxInt)))
+      else
+        RequestParams.Add(Param);
+    end;
+  end;
+  if SameText(RequestHeaders.StrValue(HTTP_HEADER_CONTENT_TYPE), CONTENT_TYPE_X_WWW_FORM_URLENCODED) and
+    (FRequestBodyStream<>nil) then
+  begin
+    var AnsiQuery: ansistring;
+    var Len := RequestBodyStream.Size;
+    SetLength(AnsiQuery, Len);
+    RequestBodyStream.Read(AnsiQuery[1], Len);
+    var Query := string(AnsiQuery).Split(['&']);
+    for var Param in Query do
+    begin
+      P := pos('=', Param);
+      if P>1 then
+        RequestParams.Add(Copy(Param, 1, P)+TNetEncoding.URL.Decode(Copy(Param, P+1, MaxInt)))
+      else
+        RequestParams.Add(Param);
+    end;
+  end;
 end;
 
 procedure TdwlHTTPSocket.ReadHandlingBuffer(HandlingBuffer: PdwlHandlingBuffer);
@@ -157,7 +203,13 @@ begin
       end;
     hcsReadRequestBody:
       begin
-        FRequestBodyStream.Write(Curr^, Eof-Curr)
+        FRequestBodyStream.Write(Curr^, Eof-Curr);
+        if FRequestBodyStream.Size>=FContentLength then
+        begin
+          FRequestBodyStream.Seek(0, soFromBeginning);
+          FState := hcsProcessing;
+        end;
+        Curr := Eof;
       end;
     hcsProcessing: ReadProcessRequest;
     hcsError,
@@ -188,6 +240,13 @@ begin
   end
   else
     FState := hcsProcessing;
+  // Handle 100 request
+  if SameText(FRequestHeaders.StrValue(HTTP_HEADER_EXPECT), EXPECT_100_CONTINUE) then
+  begin
+    WriteLine('HTTP/1.1 100 Continue');
+    WriteLine;
+    FlushWrites;
+  end;
 end;
 
 procedure TdwlHTTPSocket.ReadPendingLine;
@@ -217,8 +276,17 @@ begin
           Exit;
         end;
       end;
-      FCommand := Parts[0];
-      FUri := TNetEncoding.URL.Decode(Parts[1]);
+      var Cmd := TdwlHTTPUtils.StringTodwlhttpCommand(Parts[0]);
+      if Cmd<0 then
+      begin
+        FState := hcsError;
+        FStatusCode := HTTP_STATUS_VERSION_NOT_SUP;
+        FReadError := 'Cannot handle command '+Parts[0];
+        Exit;
+      end
+      else
+        FCommand := Cmd;
+      FUri := Parts[1];
       FState := hcsReadHeader;
     end;
   hcsReadHeader:
@@ -267,6 +335,9 @@ begin
   end
   else
   begin
+    // extract request parameters
+    ReadProcessURI;
+    // let the request be processed bij the server implementation
     if not TdwlCustomHTTPServer(FService).HandleRequest(Self) then
       StatusCode := HTTP_STATUS_NOT_FOUND;
   end;
@@ -286,7 +357,7 @@ begin
   var HeaderENum := FResponseHeaders.GetEnumerator;
   while HeaderEnum.MoveNext do
     WriteLine(HeaderENum.CurrentKey+': '+HeaderENum.CurrentValue.ToString);
-  WriteLine(''); // end of headers
+  WriteLine; // end of headers
   // write body
   if FResponseDataStream.Size>0 then
     WriteBuf(PByte(FResponseDataStream.Memory), FResponseDataStream.Size);

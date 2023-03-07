@@ -3,7 +3,7 @@ unit DWL.TCP.Server;
 interface
 
 uses
-  DWL.TCP, Winapi.WinSock, Winsock2, System.Classes, System.Generics.Collections,
+  DWL.TCP, Winapi.WinSock, Winapi.Winsock2, System.Classes, System.Generics.Collections,
   DWL.SyncObjs;
 
 type
@@ -13,6 +13,7 @@ type
 
   TdwlServerBinding = class
   strict private
+    FIp: string;
     FPort: word;
     FListenSocket: TSocket;
     FListenIndex: byte;
@@ -22,7 +23,9 @@ type
     procedure StartListening(ListenIndex: byte);
     procedure StopListening;
   public
-    constructor Create(ABindings: TdwlServerBindings; APort: word);
+    property Ip: string read FIp;
+    property Port: word read FPort;
+    constructor Create(ABindings: TdwlServerBindings; const AIp: string; APort: word);
   end;
 
   TdwlServerBindings = class
@@ -30,10 +33,12 @@ type
   private
     FBindings: TObjectList<TdwlServerBinding>;
     FServer: TdwlTCPServer;
+    function GetBindings(Index: integer): TdwlServerBinding;
   public
+    property Bindings[Index: integer]: TdwlServerBinding read GetBindings; default;
     constructor Create(AServer: TdwlTCPServer);
     destructor Destroy; override;
-    function Add(APort: word): TdwlServerBinding;
+    function Add(const AIP: string; APort: word): TdwlServerBinding;
     procedure StartListening;
     procedure StopListening;
   end;
@@ -128,17 +133,31 @@ procedure TdwlTCPServer.IoCompleted(TransmitBuffer: PdwlTransmitBuffer; NumberOf
 begin
   // create a new accept socket
   FBindings.FBindings[TransmitBuffer.CompletionIndicator].CreateAcceptSocket;
+  // get the address information from the TransmitBuffer
+  var LocalAddress: Winapi.WinSock.PSOCKADDR;
+  var RemoteAddress: Winapi.WinSock.PSOCKADDR;
+  var LocalAddressSize: integer;
+  var RemoteAddressSize: integer;
+  GetAcceptExSockaddrs(TransmitBuffer.WSABuf.buf, 0, SizeOf(sockaddr_storage), SizeOf(sockaddr_storage),
+    LocalAddress, LocalAddressSize, RemoteAddress, RemoteAddressSize);
+  SetSocketAddresses(TransmitBuffer.Socket,
+    string(Winapi.Winsock.inet_ntoa(LocalAddress.sin_addr)),
+    ntohs(LocalAddress.sin_port),
+    string(Winapi.Winsock.inet_ntoa(RemoteAddress.sin_addr)),
+    ntohs(RemoteAddress.sin_port));
+  // signal the iohandler we accepted the socket
   IOHandler.SocketOnAccept(TransmitBuffer.Socket);
   // start receiving on the socket
   TransmitBuffer.Socket.StartReceiving;
+  // finally release the used buffer
   ReleaseTransmitBuffer(TransmitBuffer);
 end;
 
 { TdwlServerBindings }
 
-function TdwlServerBindings.Add(APort: word): TdwlServerBinding;
+function TdwlServerBindings.Add(const AIP: string; APort: word): TdwlServerBinding;
 begin
-  Result := TdwlServerBinding.Create(Self, APort);
+  Result := TdwlServerBinding.Create(Self, AIP, APort);
   FBindings.Add(Result);
 end;
 
@@ -155,6 +174,11 @@ begin
   inherited Destroy;
 end;
 
+function TdwlServerBindings.GetBindings(Index: integer): TdwlServerBinding;
+begin
+  Result := FBindings[Index];
+end;
+
 procedure TdwlServerBindings.StartListening;
 begin
   for var i := 0 to FBindings.Count-1 do
@@ -169,9 +193,10 @@ end;
 
 { TdwlServerBinding }
 
-constructor TdwlServerBinding.Create(ABindings: TdwlServerBindings; APort: word);
+constructor TdwlServerBinding.Create(ABindings: TdwlServerBindings; const AIp: string; APort: word);
 begin
   inherited Create;
+  FIp:= AIp;
   FPort := APort;
   FBindings := ABindings;
 end;
@@ -199,7 +224,10 @@ begin
     CheckWSAResult(1, 'WSASocket');
   var sockaddr: TSockAddrIn;
   sockaddr.sin_family := AF_INET;
-  sockaddr.sin_addr.s_addr := htonl(INADDR_ANY);
+  if FIp='' then
+    sockaddr.sin_addr.s_addr := INADDR_ANY
+  else
+    sockaddr.sin_addr.s_addr := inet_addr(PAnsiChar(ansistring(FIp)));
   sockaddr.sin_port := htons(FPort);
   CheckWSAResult(bind(FListenSocket, TSockAddr(sockaddr), SizeOf(sockaddr)), 'bind');
   CheckWSAResult(listen(FListenSocket, SOMAXCONN), 'listen');

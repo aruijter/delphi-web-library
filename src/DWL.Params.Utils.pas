@@ -1,6 +1,6 @@
 unit DWL.Params.Utils;
 
-{$I dwl.inc}
+{$I DWL.inc}
 
 interface
 

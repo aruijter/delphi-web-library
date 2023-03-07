@@ -3,14 +3,6 @@ unit DWL.HTTP.Consts;
 interface
 
 const
-  HTTP_HEADER_CONNECTION = 'Connection';
-  HTTP_HEADER_CONTENT_TYPE = 'Content-Type';
-  HTTP_HEADER_CONTENT_LENGTH = 'Content-Length';
-  HTTP_HEADER_CONTENT_DISPOSITION = 'Content-Disposition';
-  HTTP_HEADER_REPLAY_NONCE = 'Replay-Nonce';
-  HTTP_HEADER_LOCATION = 'Location';
-  HTTP_HEADER_TRANSFER_ENCODING = 'Transfer-Encoding';
-
   HTTP_COMMAND_UNKNOWN = 'UNKNOWN';
   HTTP_COMMAND_HEAD = 'HEAD';
   HTTP_COMMAND_GET ='GET';
@@ -20,15 +12,26 @@ const
   HTTP_COMMAND_TRACE = 'TRACE';
   HTTP_COMMAND_OPTIONS = 'OPTIONS';
 
+  HTTP_HEADER_CONNECTION = 'Connection';
+  HTTP_HEADER_CONTENT_TYPE = 'Content-Type';
+  HTTP_HEADER_CONTENT_LENGTH = 'Content-Length';
+  HTTP_HEADER_CONTENT_DISPOSITION = 'Content-Disposition';
+  HTTP_HEADER_REPLAY_NONCE = 'Replay-Nonce';
+  HTTP_HEADER_LOCATION = 'Location';
+  HTTP_HEADER_TRANSFER_ENCODING = 'Transfer-Encoding';
+  HTTP_HEADER_CACHE_CONTROL = 'Cache-Control';
+  HTTP_HEADER_EXPECT = 'Expect';
+
+  CONNECTION_KEEP_ALIVE = 'Keep-Alive';
+  CONNECTION_CLOSE = 'Close';
+  EXPECT_100_CONTINUE = '100-continue';
+
   CONTENT_TYPE_X_WWW_FORM_URLENCODED = 'application/x-www-form-urlencoded';
   CONTENT_TYPE_HTML = 'text/html';
   CONTENT_TYPE_JSON = 'application/json';
   CONTENT_TYPE_OCTET_STREAM = 'application/octet-stream';
   CONTENT_TYPE_IMAGE_PNG = 'image/png';
   CONTENT_TYPE_7Z = 'application/x-7z-compressed';
-
-  CONNECTION_KEEP_ALIVE = 'Keep-Alive';
-  CONNECTION_CLOSE = 'Close';
 
   CHARSET_UTF8 = 'utf-8';
 

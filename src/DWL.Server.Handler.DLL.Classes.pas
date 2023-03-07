@@ -4,12 +4,12 @@
 ///   in the bootstrap project needs to be derived from TdwlDDLHandling, or if
 ///   pure OAuth2 authntication is used, form TdwlDLLHandling_OAuth2
 /// </summary>
-unit DWL.HTTP.Server.Handler.DLL.Classes;
+unit DWL.Server.Handler.DLL.Classes;
 
 interface
 
 uses
-  DWL.HTTP.Server.Types, DWL.Params, System.Generics.Collections,
+  DWL.Server.Types, DWL.Params, System.Generics.Collections,
   System.Classes, System.JSON, DWL.MySQL, Winapi.WinInet, DWL.OpenID;
 
 type
@@ -134,7 +134,7 @@ implementation
 uses
   DWL.HTTP.Consts, System.SysUtils, DWL.JOSE, DWL.Types, DWL.Params.Consts,
   System.Rtti, System.DateUtils, DWL.Logging, DWL.Logging.API,
-  DWL.HTTP.Server.Utils, DWL.HTTP.Server.Globals;
+  DWL.Server.Utils, DWL.Server.Globals;
 
 const
   Param_Body_JSON='body_json';

@@ -10,10 +10,17 @@ type
     function key: pEVP_PKEY;
     function Modulus_n: TBytes;
     function PublicExponent_e: TBytes;
+    /// <summary>
+    ///   Saves PRIVATE(!) Key to PEM file
+    /// </summary>
+    procedure SaveToPEMFile(const FileName: string);
+    function PEMString: string;
   end;
 
   IdwlX509Cert = interface
     function X509(ThisCallTakesOwnerShip: boolean=false): pX509;
+    procedure SaveToPEMFile(const FileName: string);
+    function PEMString: string;
   end;
 
   TdwlOpenSSL = record
@@ -22,7 +29,6 @@ type
     class function New_PrivateKey_FromPEMFile(const FileName: string): IdwlOpenSSLKey; static;
     class function New_PrivateKey_FromPEMStr(const PEM: string): IdwlOpenSSLKey; static;
     class function New_PublicKey_FromModulusExponent(const Modulus, Exponent: TBytes): IdwlOpenSSLKey; static;
-    class procedure PrivateKey_SaveToPEMFile(PrivateKey: IdwlOpenSSLKey; const FileName: string); static;
     class function Calculate_SHA256(const Data: ansistring): TBytes; overload; static;
     class function Calculate_SHA256(const Data: PByte; DataSize: NativeUInt): TBytes; overload; static;
     class function Calculate_SHA512(const Data: ansistring): TBytes; static;
@@ -38,6 +44,7 @@ type
     /// </summary>
     class function DeriveKeyFromPassword(const Salt_b64utf, Password_plain: string): string; static;
     class function ASN1_StringToDateTime(x: pASN1_STRING): TDateTime; static;
+    class function New_Cert_FromPEMFile(const FileName: string): IdwlX509Cert; static;
     class function New_Cert_FromPEMStr(const PEM: string): IdwlX509Cert; static;
   end;
 
@@ -50,10 +57,11 @@ type
   TdwlOpenSSLKey = class(TInterfacedObject, IdwlOpenSSLKey)
   strict private
     FKey: pEVP_PKEY;
-  private
     function key: pEVP_PKEY;
     function Modulus_n: TBytes;
     function PublicExponent_e: TBytes;
+    procedure SaveToPEMFile(const FileName: string);
+    function PEMString: string;
   public
     constructor Create(AKey: pEVP_PKEY);
     destructor Destroy; override;
@@ -63,8 +71,9 @@ type
   strict private
     FX509: pX509;
     FSkipX509_free: boolean;
-  private
     function X509(TransferOwnerShip: boolean=false): pX509;
+    procedure SaveToPEMFile(const FileName: string);
+    function PEMString: string;
   public
     constructor Create(AX509: pX509);
     destructor Destroy; override;
@@ -205,6 +214,20 @@ begin
   end;
 end;
 
+class function TdwlOpenSSL.New_Cert_FromPEMFile(const FileName: string): IdwlX509Cert;
+begin
+  var BIO := BIO_new_file(PAnsiChar(ansistring(FileName)), PAnsiChar('r+'));
+  try
+    var X509 := PEM_read_bio_X509(Bio, nil, nil, nil);
+    if X509=nil then
+      Result := nil
+    else
+      Result := TdwlX509Cert.Create(x509);
+  finally
+    BIO_free(BIO);
+  end;
+end;
+
 class function TdwlOpenSSL.New_Cert_FromPEMStr(const PEM: string): IdwlX509Cert;
 begin
   var AnsiPem := ansistring(PEM);
@@ -212,8 +235,9 @@ begin
   try
     var X509 := PEM_read_bio_X509(Bio, nil, nil, nil);
     if X509=nil then
-      raise Exception.Create('Error Message');
-    Result := TdwlX509Cert.Create(x509);
+      Result := nil
+    else
+      Result := TdwlX509Cert.Create(x509);
   finally
     BIO_free(Bio);
   end;
@@ -261,16 +285,6 @@ begin
     raise Exception.Create('Error generating random bytes');
 end;
 
-class procedure TdwlOpenSSL.PrivateKey_SaveToPEMFile(PrivateKey: IdwlOpenSSLKey; const FileName: string);
-begin
-  var bp := BIO_new_file(PAnsiChar(ansistring(FileName)), PAnsiChar('w+'));
-  try
-    PEM_write_bio_PrivateKey(bp, PrivateKey.key, nil, nil, 0, nil, nil);
-  finally
-    BIO_free(bp);
-  end;
-end;
-
 class function TdwlOpenSSL.VerifySignature(const Data: ansistring; const Signature: TBytes; PublicKey: IdwlOpenSSLKey): boolean;
 begin
   var mdctx := EVP_MD_CTX_new;
@@ -299,6 +313,23 @@ begin
   inherited Destroy;
 end;
 
+function TdwlOpenSSLKey.PEMString: string;
+begin
+  var bio := BIO_new(BIO_s_mem());
+  if bio=nil then
+    Exit('');
+  try
+    CheckOpenSSL(PEM_write_bio_PrivateKey(bio, FKey, nil, nil, 0, nil, nil));
+    var AnsiStr: ansistring;
+    SetLength(AnsiStr, 8192);
+    var len := BIO_read(bio, PAnsiChar(AnsiStr), 8192);
+    SetLength(AnsiStr, len);
+    Result := string(AnsiStr);
+  finally
+    BIO_free(bio);
+  end;
+end;
+
 function TdwlOpenSSLKey.PublicExponent_e: TBytes;
 begin
   var bn := BN_new;
@@ -310,6 +341,16 @@ begin
     BN_bn2bin(BN, @Result[0]);
   finally
     BN_free(bn);
+  end;
+end;
+
+procedure TdwlOpenSSLKey.SaveToPEMFile(const FileName: string);
+begin
+  var bp := BIO_new_file(PAnsiChar(ansistring(FileName)), PAnsiChar('w+'));
+  try
+    PEM_write_bio_PrivateKey(bp, FKey, nil, nil, 0, nil, nil);
+  finally
+    BIO_free(bp);
   end;
 end;
 
@@ -334,6 +375,23 @@ end;
 
 { TdwlX509Cert }
 
+function TdwlX509Cert.PEMString: string;
+begin
+  var bio := BIO_new(BIO_s_mem());
+  if bio=nil then
+    Exit('');
+  try
+    CheckOpenSSL(PEM_write_bio_X509(bio, FX509));
+    var AnsiStr: ansistring;
+    SetLength(AnsiStr, 8192);
+    var len := BIO_read(bio, PAnsiChar(AnsiStr), 8192);
+    SetLength(AnsiStr, len);
+    Result := string(AnsiStr);
+  finally
+    BIO_free(bio);
+  end;
+end;
+
 constructor TdwlX509Cert.Create(AX509: pX509);
 begin
   inherited Create;
@@ -345,6 +403,16 @@ begin
   if not FSkipX509_free then
     X509_free(FX509);
   inherited Destroy;
+end;
+
+procedure TdwlX509Cert.SaveToPEMFile(const FileName: string);
+begin
+  var bp := BIO_new_file(PAnsiChar(ansistring(FileName)), PAnsiChar('w+'));
+  try
+    PEM_write_bio_X509(bp, FX509);
+  finally
+    BIO_free(bp);
+  end;
 end;
 
 function TdwlX509Cert.X509(TransferOwnerShip: boolean=false): pX509;

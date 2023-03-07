@@ -22,9 +22,8 @@ type
     URLNewNonce: string;
     URLAccount: string;
     URLFinalize: string;
-    URLGetCertificate: string;
+    URLCertificate: string;
     ReplayNonce: string;
-    PrivateKey: IdwlOpenSSLKey;
     JSONWebKey: string;
   end;
 
@@ -43,18 +42,19 @@ type
   /// </summary>
   TdwlACMEClient = class
   strict private
+    FAccountPrivateKey: IdwlOpenSSLKey;
+    FCertificate: IdwlX509Cert;
     FCertificateStatus: TCertificateStatus;
     FDomain: string;
     FCallBackPortNumber: integer;
-    FKeyFile: string;
-    FRootCertFile: string;
+    FPrivateKey: IdwlOpenSSLKey;
+    FRootCertificate: IdwlX509Cert;
     FProfileCountryCode: string;
     FProfileCity: string;
     FProfileState: string;
     FRenewalDays: byte;
     FAPIEndpoint: string;
     FDirectory: string;
-    FCertFile: string;
     FHTTPRequestSeen: boolean;
     FCurrentChallengeResponse: string;
     FDaysLeft: integer;
@@ -68,12 +68,13 @@ type
     function InitAccount(var State:TACMECheckState): boolean;
     function SubmitOrderAndDoChallenges(var State: TACMECheckState): boolean;
     function CreateCSRandFinalizeOrder(var State: TACMECheckState): boolean;
-    function GetCertificate(var State: TACMECheckState): boolean;
-    function GetCACertificate: boolean;
-    function GetCertFile: string;
-    function GetKeyFile: string;
-    function GetRootCertFile: string;
+    function RetrieveCertificate(var State: TACMECheckState): boolean;
+    function RetrieveCACertificate: boolean;
   public
+    /// <summary>
+    ///   The Private Key of the ACME account, must be stored and set for renewals, will be created is not set
+    /// </summary>
+    property AccountPrivateKey: IdwlOpenSSLKey read FAccountPrivateKey write FAccountPrivateKey;
     /// <summary>
     ///   The API endpoint of the ACME service, you can set this, the default
     ///   points to the LetsEncrypt Production API
@@ -84,10 +85,10 @@ type
     /// </summary>
     property CallBackPortNumber: integer read FCallBackPortNumber write FCallBackPortNumber;
     /// <summary>
-    ///   The full path/filename of the actual requested certificate. Will be generated
-    ///   automatically, but you can override it is needed
+    ///   The actual certificate. Will be generated
+    ///   automatically, but you can provide it if needed
     /// </summary>
-    property CertFile: string read GetCertFile write FCertFile;
+    property Certificate: IdwlX509Cert read FCertificate write FCertificate;
     /// <summary>
     ///   The directory where the results and the account information will be
     ///   saved. Defaults to &lt;appdir&gt;/Cert_ACME
@@ -102,12 +103,12 @@ type
     ///   The full path/filename of the applicable root certificate. Will be generated
     ///   automatically, but you can override it is needed
     /// </summary>
-    property RootCertFile: string read GetRootCertFile write FRootCertFile;
+    property RootCertificate: IdwlX509Cert read FRootCertificate write FRootCertificate;
     /// <summary>
     ///   The full path/filename of file with the private key. Will be generated
     ///   automatically, but you can override it is needed
     /// </summary>
-    property KeyFile:string read GetKeyFile write FKeyFile;
+    property PrivateKey: IdwlOpenSSLKey read FPrivateKey write FPrivateKey;
     /// <summary>
     ///   The domain for which the certificate is requested. Please note that
     ///   the DNS of this domain must point to the interface on which the application is reachable (CN value)
@@ -152,7 +153,7 @@ type
     ///   This function Gets or Renews the certificate if needed. Progress will
     ///   be logged through TdwlLogger
     /// </summary>
-    function GetOrRenewCertificate: boolean;
+    function CheckAndRetrieveCertificate: boolean;
   end;
 
 implementation
@@ -180,43 +181,31 @@ const
 
 function TdwlACMEClient.CheckCertificate: TCertificateStatus;
 var
-  cert_BIO: PBIO;
-  X509 : PX509;
   pTime: pASN1_STRING;
 begin
   try
     FCertificateStatus := certstatUnknown;
     FDaysLeft := -MaxInt;
     try
-      if TFile.Exists(CertFile) then
+      if Certificate<>nil then
       begin
-        cert_BIO := BIO_new_file(PAnsiChar(AnsiString(CertFile)), 'r+');
-        try
-          X509 := PEM_read_bio_X509(cert_BIO, nil, nil, nil);
-          try
-            pTime := X509_get0_notAfter(X509);
-            FDaysLeft := Floor(TdwlOpenSSL.ASN1_StringToDateTime(pTime)-Now);
-            if FDaysLeft>RenewalDays then
-              FCertificateStatus := certstatOk
-            else
-            begin
-              if FDaysLeft>=0 then
-                FCertificateStatus := certstatAboutToExpire
-              else
-                FCertificateStatus := certstatExpired
-            end;
-          finally
-            X509_free(X509);
-          end;
-        finally
-          BIO_free(cert_BIO);
+        pTime := X509_get0_notAfter(Certificate.X509);
+        FDaysLeft := Floor(TdwlOpenSSL.ASN1_StringToDateTime(pTime)-Now);
+        if FDaysLeft>RenewalDays then
+          FCertificateStatus := certstatOk
+        else
+        begin
+          if FDaysLeft>=0 then
+            FCertificateStatus := certstatAboutToExpire
+          else
+            FCertificateStatus := certstatExpired
         end;
       end
       else
         FCertificateStatus := certstatNotFound;
     except
       On E: Exception do
-        Log('Error on checking current certificate: '+E.Message, lsError);
+        Log('Error in checking current certificate: '+E.Message, lsError);
     end;
   finally
     Result := CertificateStatus;
@@ -254,7 +243,7 @@ begin
       JWS.ProtectedHeader[joseheaderKEYID] := State.URLAccount;
     JWS.ProtectedHeader[jwt_key_NONCE] := GetReplayNonce(State);
     JWS.ProtectedHeader[jwt_key_URL] := url;
-    Request.WritePostData(JWS.Serialize(State.PrivateKey, jskFlattened));
+    Request.WritePostData(JWS.Serialize(FAccountPrivateKey, jskFlattened));
   end;
   Result := Request.Execute;
   // Check for ReplayNonce;
@@ -274,14 +263,11 @@ var
   i: integer;
   Response: IdwlHTTPResponse;
   Status: string;
-  Obj: TJSONValue;
 begin
   Result := false;
   Log('Creating CSR and Finalizing order.', lsTrace);
   // generate private key for domain
-  var PrivateDomainkey := TdwlOpenSSL.New_PrivateKey;
-  // save private key
-  TdwlOpenSSL.PrivateKey_SaveToPEMFile(PrivateDomainkey, KeyFile);
+  FPrivateKey := TdwlOpenSSL.New_PrivateKey;
   // create CSR
   X509_Req := X509_REQ_new;
   X509_Name := X509_REQ_get_subject_name(X509_Req);
@@ -295,8 +281,8 @@ begin
   // get Certificate Signing Request.
 //  domain_KEY := EVP_PKEY_new;
 //  EVP_PKEY_assign_RSA(domain_KEY, pointer(PrivateDomainkey.rsa));
-  X509_REQ_set_pubkey(x509_req, PrivateDomainkey.key);
-  X509_REQ_sign(X509_Req, PrivateDomainkey.key, EVP_sha256);
+  X509_REQ_set_pubkey(x509_req, FPrivateKey.key);
+  X509_REQ_sign(X509_Req, FPrivateKey.key, EVP_sha256);
   BIO := BIO_new(BIO_s_mem);
   try
     i2d_X509_REQ_bio(BIO, x509_req);
@@ -316,18 +302,22 @@ begin
     Log('Error in finalize request: '+Response.AsString, lsError);
     Exit;
   end;
-  Obj := TJSONObject.ParseJSONValue(Response.AsString);
-  Status := Obj.GetValue<string>('status');
-  if Status<>'valid' then
-  begin
-    Log('Wrong status in finalize request: '+Response.AsString, lsError);
-    Exit;
+  var JSON := TJSONObject.ParseJSONValue(Response.AsString);
+  try
+    Status := JSON.GetValue<string>('status');
+    if Status<>'valid' then
+    begin
+      Log('Wrong status in finalize request: '+Response.AsString, lsError);
+      Exit;
+    end;
+    State.URLCertificate := JSON.GetValue<string>('certificate');
+  finally
+    JSON.Free;
   end;
-  State.URLGetCertificate := Obj.GetValue<string>('certificate');
   Result := true;
 end;
 
-function TdwlACMEClient.GetCACertificate: boolean;
+function TdwlACMEClient.RetrieveCACertificate: boolean;
 var
   Response: IdwlHTTPResponse;
 begin
@@ -339,42 +329,28 @@ begin
     Log('Error downloading Root Certificate: '+Response.AsString, lsError);
     Exit;
   end;
-  TFile.WriteAllText(RootCertFile, Response.AsString);
+  RootCertificate := TdwlOpenSSL.New_Cert_FromPEMStr(Response.AsString);
   Log('Root Certificate retrieval succeeded', lsNotice);
   Result := true;
 end;
 
-function TdwlACMEClient.GetCertFile: string;
-begin
-  Result := FCertFile;
-  if Result='' then
-    Result := Directory+'\'+ReplaceStr(Domain, '.', '_')+'.crt';
-end;
-
-function TdwlACMEClient.GetCertificate(var State: TACMECheckState): boolean;
+function TdwlACMEClient.RetrieveCertificate(var State: TACMECheckState): boolean;
 var
   Response: IdwlHTTPResponse;
 begin
   Result := false;
-  Response := DoRequest(State, State.URLGetCertificate, HTTP_COMMAND_POST);
+  Response := DoRequest(State, State.URLCertificate, HTTP_COMMAND_POST);
   if Response.StatusCode<>HTTP_STATUS_OK then
   begin
     Log('Error downloading Certificate: '+Response.AsString, lsError);
     Exit;
   end;
-  TFile.WriteAllText(CertFile, Response.AsString);
+  Certificate := TdwlOpenSSL.New_Cert_FromPEMStr(Response.AsString);
   Log('Certificate retrieval succeeded', lsNotice);
   Result := true;
 end;
 
-function TdwlACMEClient.GetKeyFile: string;
-begin
-  Result := FKeyFile;
-  if Result='' then
-    Result := Directory+'\'+ReplaceStr(Domain, '.', '_')+'.key';
-end;
-
-function TdwlACMEClient.GetOrRenewCertificate: boolean;
+function TdwlACMEClient.CheckAndRetrieveCertificate: boolean;
 begin
   if FAPIEndpoint=StagingAPIEndpoint then
     Log('Using Staging environment', lsWarning);
@@ -396,9 +372,9 @@ begin
       Exit;
     if not CreateCSRandFinalizeOrder(State) then
       Exit;
-    if not GetCertificate(State) then
+    if not RetrieveCertificate(State) then
       Exit;
-    if not GetCACertificate then
+    if not RetrieveCACertificate then
       Exit;
     CheckCertificate; {To get status and date etc}
   finally
@@ -423,13 +399,6 @@ begin
   State.ReplayNonce := '';
 end;
 
-function TdwlACMEClient.GetRootCertFile: string;
-begin
-  Result := FRootCertFile;
-  if Result='' then
-    Result := Directory+'\'+ReplaceStr(Domain, '.', '_')+'_root.crt';
-end;
-
 procedure TdwlACMEClient.HTTPServerCommand(AContext: TIdContext; ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
 begin
   AResponseInfo.ContentType := 'text/plain';
@@ -448,22 +417,23 @@ begin
 end;
 
 function TdwlACMEClient.InitializeACMEDirectory(var State:TACMECheckState): boolean;
-var
-  Obj: TJSONValue;
-  Response: IdwlHTTPResponse;
 begin
   Result := false;
   try
-    Response := DoRequest(State, APIEndpoint);
+    var Response := DoRequest(State, APIEndpoint);
     if Response.StatusCode<>HTTP_STATUS_OK then
     begin
       Log('Error getting API endpoint directory: '+Response.AsString, lsError);
       Exit;
     end;
-    Obj := TJSONObject.ParseJSONValue(Response.AsString);
-    State.URLNewAccount := Obj.GetValue<string>('newAccount');
-    State.URLNewNonce := Obj.GetValue<string>('newNonce');
-    State.URLNewOrder := Obj.GetValue<string>('newOrder');
+    var JSON := TJSONObject.ParseJSONValue(Response.AsString);
+    try
+      State.URLNewAccount := JSON.GetValue<string>('newAccount');
+      State.URLNewNonce := JSON.GetValue<string>('newNonce');
+      State.URLNewOrder := JSON.GetValue<string>('newOrder');
+    finally
+      JSON.Free;
+    end;
     Result := true;
   except
     on E: Exception do
@@ -476,7 +446,6 @@ end;
 
 function TdwlACMEClient.SubmitOrderAndDoChallenges(var State: TACMECheckState): boolean;
 var
-  Obj: TJSONValue;
   URLAuthorizations: TJSONArray;
   Challenges: TJSONArray;
   AuthNo: integer;
@@ -498,100 +467,112 @@ begin
     if Response.StatusCode=HTTP_STATUS_CREATED then
     begin
       //fetch order details
-      Obj := TJSONObject.ParseJSONValue(Response.AsString);
-      State.URLFinalize := Obj.GetValue<string>('finalize');
-      URLAuthorizations := Obj.GetValue<TJsonArray>('authorizations');
-      // start authorizations
-      for AuthNo  := 0 to URLAuthorizations.Count-1 do
-      begin
-        Response := DoRequest(State, URLAuthorizations.Items[AuthNo].Value, HTTP_COMMAND_POST);
-        if Response.StatusCode<>HTTP_STATUS_OK then
+      var OrderJSON := TJSONObject.ParseJSONValue(Response.AsString);
+      try
+        State.URLFinalize := OrderJSON.GetValue<string>('finalize');
+        URLAuthorizations := OrderJSON.GetValue<TJsonArray>('authorizations');
+        // start authorizations
+        for AuthNo := 0 to URLAuthorizations.Count-1 do
         begin
-          Log('Error getting authorization: '+Response.AsString, lsError);
-          Exit;
-        end;
-        // fetch authorization details
-        Obj := TJSONObject.ParseJSONValue(Response.AsString);
-        Challenges := Obj.GetValue<TJsonArray>('challenges');
-        // do challenges
-        for ChallNo := 0 to Challenges.Count-1 do
-        begin
-          // fetch challenge details
-          ChallType := Challenges.Items[ChallNo].GetValue<string>('type');
-          // perform challenge if it s a http challenge
-          if ChallType.StartsWith('http') then
+          Response := DoRequest(State, URLAuthorizations.Items[AuthNo].Value, HTTP_COMMAND_POST);
+          if Response.StatusCode<>HTTP_STATUS_OK then
           begin
-            ChallToken := Challenges.Items[ChallNo].GetValue<string>('token');
-            ChallUrl := Challenges.Items[ChallNo].GetValue<string>('url');
-            Log('Starting HTTP challenge '+(ChallNo+1).Tostring+ ' (listening on port '+CallBackPortNumber.ToString+')', lsTrace);
-            Status := '';
-            FHTTPRequestSeen := false;
-            HTTPServer := TIdHTTPServer.Create(nil);
-            try
-              // Set Response combined token and JSONWebkey (Thumbprint)
-              FCurrentChallengeResponse :=  ChallToken+'.'+ TNetEncoding.Base64URL.EncodeBytesToString(THashSHA2.GetHashBytes(State.JSONWebKey.Replace(' ', ''), SHA256));
-              // start internal server
-              HTTPServer.OnCommandGet := HTTPServerCommand;
-              HTTPServer.DefaultPort := CallBackPortNumber;
-              if ChallengeIP<>'' then
-              begin
-                var Bind := HTTPServer.Bindings.Add;
-                Bind.IP := ChallengeIP;
-                Bind.Port := IdPORT_HTTP;
-              end;
-              HTTPServer.Active := true;
-              // start the challenge
-              TickCount := GetTickCount64;
-              TimeoutTickCount := TickCount+10000;
-              CheckStatusTick := 0;
-              // To start challenge send payload {}
-              ChallPayLoad := '{}';
-              while TickCount<TimeoutTickCount do
-              begin
-                if CheckStatusTick<TickCount then
-                begin
-                  // Get the status, the first time this will start the challenge
-                  var JWS := New_JWS;
-                  Response := DoRequest(State, ChallURL, HTTP_COMMAND_POST, ChallPayLoad);
-                  // the next time we don't start the challende, just polling, so change payload to Post-As-Get
-                  ChallPayLoad := '';
-                  if Response.StatusCode=HTTP_STATUS_OK then
-                  begin
-                    Obj := TJSONObject.ParseJsonValue(Response.AsString);
-                    Status := Obj.GetValue<String>('status');
-                    if Status='valid' then // yes, we completed the challenge
-                    begin
-                      Log('Challenge succeeded', lsTrace);
-                      Break;
-                    end
-                    else
-                      Log('challenge status: '+Status, lsTrace);
-                    if Status<>'pending' then
-                      Break; // something went wrong
-                  end
-                  else
-                  begin
-                    Log('Error getting challenge status: '+Response.AsString, lsError);
-                    Exit;
-                  end;
-                  CheckStatusTick := TickCount+1000;
-                end;
-                Sleep(100);
-                TickCount := GetTickCount64;
-              end;
-            finally
-              HTTPServer.Free;
-            end;
-            if Status<>'valid' then
-            begin
-              if FHTTPRequestSeen then
-                Log('Challenge failed (But I saw an incoming HTTP request)', lsError)
-              else
-                Log('Challenge failed, most probably we''re not publicly reachable on HTTP port 80', lsError);
-              Exit;
-            end;
+            Log('Error getting authorization: '+Response.AsString, lsError);
+            Exit;
           end;
-        end;
+          // fetch authorization details
+          var AuthJSON := TJSONObject.ParseJSONValue(Response.AsString);
+          try
+            Challenges := AuthJSON.GetValue<TJsonArray>('challenges');
+            // do challenges
+            for ChallNo := 0 to Challenges.Count-1 do
+            begin
+              // fetch challenge details
+              ChallType := Challenges.Items[ChallNo].GetValue<string>('type');
+              // perform challenge if it s a http challenge
+              if ChallType.StartsWith('http') then
+              begin
+                ChallToken := Challenges.Items[ChallNo].GetValue<string>('token');
+                ChallUrl := Challenges.Items[ChallNo].GetValue<string>('url');
+                Log('Starting HTTP challenge '+(ChallNo+1).Tostring+ ' (listening on port '+CallBackPortNumber.ToString+')', lsTrace);
+                Status := '';
+                FHTTPRequestSeen := false;
+                HTTPServer := TIdHTTPServer.Create(nil);
+                try
+                  // Set Response combined token and JSONWebkey (Thumbprint)
+                  FCurrentChallengeResponse :=  ChallToken+'.'+ TNetEncoding.Base64URL.EncodeBytesToString(THashSHA2.GetHashBytes(State.JSONWebKey.Replace(' ', ''), SHA256));
+                  // start internal server
+                  HTTPServer.OnCommandGet := HTTPServerCommand;
+                  HTTPServer.DefaultPort := CallBackPortNumber;
+                  if ChallengeIP<>'' then
+                  begin
+                    var Bind := HTTPServer.Bindings.Add;
+                    Bind.IP := ChallengeIP;
+                    Bind.Port := IdPORT_HTTP;
+                  end;
+                  HTTPServer.Active := true;
+                  // start the challenge
+                  TickCount := GetTickCount64;
+                  TimeoutTickCount := TickCount+10000;
+                  CheckStatusTick := 0;
+                  // To start challenge send payload {}
+                  ChallPayLoad := '{}';
+                  while TickCount<TimeoutTickCount do
+                  begin
+                    if CheckStatusTick<TickCount then
+                    begin
+                      // Get the status, the first time this will start the challenge
+                      var JWS := New_JWS;
+                      Response := DoRequest(State, ChallURL, HTTP_COMMAND_POST, ChallPayLoad);
+                      // the next time we don't start the challende, just polling, so change payload to Post-As-Get
+                      ChallPayLoad := '';
+                      if Response.StatusCode=HTTP_STATUS_OK then
+                      begin
+                        var ChallJSON := TJSONObject.ParseJsonValue(Response.AsString);
+                        try
+                          Status := ChallJSON.GetValue<String>('status');
+                        finally
+                          ChallJSON.Free;
+                        end;
+                        if Status='valid' then // yes, we completed the challenge
+                        begin
+                          Log('Challenge succeeded', lsTrace);
+                          Break;
+                        end
+                        else
+                          Log('challenge status: '+Status, lsTrace);
+                        if Status<>'pending' then
+                          Break; // something went wrong
+                      end
+                      else
+                      begin
+                        Log('Error getting challenge status: '+Response.AsString, lsError);
+                        Exit;
+                      end;
+                      CheckStatusTick := TickCount+1000;
+                    end;
+                    Sleep(100);
+                    TickCount := GetTickCount64;
+                  end;
+                finally
+                  HTTPServer.Free;
+                end;
+                if Status<>'valid' then
+                begin
+                  if FHTTPRequestSeen then
+                    Log('Challenge failed (But I saw an incoming HTTP request)', lsError)
+                  else
+                    Log('Challenge failed, most probably we''re not publicly reachable on HTTP port 80', lsError);
+                  Exit;
+                end;
+              end;
+            end;
+          finally
+            AuthJSON.Free;
+          end;
+      end;
+      finally
+        OrderJSON.Free;
       end;
       Result := true;
     end
@@ -611,11 +592,11 @@ begin
 procedure TdwlACMEClient.LogCertificateStatus;
 begin
   case CertificateStatus of
-  certstatUnknown: Log('Certificate status unknown.', lsError);
-  certstatNotFound: Log('No certificate found.', lsError);
-  certstatExpired: Log('Current certificate expired.', lsError);
-  certstatAboutToExpire: Log('Current certificate about to expire: '+DaysLeft.ToString+' days left.', lsNotice);
-  certstatOk: Log('Current certificate found, still valid for '+DaysLeft.ToString+' days.', lsTrace);
+  certstatUnknown: Log('Certificate status for domain '+Domain+' unknown', lsError);
+  certstatNotFound: Log('No certificate found for domain '+Domain, lsError);
+  certstatExpired: Log('Current certificate for domain '+Domain+' is expired.', lsError);
+  certstatAboutToExpire: Log('Current certificate for domain '+Domain+' is about to expire: '+DaysLeft.ToString+' days left.', lsNotice);
+  certstatOk: Log('Current certificate found for domain '+Domain+', still valid for '+DaysLeft.ToString+' days.', lsTrace);
   end;
 end;
 
@@ -624,19 +605,14 @@ begin
   // new approach
   Result := false;
   try
-    var FnPrivateKey := Directory+'\'+PrivateAccountKeyFileName;
-    // Try to read current key
-    if FileExists(FnPrivateKey) then
-      State.PrivateKey := TdwlOpenSSL.New_PrivateKey_FromPEMFile(FnPrivateKey)
-    else
+    if AccountPrivateKey=nil then
     begin
-      State.PrivateKey := TdwlOpenSSL.New_PrivateKey;
-      TdwlOpenSSL.PrivateKey_SaveToPEMFile(State.PrivateKey, FnPrivateKey);
+      FAccountPrivateKey := TdwlOpenSSL.New_PrivateKey;
       Log('Created new account Key.', lsTrace);
     end;
     // Create the JWK to be used
-    var e := State.PrivateKey.PublicExponent_e;
-    var n := State.PrivateKey.Modulus_n;
+    var e := FAccountPrivateKey.PublicExponent_e;
+    var n := FAccountPrivateKey.Modulus_n;
     State.JSONWebKey := '{"e":"'+TNetEncoding.Base64URL.EncodeBytesToString(e)+'","kty":"RSA","n":"'+TNetEncoding.Base64URL.EncodeBytesToString(n)+'"}';
     Result := true;
   except

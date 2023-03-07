@@ -4,7 +4,7 @@ interface
 
 type
   TdwlHTTPUtils = record
-    class function StringTodwlhttpCommand(const HttpCommand: string): byte; static;
+    class function StringTodwlhttpCommand(const HttpCommand: string): integer; static;
     class function StatusCodeDescription(StatusCode: integer): string; static;
   end;
 
@@ -62,7 +62,7 @@ begin
   end;
 end;
 
-class function TdwlHTTPUtils.StringTodwlhttpCommand(const HttpCommand: string): byte;
+class function TdwlHTTPUtils.StringTodwlhttpCommand(const HttpCommand: string): integer;
 begin
   Result := IndexStr(HttpCommand, dwlhttpCommandToString);
 end;

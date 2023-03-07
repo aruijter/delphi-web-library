@@ -4,9 +4,7 @@ uses
   SimpleShareMem,
   SvcMgr,
   fMain in 'forms\fMain.pas' {DWL_Server: TService},
-  DWLServer.Consts in '..\units\DWLServer.Consts.pas',
-  DWLServer.Section in '..\units\DWLServer.Section.pas',
-  DWLServer.Server in '..\units\DWLServer.Server.pas';
+  DWLServer.Section in '..\units\DWLServer.Section.pas';
 
 {$R *.RES}
 
