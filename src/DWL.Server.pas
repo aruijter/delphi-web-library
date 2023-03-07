@@ -57,8 +57,6 @@ type
     function GetIsRunning: boolean;
   protected
     function HandleRequest(Request: TdwlHTTPSocket): boolean; override;
-    procedure InternalActivate; override;
-    procedure InternalDeActivate; override;
   public
     property IsRunning: boolean read GetIsRunning;
     property LogLevel: byte read FLogLevel write FLogLevel;
@@ -263,16 +261,6 @@ begin
   Freemem(State._InternalServerStructure);
   FreeMem(State);
   Result := true;
-end;
-
-procedure TDWLServer.InternalActivate;
-begin
-  inherited InternalActivate;
-end;
-
-procedure TDWLServer.InternalDeActivate;
-begin
-  inherited InternalDeActivate;
 end;
 
 function TDWLServer.IsSecure: boolean;

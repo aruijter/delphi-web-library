@@ -304,6 +304,9 @@ begin
       else
         FServer.OnlyLocalConnections := false;
       Start_DetermineServerParams(ConfigParams);
+      // Time to start the server
+      FServer.Active := true;
+      TdwlLogger.Log('Enabled Server listening', lsNotice);
       if FServer.IsSecure or FServer.OnlyLocalConnections then
       begin
         TdwlMailQueue.Configure(ConfigParams, true);
@@ -312,9 +315,6 @@ begin
       end
       else
         TdwlLogger.Log('Skipped loading of handlers because server is not secure', lsWarning);
-      // Time to start the server
-      FServer.Active := true;
-      TdwlLogger.Log('Enabled Server listening', lsNotice);
       FACMECheckThread := TACMECheckThread.Create(Self, ConfigParams);
       TdwlLogger.Log('DWL Server started', lsTrace);
       FServerStarted := true;
