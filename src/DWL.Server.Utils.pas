@@ -22,10 +22,9 @@ type
     /// </summary>
     procedure SetContentType(const ContentType: string; const CharSet: string='');
     /// <summary>
-    ///   an easy way to set the contenttextwhen handling a request.
-    ///   Thisfunction uses the server callback function to set the
-    ///   contentbuffer/length and contenttype of the request. Note: the
-    ///   contenttext of the underlying IdHTTPServer is not used. <br />
+    ///   an easy way to set the contenttext when handling a request.
+    ///   This function uses the server callback function to set the
+    ///   contentbuffer/length and contenttype of the request.
     /// </summary>
     procedure SetContentText(const BodyStr: string; const ContentType: string=CONTENT_TYPE_HTML);
     procedure SetHeaderValue(const HeaderKey, Value: string);

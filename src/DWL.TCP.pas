@@ -211,7 +211,6 @@ end;
 procedure TdwlSocket.SendTransmitBuffer(TransmitBuffer: PdwlTransmitBuffer);
 begin
   WSA_ShutdownOnError(WSASend2(SocketHandle, @TransmitBuffer.WSABuf, 1, nil, 0, LPWSAOVERLAPPED(TransmitBuffer), nil), 'WSASend');
-  TdwlLogger.Log('Sent '+TransmitBuffer.WSABuf.len.ToString+' '+NativeUInt(TransmitBuffer).ToString);
   AtomicIncrement(FWritesInProgress);
 end;
 
@@ -437,7 +436,6 @@ begin
       end;
     COMPLETIONINDICATOR_WRITE:
       begin
-        TdwlLogger.Log('Compl '+NumberOfBytesTransferred.ToString+' van '+TransmitBuffer.WSABuf.len.ToString+' '+NativeUInt(TransmitBuffer).ToString);
         FService.ReleaseTransmitBuffer(TransmitBuffer);
         AtomicDecrement(FWritesInProgress);
       end;
@@ -553,17 +551,9 @@ end;
 
 procedure TdwlTCPService.ReleaseTransmitBuffer(TransmitBuffer: PdwlTransmitBuffer);
 begin
-  try
-  if not TransmitBuffer.Socket.FTransmitBuffers.Contains(TransmitBuffer) then
-    TdwlLogger.Log('NOT FOUND')
-  else
-  begin
   TransmitBuffer.Socket.FTransmitBuffers.Remove(TransmitBuffer);
   FreeMem(TransmitBuffer.WSABuf.buf);
   FreeMem(TransmitBuffer);
-  end;
-  except
-  end;
 end;
 
 function TdwlTCPService.AcquireHandlingBuffer(Socket: TdwlSocket): PdwlHandlingBuffer;

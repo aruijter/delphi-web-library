@@ -29,7 +29,7 @@ type
     procedure Start_LoadURIAliases(ConfigParams: IdwlParams);
   private
     FServer: TDWLServer;
-    class function CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams; TryUpgrade: boolean=false): boolean;
+    class procedure CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams; TryUpgrade: boolean=false);
   public
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
@@ -45,7 +45,7 @@ uses
   DWL.Params.Consts, DWL.HTTP.Consts, DWL.ACME, DWL.OpenSSL,
   System.Math, DWL.TCP.Consts, System.StrUtils, Winapi.Windows,
   System.Threading, DWL.Logging.Callback, Winapi.ShLwApi, DWL.Mail.Queue,
-  DWL.Server.Handler.Mail, DWL.Server.Handler.DLL, DWL.HTTP.Server;
+  DWL.Server.Handler.Mail, DWL.Server.Handler.DLL;
 
 type
   TACMECheckThread = class(TdwlThread)
@@ -73,7 +73,7 @@ begin
   inherited BeforeDestruction;
 end;
 
-class function TDWLServerSection.CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams; TryUpgrade: boolean=false): boolean;
+class procedure TDWLServerSection.CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams; TryUpgrade: boolean=false);
 const
   SQL_GetHostNames =
     'SELECT HostName, RootCert, Cert, PrivateKey, CountryCode, State, City, BindingIp, Id FROM dwl_hostnames';
@@ -83,7 +83,6 @@ const
     'UPDATE dwl_hostnames SET RootCert=?, Cert=?, PrivateKey=? WHERE Id=?';
   Update_Cert_Idx_RootCert=0; Update_Cert_Idx_Cert=1; Update_Cert_Idx_PrivateKey=2; Update_Cert_Idx_Id=3;
 begin
-  Result := false; // no certificate was updated
   var SslIoHandler: IdwlSslIoHandler;
   var HostnameSeen := false;
   if not Supports(Server.IOHandler, IdwlSslIoHandler, SslIoHandler)  then
@@ -143,7 +142,6 @@ begin
       end;
       if ACMEClient.CertificateStatus=certstatOk then
       begin // process newly retrieved certificate
-        Result := true; // at least one certificate was updated
         RootCertificate := ACMECLient.RootCertificate.PEMString;
         Certificate := ACMECLient.Certificate.PEMString;
         PrivateKey := ACMECLient.PrivateKey.PEMString;
@@ -153,13 +151,6 @@ begin
         CmdUpdate.Parameters.SetTextDataBinding(Update_Cert_Idx_PrivateKey, PrivateKey);
         CmdUpdate.Parameters.SetIntegerDataBinding(Update_Cert_Idx_Id, Cmd.Reader.GetInteger(GetHostNames_Idx_Id));
         CmdUpdate.Execute;
-        {$IFNDEF NEWHTTPSERVER}
-        // save certificates to file
-        var CertificatesPath := ExtractFilePath(ParamStr(0))+'Cert_ACME\';
-        ACMEClient.RootCertificate.SaveToPEMFile(CertificatesPath+ReplaceStr(ACMECLient.Domain, '.', '_')+'_root.crt');
-        ACMECLient.Certificate.SaveToPEMFile(CertificatesPath+ReplaceStr(ACMECLient.Domain, '.', '_')+'.crt');
-        ACMEClient.PrivateKey.SaveToPEMFile(CertificatesPath+ReplaceStr(ACMECLient.Domain, '.', '_')+'.key');
-        {$ENDIF}
       end;
       if ACMEClient.CertificateStatus in [certstatAboutToExpire, certstatOk] then
         SslIoHandler.Environment.AddContext(ACMECLient.Domain, RootCertificate, Certificate, PrivateKey);
@@ -293,11 +284,7 @@ begin
     try
       TdwlLogger.Log('DWL Server starting', lsTrace);
       var ConfigParams := New_Params;
-      {$IFDEF NEWHTTPSERVER}
       DWL.Server.AssignServerProcs;
-      {$ELSE}
-      DWL.HTTP.Server.AssignServerProcs;
-      {$ENDIF}
       Start_PrepareParameters_Phase1(ConfigParams);
       var Session := Start_InitDataBase(ConfigParams);
       Start_PrepareParameters_Phase2(Session, ConfigParams);
@@ -326,22 +313,14 @@ begin
       else
         TdwlLogger.Log('Skipped loading of handlers because server is not secure', lsWarning);
       // Time to start the server
-      {$IFDEF NEWHTTPSERVER}
       FServer.Active := true;
-      {$ELSE}
-      FServer.Start(ConfigParams);
-      {$ENDIF}
       TdwlLogger.Log('Enabled Server listening', lsNotice);
       FACMECheckThread := TACMECheckThread.Create(Self, ConfigParams);
       TdwlLogger.Log('DWL Server started', lsTrace);
       FServerStarted := true;
     except
       FServerStarted := false;
-      {$IFDEF NEWHTTPSERVER}
       FServer.Active := false;
-      {$ELSE}
-      FServer.Stop;
-      {$ENDIF}
     end;
     FServerStarting := false;
   end);
@@ -445,11 +424,7 @@ begin
   TdwlLogger.Log('Stopping DWL Server', lsNotice);
   FLogHandler := nil; // do not try to log when server goes down
   FreeAndNil(FACMECheckThread);
-  {$IFDEF NEWHTTPSERVER}
   FServer.Active := false;
-  {$ELSE}
-  FServer.Stop;
-  {$ENDIF}
   TdwlLogger.UnregisterDispatcher(FCallBackLogDispatcher);
   TdwlMailQueue.Configure(nil); // to stop sending
   TdwlLogger.Log('Stopped DWL Server', lsNotice);
@@ -507,18 +482,7 @@ begin
           end);
           Continue;
     try
-      if TDWLServerSection.CheckACMEConfiguration(FSection.FServer, FConfigParams) then
-      begin
-        {$IFNDEF NEWHTTPSERVER}
-        TdwlLogger.Log('Requesting server restart due to changed ACME Certificate', lsTrace);
-        // 'post' a restart to the main thread
-        TThread.Queue(nil,  procedure
-          begin
-            FSection.StopServer;
-            FSection.StartServer;
-          end);
-        {$ENDIF}
-      end;
+      TDWLServerSection.CheckACMEConfiguration(FSection.FServer, FConfigParams);
     except
       on E:Exception do
         TdwlLogger.Log(E);

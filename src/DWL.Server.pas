@@ -8,7 +8,7 @@ uses
   System.Threading, DWL.Params, DWL.Logging,
   DWL.TCP.HTTP,
   System.Generics.Collections, System.SysUtils,
-  DWL.Server.Types, DWL.HTTP.Server;
+  DWL.Server.Types;
 
 type
   TDWlServer=class;
@@ -50,13 +50,9 @@ type
     FLogLevel: byte;
     FURIAliases: TDictionary<string, string>;
     FOnlyLocalConnections: boolean;
-    FIsStopping: boolean;
     FExecutionTask: ITask;
-    FParams: IdwlParams;
     FRootHandlerAccess: TMultiReadExclusiveWriteSynchronizer;
     FRootHandler: TdwlHTTPHandler;
-    FHTTPServer: TdwlHTTPServer;
-    procedure Execute;
   private
     function GetIsRunning: boolean;
   protected
@@ -84,8 +80,6 @@ type
     ///   the SSL protocol is activated and this function returns true
     /// </summary>
     function IsSecure: boolean;
-    procedure Start(Params: IdwlParams);
-    procedure Stop;
     /// <summary>
     ///   This will suspend handling, the server will stay active, but the
     ///   handling of the requests will be delayed until ResumeHandling is
@@ -178,48 +172,11 @@ end;
 
 destructor TDWLServer.Destroy;
 begin
-  Stop;
+  Active := false;
   FURIAliases.Free;
   FRootHandler.Free;
   FRootHandlerAccess.Free;
   inherited Destroy;
-end;
-
-procedure TDWLServer.Execute;
-const
-  SleepDelay=250;
-begin
-  try
-    FHTTPServer := TdwlHTTPServer.Create(Self);
-    try
-      var SslIoHandler: IdwlSslIoHandler;
-      if Supports(IOHandler, IdwlSslIoHandler, SslIoHandler) then
-      begin
-        var CertificatesPath := ExtractFilePath(ParamStr(0))+'Cert_ACME\';
-        var HostName := SslIoHandler.Environment.MainContext.HostName;
-        FHTTPServer.AddHostName(HostName,
-          CertificatesPath+ReplaceStr(HostName, '.', '_')+'.crt',
-          CertificatesPath+ReplaceStr(HostName, '.', '_')+'_root.crt',
-          CertificatesPath+ReplaceStr(HostName, '.', '_')+'.key');
-      end;
-      var IndyBinding := FHTTPServer.Bindings.Add;
-      IndyBinding.IP := Bindings[0].IP;
-      IndyBinding.Port := Bindings[0].Port;
-      FHTTPServer.OnlyLocalConnections := OnlyLocalConnections;
-      FHTTPServer.Open;
-      TdwlLogger.Log('Opened HTTP Server', lsNotice);
-      while not FIsStopping do
-      begin
-        Sleep(SleepDelay);
-      end;
-      TdwlLogger.Log('Closing HTTP Server', lsNotice);
-    finally
-      FHTTPServer.Free;
-    end;
-  except
-    on E: Exception do
-      TdwlLogger.Log('Exception occured: ' + E.Message, lsError);
-  end;
 end;
 
 function TDWLServer.FindHandler(const URI: string): TdwlHTTPHandler;
@@ -245,7 +202,7 @@ function TDWLServer.HandleRequest(Request: TdwlHTTPSocket): boolean;
       Result := FinalHandler.URI
     else
       Result := '';
-    Result := 'Rq '{+AContext.Binding.PeerIP+':'+AContext.Binding.Port.ToString+' '}+
+    Result := 'Rq '+Request.IP_Remote+':'+Request.Port_Local.ToString+' '+
       dwlhttpCommandToString[State.Command]+' '+Result+PServerStructure(State._InternalServerStructure).State_URI+' '+
       State.StatusCode.ToString+' ('+(GetTickCount64-PServerStructure(State._InternalServerStructure).Tick).ToString+'ms)';
   end;
@@ -364,26 +321,6 @@ end;
 procedure TDWLServer.ResumeHandling;
 begin
   FRootHandlerAccess.EndWrite;
-end;
-
-procedure TDWLServer.Start(Params: IdwlParams);
-begin
-  if IsRunning then
-    Exit;
-  FParams := Params;
-  FIsStopping := false;
-  FExecutionTask := TTask.Create(procedure()
-    begin
-      Execute;
-    end);
-  FExecutionTask.Start;
-end;
-
-procedure TDWLServer.Stop;
-begin
-  FIsStopping := true;
-  if FExecutionTask<>nil then
-    FExecutionTask.Wait(5000);
 end;
 
 procedure TDWLServer.SuspendHandling;

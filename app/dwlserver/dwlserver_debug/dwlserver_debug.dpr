@@ -1,7 +1,6 @@
 program dwlserver_debug;
 
 uses
-  FastMM5,
   Vcl.Forms,
   fMain in 'Forms\fMain.pas' {MainForm},
   DWLServer.Section in '..\units\DWLServer.Section.pas';

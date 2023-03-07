@@ -7,7 +7,7 @@ unit DWL.Server.Handler.Mail;
 interface
 
 uses
-  DWL.HTTP.Server, DWL.Server.Types, DWL.Params, DWL.Server;
+  DWL.Server.Types, DWL.Params, DWL.Server;
 
 type
   TdwlHTTPHandler_Mail = class(TdwlHTTPHandler)
