@@ -111,14 +111,14 @@ begin
       var PrivateKey := Cmd.Reader.GetString(GetHostNames_Idx_PrivateKey, true);
       if Certificate<>'' then
       begin
-        ACMEClient.RootCertificate := TdwlOpenSSL.New_Cert_FromPEMStr(RootCertificate);
-        ACMEClient.Certificate := TdwlOpenSSL.New_Cert_FromPEMStr(Certificate);
+        ACMEClient.RootCertificate := RootCertificate;
+        ACMEClient.Certificate := Certificate;
         ACMEClient.PrivateKey := TdwlOpenSSL.New_PrivateKey_FromPEMStr(PrivateKey);
       end
       else
       begin
-        ACMECLient.RootCertificate := nil;
-        ACMEClient.Certificate := nil;
+        ACMECLient.RootCertificate := '';
+        ACMEClient.Certificate := '';
         ACMECLient.PrivateKey := nil;
       end;
       ACMEClient.CheckCertificate;
@@ -142,8 +142,8 @@ begin
       end;
       if ACMEClient.CertificateStatus=certstatOk then
       begin // process newly retrieved certificate
-        RootCertificate := ACMECLient.RootCertificate.PEMString;
-        Certificate := ACMECLient.Certificate.PEMString;
+        RootCertificate := ACMECLient.RootCertificate;
+        Certificate := ACMECLient.Certificate;
         PrivateKey := ACMECLient.PrivateKey.PEMString;
         var CmdUpdate := Session.CreateCommand(SQL_Update_Cert);
         CmdUpdate.Parameters.SetTextDataBinding(Update_Cert_Idx_RootCert, RootCertificate);

@@ -43,12 +43,12 @@ type
   TdwlACMEClient = class
   strict private
     FAccountPrivateKey: IdwlOpenSSLKey;
-    FCertificate: IdwlX509Cert;
+    FCertificate: string;
     FCertificateStatus: TCertificateStatus;
     FDomain: string;
     FCallBackPortNumber: integer;
     FPrivateKey: IdwlOpenSSLKey;
-    FRootCertificate: IdwlX509Cert;
+    FRootCertificate: string;
     FProfileCountryCode: string;
     FProfileCity: string;
     FProfileState: string;
@@ -88,7 +88,7 @@ type
     ///   The actual certificate. Will be generated
     ///   automatically, but you can provide it if needed
     /// </summary>
-    property Certificate: IdwlX509Cert read FCertificate write FCertificate;
+    property Certificate: string read FCertificate write FCertificate;
     /// <summary>
     ///   The directory where the results and the account information will be
     ///   saved. Defaults to &lt;appdir&gt;/Cert_ACME
@@ -103,7 +103,7 @@ type
     ///   The full path/filename of the applicable root certificate. Will be generated
     ///   automatically, but you can override it is needed
     /// </summary>
-    property RootCertificate: IdwlX509Cert read FRootCertificate write FRootCertificate;
+    property RootCertificate: string read FRootCertificate write FRootCertificate;
     /// <summary>
     ///   The full path/filename of file with the private key. Will be generated
     ///   automatically, but you can override it is needed
@@ -187,9 +187,10 @@ begin
     FCertificateStatus := certstatUnknown;
     FDaysLeft := -MaxInt;
     try
-      if Certificate<>nil then
+      if Certificate<>'' then
       begin
-        pTime := X509_get0_notAfter(Certificate.X509);
+        var Cert := TdwlOpenSSL.New_Cert_FromPEMStr(Certificate);
+        pTime := X509_get0_notAfter(Cert.X509);
         FDaysLeft := Floor(TdwlOpenSSL.ASN1_StringToDateTime(pTime)-Now);
         if FDaysLeft>RenewalDays then
           FCertificateStatus := certstatOk
@@ -329,7 +330,7 @@ begin
     Log('Error downloading Root Certificate: '+Response.AsString, lsError);
     Exit;
   end;
-  RootCertificate := TdwlOpenSSL.New_Cert_FromPEMStr(Response.AsString);
+  RootCertificate := Response.AsString;
   Log('Root Certificate retrieval succeeded', lsNotice);
   Result := true;
 end;
@@ -345,7 +346,7 @@ begin
     Log('Error downloading Certificate: '+Response.AsString, lsError);
     Exit;
   end;
-  Certificate := TdwlOpenSSL.New_Cert_FromPEMStr(Response.AsString);
+  Certificate := Response.AsString;
   Log('Certificate retrieval succeeded', lsNotice);
   Result := true;
 end;
