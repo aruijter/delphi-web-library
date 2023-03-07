@@ -276,7 +276,9 @@ end;
 
 class function TdwlOS.NumberOfLogicalProcessors: cardinal;
 begin
-  Result := StrToIntDef(WMI_Value('Win32_Processor', 'NumberOfLogicalProcessors'), 1);
+  var SystemInfo: _SYSTEM_INFO;
+  GetSystemInfo(SystemInfo);
+  Result := SystemInfo.dwNumberOfProcessors;
 end;
 
 class function TdwlOS.WMI_Value(const Win32Class, Win32Property: string): string;
