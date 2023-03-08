@@ -172,6 +172,8 @@ begin
     ShowMessage('This file has version '+FileVersion.GetAsString+'.'#13#10'At lease version '+NextVersion.GetAsString+' is needed for release.');
     Exit;
   end;
+  if FileVersion.Build<1 then
+    FileVersion.Build := NextVersion.Build+1;
   if FileExt<>'.7z' then
   begin
     var Fn7z := ChangeFileExt(FileName, '.7z');
