@@ -52,7 +52,7 @@ begin
     var lRequest := New_HTTPRequest(FAuthorization_Endpoint+'/refreshtoken');
     lRequest.Method := HTTP_COMMAND_POST;
     lRequest.WritePostData(Format('username=%s&password=%s', [TNetEncoding.URL.Encode(Username), TNetEncoding.URL.Encode(Password)]));
-    lRequest.Header[HTTP_HEADER_CONTENT_TYPE] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
+    lRequest.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
     var lResponse := lRequest.Execute;
     if lResponse.StatusCode=200 then
     begin
@@ -80,7 +80,7 @@ begin
   var lRequest := New_HTTPRequest(FAuthorization_Endpoint+'/accesstoken');
   lRequest.Method := HTTP_COMMAND_POST;
   lRequest.WritePostData(Format('refreshtoken=%s', [GetRefreshToken]));
-  lRequest.Header[HTTP_HEADER_CONTENT_TYPE] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
+  lRequest.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
   var lResponse := lRequest.Execute;
   case lResponse.StatusCode of
   HTTP_STATUS_OK:

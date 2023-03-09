@@ -161,7 +161,7 @@ begin
   begin
     Result := nil;
     var CType: string;
-    if TryGetHeaderValue(State, HTTP_HEADER_CONTENT_TYPE, CType) and SameText(Copy(CType, 1, CONTENT_TYPE_JSON.Length), CONTENT_TYPE_JSON) then
+    if TryGetHeaderValue(State, HTTP_FIELD_CONTENT_TYPE, CType) and SameText(Copy(CType, 1, CONTENT_TYPE_JSON.Length), CONTENT_TYPE_JSON) then
     begin
       var PostData: pointer;
       var PostDataSize: Int64;

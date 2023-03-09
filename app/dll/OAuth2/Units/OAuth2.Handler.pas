@@ -441,7 +441,7 @@ begin
   if State.Command=dwlhttpPOST then
   begin
     var ContType: string;
-    if not TryGetHeaderValue(State, HTTP_HEADER_CONTENT_TYPE, ContType) or
+    if not TryGetHeaderValue(State, HTTP_FIELD_CONTENT_TYPE, ContType) or
       (ContType<>CONTENT_TYPE_X_WWW_FORM_URLENCODED) then
     begin
       HandlingError(State);

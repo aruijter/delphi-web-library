@@ -220,7 +220,7 @@ begin
           serverProcs.ArrangeContentBufferProc(State, ContentBuffer, Size);
           Move(pBuffer^, ContentBuffer^, Size);
           State.SetContentType(CONTENT_TYPE_OCTET_STREAM);
-          State.SetHeaderValue(HTTP_HEADER_CONTENT_DISPOSITION, 'filename='+Cmd.Reader.GetString(2, true)+'.'+Cmd.Reader.GetString(1));
+          State.SetHeaderValue(HTTP_FIELD_CONTENT_DISPOSITION, 'filename='+Cmd.Reader.GetString(2, true)+'.'+Cmd.Reader.GetString(1));
         end
         else
           State.StatusCode := HTTP_STATUS_NO_CONTENT;

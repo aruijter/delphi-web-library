@@ -260,7 +260,7 @@ begin
       var DispList := TStringList.Create;
       try
         DispList.Delimiter := ';';
-        DispList.DelimitedText := Response.Header[HTTP_HEADER_CONTENT_DISPOSITION];
+        DispList.DelimitedText := Response.Header[HTTP_FIELD_CONTENT_DISPOSITION];
         FileName := DispList.Values['filename'];
       finally
         DispList.Free;
