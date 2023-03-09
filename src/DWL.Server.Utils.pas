@@ -48,7 +48,7 @@ begin
   var CombinedContentType := ContentType;
   if CharSet<>'' then
     CombinedContentType := CombinedContentType+'; charset='+CharsetToWrite;
-  serverProcs.SetHeaderValueProc(@Self, HTTP_HEADER_CONTENT_TYPE, PWideChar(CombinedContentType));
+  serverProcs.SetHeaderValueProc(@Self, HTTP_FIELD_CONTENT_TYPE, PWideChar(CombinedContentType));
 end;
 
 procedure TdwlHTTPHandlingStateHelper.SetHeaderValue(const HeaderKey,Value: string);

@@ -233,7 +233,7 @@ begin
   Request.Method := Method;
   if (Method=HTTP_COMMAND_POST) then
   begin
-    Request.Header[HTTP_HEADER_CONTENT_TYPE] := 'application/jose+json';
+    Request.Header[HTTP_FIELD_CONTENT_TYPE] := 'application/jose+json';
     var JWS := New_JWS;
     JWS.SetPayloadString(PayLoad);
     // Payload is always provided as a JWS object if Account URL is not yet available
@@ -248,7 +248,7 @@ begin
   end;
   Result := Request.Execute;
   // Check for ReplayNonce;
-  Nonce := Result.Header[HTTP_HEADER_REPLAY_NONCE];
+  Nonce := Result.Header[HTTP_FIELD_REPLAY_NONCE];
   if Nonce<>'' then
     State.ReplayNonce := Nonce;
 end;
@@ -412,7 +412,7 @@ begin
   var Response := DoRequest(State, State.URLNewAccount, HTTP_COMMAND_POST, '{"termsOfServiceAgreed":true}');
   Result := (Response.StatusCode in [HTTP_STATUS_OK, HTTP_STATUS_CREATED]);
   if Result then
-    State.URLAccount := Response.Header[HTTP_HEADER_LOCATION]
+    State.URLAccount := Response.Header[HTTP_FIELD_LOCATION]
   else
     Log('Account initialization failed: '+Response.AsString, lsError);
 end;

@@ -156,9 +156,9 @@ begin
       begin
         lRequest.WritePostData(URLEncodedParamsOrPostBody);
         if PostBodyIsJSON then
-          lRequest.Header[HTTP_HEADER_CONTENT_TYPE] := CONTENT_TYPE_JSON
+          lRequest.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_JSON
         else
-          lRequest.Header[HTTP_HEADER_CONTENT_TYPE] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
+          lRequest.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
       end
       else
         lRequest.URL := lRequest.URL+'?'+URLEncodedParamsOrPostBody;

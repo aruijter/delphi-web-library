@@ -3,17 +3,51 @@ unit DWL.HTTP.Utils;
 interface
 
 type
+  IdwlHTTPFieldValue = interface
+    function MainValue: string;
+    function SubValue(const Key: string; const Default: string=''): string;
+  end;
+
   TdwlHTTPUtils = record
     class function StringTodwlhttpCommand(const HttpCommand: string): integer; static;
     class function StatusCodeDescription(StatusCode: integer): string; static;
+    class function ParseHTTPFieldValue(const Value: string): IdwlHTTPFieldValue; static;
+    class function MIMEnameToCodepage(const Charset: string; Default: cardinal=CP_UTF8): integer; static;
   end;
 
 implementation
 
 uses
-  DWL.HTTP.Consts, System.StrUtils, Winapi.WinInet, System.SysUtils;
+  DWL.HTTP.Consts, System.StrUtils, Winapi.WinInet, System.SysUtils,
+  System.Classes, DWL.Logging;
+
+type
+  TdwlHTTPField = class(TInterfacedObject, IdwlHTTPFieldValue)
+  strict private
+    FMainValue: string;
+    FExtraValues: TStringList;
+  private
+    function MainValue: string;
+    function SubValue(const Key: string; const Default: string=''): string;
+  public
+    constructor Create(const Value: string);
+    destructor Destroy; override;
+  end;
 
 { TdwlHTTPUtils }
+
+class function TdwlHTTPUtils.MIMEnameToCodepage(const Charset: string; Default: cardinal=CP_UTF8): integer;
+begin
+  for var Combination in CodePageMIMEnameCombinations do
+    if SameText(Combination.MIMEname, Charset) then
+      Exit(Combination.Codepage);
+  Result := CP_UTF8; // The default
+end;
+
+class function TdwlHTTPUtils.ParseHTTPFieldValue(const Value: string): IdwlHTTPFieldValue;
+begin
+  Result := TdwlHTTPField.Create(Value);
+end;
 
 class function TdwlHTTPUtils.StatusCodeDescription(StatusCode: integer): string;
 begin
@@ -65,6 +99,43 @@ end;
 class function TdwlHTTPUtils.StringTodwlhttpCommand(const HttpCommand: string): integer;
 begin
   Result := IndexStr(HttpCommand, dwlhttpCommandToString);
+end;
+
+{ TdwlHTTPField }
+
+constructor TdwlHTTPField.Create(const Value: string);
+begin
+  inherited Create;
+  var Parts := Value.Split([';']);
+  if High(Parts)<0 then
+    Exit;
+  FMainValue := Parts[0].Trim;
+  if High(Parts)<1 then
+    Exit;
+  FExtraValues := TStringList.Create;
+  for var i := 1 to High(Parts) do
+    FExtraValues.Add(Parts[i].Trim);
+  inherited Destroy;
+end;
+
+destructor TdwlHTTPField.Destroy;
+begin
+  FExtraValues.Free;
+  inherited Destroy;
+end;
+
+function TdwlHTTPField.SubValue(const Key: string; const Default: string=''): string;
+begin
+  if FExtraValues=nil then
+    Exit(Default);
+  Result := FExtraValues.Values[Key];
+  if Result='' then
+    Result := Default;
+end;
+
+function TdwlHTTPField.MainValue: string;
+begin
+  Result := FMainValue;
 end;
 
 end.

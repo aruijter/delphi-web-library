@@ -155,14 +155,16 @@ begin
         RequestParams.Add(Param);
     end;
   end;
-  if SameText(RequestHeaders.StrValue(HTTP_HEADER_CONTENT_TYPE), CONTENT_TYPE_X_WWW_FORM_URLENCODED) and
-    (FRequestBodyStream<>nil) then
+  var ContTypeHeader := TdwlHTTPUtils.ParseHTTPFieldValue(RequestHeaders.StrValue(HTTP_FIELD_CONTENT_TYPE));
+  if SameText(ContTypeHeader.MainValue, CONTENT_TYPE_X_WWW_FORM_URLENCODED) and (FRequestBodyStream<>nil) then
   begin
-    var AnsiQuery: ansistring;
+    var WideStr: string;;
+    var CodePage := TdwlHTTPUtils.MIMEnameToCodepage(ContTypeHeader.SubValue(HTTP_SUBFIELD_CHARSET, CHARSET_UTF8));
     var Len := RequestBodyStream.Size;
-    SetLength(AnsiQuery, Len);
-    RequestBodyStream.Read(AnsiQuery[1], Len);
-    var Query := string(AnsiQuery).Split(['&']);
+    SetLength(WideStr, Len);
+    Len := MultiByteToWideChar(CodePage, 0, RequestBodyStream.Memory, Len, @WideStr[1], Len);
+    SetLength(WideStr, Len);
+    var Query := WideStr.Split(['&']);
     for var Param in Query do
     begin
       P := pos('=', Param);
@@ -222,7 +224,7 @@ end;
 
 procedure TdwlHTTPSocket.ReadFinishHeader;
 begin
-  var TransferEncoding := FRequestHeaders.StrValue(HTTP_HEADER_TRANSFER_ENCODING);
+  var TransferEncoding := FRequestHeaders.StrValue(HTTP_FIELD_TRANSFER_ENCODING);
   if SameText(TransferEncoding, TRANSFER_ENCODING_CHUNCKED) then
   begin
     FState := hcsError;
@@ -230,7 +232,7 @@ begin
     FReadError := 'Transfer encoding chuncked not supported';
     Exit;
   end;
-  if not FRequestHeaders.TryGetIntValue(HTTP_HEADER_CONTENT_LENGTH, FContentLength) then
+  if not FRequestHeaders.TryGetIntValue(HTTP_FIELD_CONTENT_LENGTH, FContentLength) then
     FContentLength := 0;
   if FContentLength>0 then
   begin
@@ -241,7 +243,7 @@ begin
   else
     FState := hcsProcessing;
   // Handle 100 request
-  if SameText(FRequestHeaders.StrValue(HTTP_HEADER_EXPECT), EXPECT_100_CONTINUE) then
+  if SameText(FRequestHeaders.StrValue(HTTP_FIELD_EXPECT), EXPECT_100_CONTINUE) then
   begin
     WriteLine('HTTP/1.1 100 Continue');
     WriteLine;
@@ -320,16 +322,16 @@ end;
 
 procedure TdwlHTTPSocket.ReadProcessRequest;
 begin
-  var KeepAlive := (FProtocol<>HTTP10) and SameText(FRequestHeaders.StrValue(HTTP_HEADER_CONNECTION), CONNECTION_KEEP_ALIVE);
+  var KeepAlive := (FProtocol<>HTTP10) and SameText(FRequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE);
   if FProtocol<>HTTP10 then
-    FResponseHeaders.WriteValue(HTTP_HEADER_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));
+    FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));
   if FResponseDataStream=nil then
     FResponseDataStream := TMemoryStream.Create;
   if FState=hcsError then
   begin
     if FReadError<>'' then
     begin
-      FResponseHeaders.WriteValue(HTTP_HEADER_CONTENT_TYPE, CONTENT_TYPE_HTML);
+      FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_TYPE, CONTENT_TYPE_HTML);
       FResponseDataStream.WriteData('<html><body><h1>'+TNetEncoding.HTML.Encode(FReadError)+'</h1></body></html>');
     end;
   end
@@ -342,7 +344,7 @@ begin
       StatusCode := HTTP_STATUS_NOT_FOUND;
   end;
   // Remember to not write Content-Length when Command CONNECT is added later
-  FResponseHeaders.WriteValue(HTTP_HEADER_CONTENT_LENGTH, FResponseDataStream.Size.ToString);
+  FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_LENGTH, FResponseDataStream.Size.ToString);
   // Write HTTP protocol line
   WriteStr('HTTP/1.');
   case FProtocol of

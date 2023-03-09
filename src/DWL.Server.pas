@@ -57,6 +57,7 @@ type
     function GetIsRunning: boolean;
   protected
     function HandleRequest(Request: TdwlHTTPSocket): boolean; override;
+    procedure InternalDeActivate; override;
   public
     property IsRunning: boolean read GetIsRunning;
     property LogLevel: byte read FLogLevel write FLogLevel;
@@ -124,6 +125,7 @@ type
     function FindHandler(const URI: string): TdwlHTTPHandler;
     procedure RegisterHandler(const URI: string; Handler: TdwlHTTPHandler);
     function UnRegisterHandler(const URI: string): boolean;
+    procedure UnRegisterAllHandlers;
   protected
     function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
   public
@@ -263,6 +265,12 @@ begin
   Result := true;
 end;
 
+procedure TDWLServer.InternalDeActivate;
+begin
+  TdwlHTTPHandler_PassThrough(FRootHandler).UnRegisterAllHandlers;
+  inherited InternalDeActivate;
+end;
+
 function TDWLServer.IsSecure: boolean;
 begin
   Result := Supports(IoHandler, IdwlSslIoHandler);
@@ -281,7 +289,7 @@ begin
   State.Flags := 0;
   if (LogLevel>=httplogLevelFailedRequests) then
     PServerStructure(State._InternalServerStructure).Tick := GetTickCount64;
-  State.SetHeaderValue(HTTP_HEADER_CACHE_CONTROL, 'no-cache');
+  State.SetHeaderValue(HTTP_FIELD_CACHE_CONTROL, 'no-cache');
   FRootHandlerAccess.BeginRead;
   try
     // RootHandler never needs Authentication Control
@@ -438,6 +446,11 @@ begin
     Handler.FServer := FServer;
     Handler.FURI := FURI+URI;
   end;
+end;
+
+procedure TdwlHTTPHandler_PassThrough.UnRegisterAllHandlers;
+begin
+  FHandlers.Clear;
 end;
 
 function TdwlHTTPHandler_PassThrough.UnRegisterHandler(const URI: string): boolean;

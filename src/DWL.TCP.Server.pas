@@ -39,6 +39,7 @@ type
     constructor Create(AServer: TdwlTCPServer);
     destructor Destroy; override;
     function Add(const AIP: string; APort: word): TdwlServerBinding;
+    procedure Clear;
     procedure StartListening;
     procedure StopListening;
   end;
@@ -161,6 +162,11 @@ begin
   FBindings.Add(Result);
 end;
 
+procedure TdwlServerBindings.Clear;
+begin
+  FBindings.Clear;
+end;
+
 constructor TdwlServerBindings.Create;
 begin
   inherited Create;
@@ -237,7 +243,6 @@ end;
 
 procedure TdwlServerBinding.StopListening;
 begin
-  shutdown(FListenSocket, SD_BOTH);
   closesocket(FListenSocket);
 end;
 

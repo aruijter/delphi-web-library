@@ -427,6 +427,7 @@ begin
   FServer.Active := false;
   TdwlLogger.UnregisterDispatcher(FCallBackLogDispatcher);
   TdwlMailQueue.Configure(nil); // to stop sending
+  FServer.Bindings.Clear;
   TdwlLogger.Log('Stopped DWL Server', lsNotice);
   TdwlLogger.FinalizeDispatching;
   FServerStarted := false;
