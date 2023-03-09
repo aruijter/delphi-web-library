@@ -8,7 +8,7 @@ interface
 
 uses
   DWL.OpenSSL.Api, DWL.OpenSSL, System.SysUtils, DWL.HTTP.Consts,
-  DWL.HTTP.Client, DWL.Logging, IdContext, IdCustomHTTPServer, DWL.JOSE;
+  DWL.HTTP.Client, DWL.Logging, DWL.JOSE;
 
 type
   TCertificateStatus = (certstatUnknown, certstatNotFound, certstatExpired, certstatAboutToExpire, certstatOk);
@@ -56,13 +56,11 @@ type
     FAPIEndpoint: string;
     FDirectory: string;
     FHTTPRequestSeen: boolean;
-    FCurrentChallengeResponse: string;
     FDaysLeft: integer;
     FChallengeIP: string;
     function DoRequest(var State: TACMECheckState; const URL: string; Method: string=HTTP_COMMAND_GET; const Payload: string=''): IdwlHTTPResponse;
     function GetReplayNonce(var State:TACMECheckState): string;
     procedure Log(const Msg: string; SeverityLevel: TdwlLogSeverityLevel);
-    procedure HTTPServerCommand(AContext: TIdContext; ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
     function PrepareKey(var State:TACMECheckState): boolean;
     function InitializeACMEDirectory(var State:TACMECheckState): boolean;
     function InitAccount(var State:TACMECheckState): boolean;
@@ -159,11 +157,10 @@ type
 implementation
 
 uses
-  IdCoderMIME, System.Classes, System.AnsiStrings, System.StrUtils,
+  System.Classes, System.AnsiStrings, System.StrUtils,
   System.DateUtils, System.IOUtils, System.Math, System.JSON, Winapi.WinInet,
-  IdHTTPServer, System.Hash, Winapi.Windows,
-  System.Generics.Collections, System.NetEncoding,
-  IdAssignedNumbers;
+  System.Hash, Winapi.Windows,
+  System.Generics.Collections, System.NetEncoding, DWL.TCP.Consts, DWL.TCP.HTTP;
 
 const
   ProductionAPIEndpoint ='https://acme-v02.api.letsencrypt.org/directory';
@@ -176,6 +173,14 @@ const
   DefaultAPIEndpoint = ProductionAPIEndpoint;
   {$ENDIF}
   PrivateAccountKeyFileName='account.key';
+
+type
+  TCallBackServer = class(TdwlCustomHTTPServer)
+  private
+    FCurrentChallengeResponse: ansistring;
+  protected
+    function HandleRequest(Request: TdwlHTTPSocket): boolean; override;
+  end;
 
 { TdwlACMEClient }
 
@@ -220,7 +225,7 @@ begin
   FDaysLeft := -1;
   FRenewalDays := 30; //Let's encrypt recommendation
   FAPIEndpoint := DefaultAPIEndpoint;
-  FCallBackPortNumber := IdPORT_HTTP;
+  FCallBackPortNumber := PORT_HTTP;
   FDirectory := ExtractFilePath(ParamStr(0))+'Cert_ACME';
 end;
 
@@ -280,8 +285,6 @@ begin
   X509_NAME_add_entry_by_txt(X509_Name, 'CN', MBSTRING_ASC, PAnsiChar(AnsiString(Domain)), -1, -1, 0);
 
   // get Certificate Signing Request.
-//  domain_KEY := EVP_PKEY_new;
-//  EVP_PKEY_assign_RSA(domain_KEY, pointer(PrivateDomainkey.rsa));
   X509_REQ_set_pubkey(x509_req, FPrivateKey.key);
   X509_REQ_sign(X509_Req, FPrivateKey.key, EVP_sha256);
   BIO := BIO_new(BIO_s_mem);
@@ -400,12 +403,6 @@ begin
   State.ReplayNonce := '';
 end;
 
-procedure TdwlACMEClient.HTTPServerCommand(AContext: TIdContext; ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
-begin
-  AResponseInfo.ContentType := 'text/plain';
-  AResponseInfo.ContentText := FCurrentChallengeResponse;
-end;
-
 function TdwlACMEClient.InitAccount(var State:TACMECheckState): boolean;
 begin
   // contact information is not required, only agree to terms of service
@@ -454,7 +451,6 @@ var
   ChallType: string;
   ChallUrl: string;
   ChallToken: string;
-  HTTPServer: TIDHttpServer;
   TickCount: UInt64;
   TimeOutTickCount: UInt64;
   CheckStatusTick: UInt64;
@@ -498,20 +494,13 @@ begin
                 Log('Starting HTTP challenge '+(ChallNo+1).Tostring+ ' (listening on port '+CallBackPortNumber.ToString+')', lsTrace);
                 Status := '';
                 FHTTPRequestSeen := false;
-                HTTPServer := TIdHTTPServer.Create(nil);
+                var CallBackServer := TCallBackServer.Create;
                 try
                   // Set Response combined token and JSONWebkey (Thumbprint)
-                  FCurrentChallengeResponse :=  ChallToken+'.'+ TNetEncoding.Base64URL.EncodeBytesToString(THashSHA2.GetHashBytes(State.JSONWebKey.Replace(' ', ''), SHA256));
+                  CallbackServer.FCurrentChallengeResponse := ansistring(ChallToken+'.'+ TNetEncoding.Base64URL.EncodeBytesToString(THashSHA2.GetHashBytes(State.JSONWebKey.Replace(' ', ''), SHA256)));
+                  CallbackServer.Bindings.Add(ChallengeIP, CallBackPortNumber);
                   // start internal server
-                  HTTPServer.OnCommandGet := HTTPServerCommand;
-                  HTTPServer.DefaultPort := CallBackPortNumber;
-                  if ChallengeIP<>'' then
-                  begin
-                    var Bind := HTTPServer.Bindings.Add;
-                    Bind.IP := ChallengeIP;
-                    Bind.Port := IdPORT_HTTP;
-                  end;
-                  HTTPServer.Active := true;
+                  CallBackServer.Active := true;
                   // start the challenge
                   TickCount := GetTickCount64;
                   TimeoutTickCount := TickCount+10000;
@@ -556,7 +545,7 @@ begin
                     TickCount := GetTickCount64;
                   end;
                 finally
-                  HTTPServer.Free;
+                  CallBackServer.Free;
                 end;
                 if Status<>'valid' then
                 begin
@@ -622,6 +611,15 @@ begin
       Log('Error in PrepareKey: '+E.Message, lsError);
     end;
   end;
+end;
+
+{ TCallBackServer }
+
+function TCallBackServer.HandleRequest(Request: TdwlHTTPSocket): boolean;
+begin
+  Request.ResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_TYPE, CONTENT_TYPE_PLAIN);
+  Request.ResponseDataStream.WriteBuffer(FCurrentChallengeResponse[1], Length(FCurrentChallengeResponse));
+  Result := true;
 end;
 
 end.

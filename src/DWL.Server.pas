@@ -113,8 +113,8 @@ uses
   System.Rtti, DWL.Params.Consts, System.StrUtils,
   DWL.MySQL, DWL.Server.Handler.DLL,
   Winapi.Windows, Winapi.ShLwApi, DWL.Server.Consts,
-  DWL.HTTP.Consts, DWL.Mail.Queue, IdAssignedNumbers, System.Math, DWL.OpenSSL,
-  DWL.TCP.SSL, Winapi.WinInet, DWL.Server.Utils, IdContext, IdCustomHTTPServer,
+  DWL.HTTP.Consts, DWL.Mail.Queue, System.Math, DWL.OpenSSL,
+  DWL.TCP.SSL, Winapi.WinInet, DWL.Server.Utils, IdContext,
   DWL.Server.Globals;
 
 type
