@@ -260,7 +260,6 @@ function TdwlSslIoHandler.Process(Socket: TdwlSocket): boolean;
 begin
   Result := true;
   var SslVars := PsslSocketVars(Socket.SocketVars);
-  var S := ERR_GetErrorMessage;
   var BytesRead: integer;
   // Try to deliver bytes to application
   var ReadBuf := sslVars.ReadBuf;

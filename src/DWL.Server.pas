@@ -240,7 +240,7 @@ begin
       TdwlLogger.Log(GetLogLine(State)+' (websocket closed)', lsTrace)
     else
     begin
-      if (State.StatusCode<>HTTP_STATUS_OK) and (LogLevel>=httplogLevelFailedRequests) then
+      if (State.StatusCode<>HTTP_STATUS_OK) and ((State.StatusCode<>HTTP_STATUS_REDIRECT)) and (LogLevel>=httplogLevelFailedRequests) then
         TdwlLogger.Log(GetLogLine(State), lsNotice)
       else
       begin

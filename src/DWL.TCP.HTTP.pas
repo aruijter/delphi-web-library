@@ -110,6 +110,7 @@ end;
 
 procedure TdwlHTTPSocket.ClearCurrentRequest;
 begin
+  FRequestParams.Clear;
   FRequestHeaders.Clear;
   FResponseHeaders.Clear;
   if FRequestBodyStream<>nil then
@@ -117,6 +118,7 @@ begin
   if FResponseDataStream<>nil then
     FResponseDataStream.Clear;
   FState := hcsReadRequest;
+  FReadError := '';
   // No need to clear other variables, they're always overwritten during evaluation of next request
 end;
 
@@ -150,7 +152,7 @@ begin
     begin
       P := pos('=', Param);
       if P>1 then
-        RequestParams.Add(Copy(Param, 1, P)+TNetEncoding.URL.Decode(Copy(Param, P+1, MaxInt)))
+        RequestParams.Add(TNetEncoding.URL.Decode(Copy(Param, 1, P-1))+'='+TNetEncoding.URL.Decode(Copy(Param, P+1, MaxInt)))
       else
         RequestParams.Add(Param);
     end;
@@ -169,7 +171,7 @@ begin
     begin
       P := pos('=', Param);
       if P>1 then
-        RequestParams.Add(Copy(Param, 1, P)+TNetEncoding.URL.Decode(Copy(Param, P+1, MaxInt)))
+        RequestParams.Add(TNetEncoding.URL.Decode(Copy(Param, 1, P-1))+'='+TNetEncoding.URL.Decode(Copy(Param, P+1, MaxInt)))
       else
         RequestParams.Add(Param);
     end;
