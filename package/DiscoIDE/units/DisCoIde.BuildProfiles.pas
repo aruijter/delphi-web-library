@@ -16,6 +16,7 @@ type
     class procedure DoBuildDebug(Sender: TObject);
     class procedure DoBuildPreRelease(Sender: TObject);
     class procedure DoBuildRelease(Sender: TObject);
+    class procedure DoBuildPreReleaseWithDebugInfo(Sender: TObject);
     class function GetSuitableproject: IOTAProject;
     class procedure OutputVersionInfo(Project: IOTAProject; IsADebug, IsAPreRelease, IsARelease: boolean);
     class procedure SetDefines(Project: IOTAProject; IsRelease: boolean);
@@ -34,12 +35,11 @@ begin
   var ProjectMenu := MainMenu.Items.Find('Project');
   if ProjectMenu <> nil then
   begin
-    var
-    MI := TMenuItem.Create(ProjectMenu);
+    var MI := TMenuItem.Create(ProjectMenu);
     FMenuItems.Add(MI); // this will destroy the item when finalizing
-    MI.Caption := 'Build - &Release';
-    MI.Name := 'DisCoIde_MenuItem_Build_Release';
-    MI.OnClick := DoBuildRelease;
+    MI.Caption := 'Build - &PreRelease with DebugInfo';
+    MI.Name := 'DisCoIde_MenuItem_Build_PreRelease_with_DebugInfo';
+    MI.OnClick := DoBuildPreReleaseWithDebugInfo;
     ProjectMenu.Insert(0, MI);
 
     MI := TMenuItem.Create(ProjectMenu);
@@ -47,6 +47,13 @@ begin
     MI.Caption := 'Build - &PreRelease';
     MI.Name := 'DisCoIde_MenuItem_Build_PreRelease';
     MI.OnClick := DoBuildPreRelease;
+    ProjectMenu.Insert(0, MI);
+
+    MI := TMenuItem.Create(ProjectMenu);
+    FMenuItems.Add(MI); // this will destroy the item when finalizing
+    MI.Caption := 'Build - &Release';
+    MI.Name := 'DisCoIde_MenuItem_Build_Release';
+    MI.OnClick := DoBuildRelease;
     ProjectMenu.Insert(0, MI);
 
     MI := TMenuItem.Create(ProjectMenu);
@@ -141,6 +148,34 @@ begin
     TdwlToolsAPI.SetProjectOption(Project, 'Assertions', 0);
     TdwlToolsAPI.SetProjectOption(Project, 'StackFrames', 0);
     TdwlToolsAPI.SetProjectOption(Project, 'DebugInfo', false);
+    TdwlToolsAPI.SetProjectOption(Project, 'MapFile', 3);
+    SetDefines(Project, true);
+    OutputVersionInfo(Project, false, false, true);
+    Project.ProjectBuilder.BuildProject(cmOTABuild, true);
+  except
+    on E: Exception do
+      MessageDlg(E.Message, TMsgDlgType.mtError, [mbOk], 0);
+  end;
+end;
+
+class procedure TDisCoIde_BuildProfiles.DoBuildPreReleaseWithDebugInfo(Sender: TObject);
+begin
+  try
+    var
+    Project := GetSuitableproject;
+    if Project = nil then
+      Exit;
+    Project.CurrentConfiguration := 'Release';
+    TdwlToolsAPI.SetProjectOption(Project, 'Optimization', 1);
+    TdwlToolsAPI.SetProjectOption(Project, 'RangeChecks', 0);
+    TdwlToolsAPI.SetProjectOption(Project, 'IOChecks', 0);
+    TdwlToolsAPI.SetProjectOption(Project, 'OverflowChecks', 0);
+    TdwlToolsAPI.SetProjectOption(Project, 'UnitDebugInfo', 2);
+    TdwlToolsAPI.SetProjectOption(Project, 'LocalSymbols', 1);
+    TdwlToolsAPI.SetProjectOption(Project, 'ReferenceInfo', 2);
+    TdwlToolsAPI.SetProjectOption(Project, 'Assertions', 0);
+    TdwlToolsAPI.SetProjectOption(Project, 'StackFrames', 0);
+    TdwlToolsAPI.SetProjectOption(Project, 'DebugInfo', true);
     TdwlToolsAPI.SetProjectOption(Project, 'MapFile', 3);
     SetDefines(Project, true);
     OutputVersionInfo(Project, false, false, true);
