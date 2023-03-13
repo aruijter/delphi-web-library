@@ -50,7 +50,7 @@ const
     FWritesInProgress: cardinal;
     procedure CreateRecvRequest;
     procedure HandleCurrentWriteBuffer;
-    procedure WSA_ShutdownOnError(ResultCode: Integer; const Op: string);
+    function CheckWSAResult_ShutdownOnError(ResultCode: Integer; const LogErrorWithThisString: string=''): integer;
   private
     FSocketCS: TCriticalSection;
     FShutdownTick: UInt64;
@@ -125,8 +125,8 @@ const
     procedure ReleaseTransmitBuffer(TransmitBuffer: PdwlTransmitBuffer);
   end;
 
-function CheckWSAResult(ResultCode: Integer; const Op: string): Integer; overload;
-function CheckWSAResult(ResultBool: boolean; const Op: string): Integer; overload;
+function CheckWSAResult(ResultCode: Integer; const LogErrorWithThisString: string=''): Integer; overload;
+function CheckWSAResult(ResultBool: boolean; const LogErrorWithThisString: string=''): Integer; overload;
 function WSARecv2(s: TSocket; lpBuffers: LPWSABUF; dwBufferCount: DWORD;
   lpNumberOfBytesRecvd: PCardinal; var lpFlags: DWORD; lpOverlapped: LPWSAOVERLAPPED;
   lpCompletionRoutine: LPWSAOVERLAPPED_COMPLETION_ROUTINE): Integer; stdcall;
@@ -148,22 +148,22 @@ const
   CLEANUPTHREAD_SLEEP_MSECS = 300;
   CLEANUP_DELAY_MSECS = 750;
 
-function CheckWSAResult(ResultCode: Integer; const Op: string): Integer;
+function CheckWSAResult(ResultCode: Integer; const LogErrorWithThisString: string=''): Integer;
 begin
   if ResultCode<>0 then
   begin
     Result := WSAGetLastError;
-    if (Result<>WSAEWOULDBLOCK) and (Result<>integer(WSA_IO_PENDING)) and (Result<>integer(WSA_IO_INCOMPLETE)) then
-      TdwlLogger.Log('Winsock error: '+SysErrorMessage(Result)+' ('+Result.ToString+')'+IfThen(Op<>'',' in '+Op), lsError);
+    if (LogErrorWithThisString<>'') and (Result<>WSAEWOULDBLOCK) and (Result<>integer(WSA_IO_PENDING)) and (Result<>integer(WSA_IO_INCOMPLETE)) then
+      TdwlLogger.Log('Winsock error: '+SysErrorMessage(Result)+' ('+Result.ToString+') in '+LogErrorWithThisString, lsError);
   end
   else
     Result := 0;
 end;
 
-function CheckWSAResult(ResultBool: boolean; const Op: string): Integer;
+function CheckWSAResult(ResultBool: boolean; const LogErrorWithThisString: string): Integer;
 begin
   if not ResultBool then
-    Result := CheckWSAResult(-1, Op)
+    Result := CheckWSAResult(-1, LogErrorWithThisString)
   else
     Result := 0;
 end;
@@ -210,7 +210,9 @@ end;
 
 procedure TdwlSocket.SendTransmitBuffer(TransmitBuffer: PdwlTransmitBuffer);
 begin
-  WSA_ShutdownOnError(WSASend2(SocketHandle, @TransmitBuffer.WSABuf, 1, nil, 0, LPWSAOVERLAPPED(TransmitBuffer), nil), 'WSASend');
+  var Res := CheckWSAResult_ShutdownOnError(WSASend2(SocketHandle, @TransmitBuffer.WSABuf, 1, nil, 0, LPWSAOVERLAPPED(TransmitBuffer), nil));
+  if (Res<>WSAECONNRESET) and (Res<>WSAEWOULDBLOCK) and (Res<>integer(WSA_IO_PENDING)) and (Res<>integer(WSA_IO_INCOMPLETE)) then
+    TdwlLogger.Log('Winsock error: '+SysErrorMessage(Res)+' ('+Res.ToString+') in SendTransmitBuffer', lsError);
   AtomicIncrement(FWritesInProgress);
 end;
 
@@ -291,12 +293,10 @@ begin
   WriteBuf(@B, 1);
 end;
 
-procedure TdwlSocket.WSA_ShutdownOnError(ResultCode: Integer; const Op: string);
+function TdwlSocket.CheckWSAResult_ShutdownOnError(ResultCode: Integer; const LogErrorWithThisString: string=''): integer;
 begin
-  if ResultCode=0 then
-    Exit;
-  Resultcode := CheckWSAResult(ResultCode, Op);
-  if (ResultCode<>0) and (ResultCode<>WSA_IO_PENDING) then
+  Result := CheckWSAResult(ResultCode, LogErrorWithThisString);
+  if (Result<>0) and (Result<>WSA_IO_PENDING) then
     ShutDown;
 end;
 
@@ -316,7 +316,7 @@ begin
   FSocketHandle := WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
   //and attach to IoCompletionPort
 	if CreateIoCompletionPort(SocketHandle, FService.FIoCompletionPort, 0, 0)=0 then
-    WSA_ShutdownOnError(-1, 'CreateIoCompletionPort');
+    CheckWSAResult_ShutdownOnError(-1, 'CreateIoCompletionPort');
   CreateWriteBuffer;
 end;
 
@@ -326,7 +326,9 @@ begin
   Inc(FReadLastID);
   TransmitBuffer.CompletionId := FReadLastID;
   var EmptyFlags: cardinal := 0;
-  WSA_ShutdownOnError(WSARecv2(SocketHandle, @TransmitBuffer.WSABuf, 1, nil, EmptyFlags, LPWSAOVERLAPPED(TransmitBuffer), nil), 'WSARecv');
+  var Res:= CheckWSAResult_ShutdownOnError(WSARecv2(SocketHandle, @TransmitBuffer.WSABuf, 1, nil, EmptyFlags, LPWSAOVERLAPPED(TransmitBuffer), nil));
+  if (Res<>WSAECONNRESET) and (Res<>WSAEWOULDBLOCK) and (Res<>integer(WSA_IO_PENDING)) and (Res<>integer(WSA_IO_INCOMPLETE)) then
+    TdwlLogger.Log('Winsock error: '+SysErrorMessage(Res)+' ('+Res.ToString+') in CreateRecvRequest', lsError);
 end;
 
 procedure TdwlSocket.CreateWriteBuffer;
@@ -494,7 +496,7 @@ begin
   FActiveSockets.Free;
   FInActiveSockets.Free;
   // cleanup winsock
-  CheckWSAResult(WSACleanup, 'WSACleanup');;
+  CheckWSAResult(WSACleanup, 'WSACleanup');
   FIoThreads.Free;
   inherited Destroy;
 end;
