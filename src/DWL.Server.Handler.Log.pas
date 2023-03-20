@@ -9,7 +9,8 @@ interface
 
 uses
   DWL.Server, DWL.Server.Types, DWL.Params,
-  System.Generics.Collections, System.SysUtils, System.SyncObjs, DWL.SyncObjs;
+  System.Generics.Collections, System.SysUtils, System.SyncObjs, DWL.SyncObjs,
+  System.RegularExpressions;
 
 const
   logdestinationServerConsole='serverconsole';
@@ -26,8 +27,8 @@ type
     FId: integer;
     FMinLevel: byte;
     FMaxLevel: byte;
-    FChannel: string;
-    FTopic: string;
+    FChannel: TRegEx;
+    FTopic: TRegEx;
     FParameters: string;
     FSuppressDuplicateMSecs: cardinal;
     // suppresshash is a list of hashes and the tick when the hashed value should not longer be suppressed
@@ -39,8 +40,8 @@ type
     property Id: integer read FId;
     property MinLevel: byte read FMinLevel write FMinLevel;
     property MaxLevel: byte read FMaxLevel write FMaxLevel;
-    property Channel: string read FChannel write FChannel;
-    property Topic: string read FTopic write FTopic;
+    property Channel: TRegEx read FChannel write FChannel;
+    property Topic: TRegEx read FTopic write FTopic;
     property Parameters: string read FParameters write FParameters;
     property SuppressDuplicateMSecs: cardinal read FSuppressDuplicateMSecs write SetSuppressDuplicateMSecs;
     function IsSuppressed(Level: Byte; const Source, Channel, Topic, Msg: string): boolean;
@@ -194,8 +195,20 @@ begin
         // (ignore the items from dwl_log_debug)
         Trigger.MinLevel := Max(integer(lsNotice), Cmd.Reader.GetInteger(1, true));
         Trigger.MaxLevel := Cmd.Reader.GetInteger(2, true, integer(lsFatal));
-        Trigger.Channel := Cmd.Reader.GetString(3, true, '*');
-        Trigger.Topic := Cmd.Reader.GetString(4, true, '*');
+        var RegExStr := Cmd.Reader.GetString(3, true, '.*');
+        try
+          Trigger.Channel := TRegEx.Create(RegExStr, [roCompiled, roSingleLine]);
+        except
+          TdwlLogger.Log('Invalid regex for Channel (TriggerID='+TriggerID.ToString+'): '+RegExStr);
+          Trigger.Channel := TRegEx.Create('.*', [roCompiled, roSingleLine]);
+        end;
+        RegExStr := Cmd.Reader.GetString(4, true, '.*');
+        try
+          Trigger.Topic := TRegEx.Create(RegExStr, [roCompiled, roSingleLine]);
+        except
+          TdwlLogger.Log('Invalid regex for Topic (TriggerID='+TriggerID.ToString+'): '+RegExStr);
+          Trigger.Topic := TRegEx.Create('.*', [roCompiled, roSingleLine]);
+        end;
         Trigger.Parameters := Cmd.Reader.GetString(5, true);
         Trigger.SuppressDuplicateMSecs := Max(0, Cmd.Reader.GetInteger(6, true))*1000;
         TrigList.Add(Trigger);
@@ -294,7 +307,7 @@ begin
       CheckTriggers(TrigList);
       for var Trig in TrigList do
       begin
-        if MatchesMask(Channel, Trig.Channel) and MatchesMask(Topic, Trig.Topic) and
+        if Trig.Channel.IsMatch(Channel) and Trig.Topic.IsMatch(Topic) and
           (Level>=Trig.MinLevel) and (Level<=Trig.MaxLevel) and
           (not Trig.IsSuppressed(Level, Source, Channel, Topic, Msg)) then
         begin
