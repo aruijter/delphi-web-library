@@ -203,6 +203,7 @@ implementation
 
 uses
   System.Classes, System.Generics.Collections, DWL.SyncObjs, System.NetEncoding,
+  {$IFOPT D+}JclDebug,{$ENDIF}
   DWL.Logging.EventLog, System.Hash, DWL.IOUtils;
 
 type
@@ -407,12 +408,14 @@ begin
   LogItem.Source := Source;
   LogItem.Channel := Channel;
   LogItem.Topic := Topic;
+  {$IFOPT D+}
   var S := Exc.StackTrace;
   if S<>'' then
   begin
     LogItem.ContentType := 'plain/text; charset=utf-8';
     LogItem.Content := TEncoding.UTF8.GetBytes(S);
   end;
+  {$ENDIF}
   TLogEngine.PostLog(LogItem);
 end;
 

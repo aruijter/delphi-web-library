@@ -617,7 +617,7 @@ begin
       end;
     except
       on E: Exception do
-        TdwlLogger.Log('TIoThread.Execute error: '+E.Message, lsError);
+        TdwlLogger.Log(E);
     end;
   end;
   FService.FIoThreads.Remove(Self);
