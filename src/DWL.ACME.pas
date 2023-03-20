@@ -173,6 +173,7 @@ const
   DefaultAPIEndpoint = ProductionAPIEndpoint;
   {$ENDIF}
   PrivateAccountKeyFileName='account.key';
+  TOPIC_ACME = 'acme';
 
 type
   TCallBackServer = class(TdwlCustomHTTPServer)
@@ -576,7 +577,7 @@ end;
 
 procedure TdwlACMEClient.Log(const Msg: string; SeverityLevel: TdwlLogSeverityLevel);
 begin
-  TdwlLogger.Log('ACME: '+Msg, SeverityLevel);
+  TdwlLogger.Log(Msg, SeverityLevel, TOPIC_ACME);
  end;
 
 procedure TdwlACMEClient.LogCertificateStatus;

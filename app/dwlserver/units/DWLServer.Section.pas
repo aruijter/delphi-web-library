@@ -20,8 +20,8 @@ type
     class function TryHostNameMigration(ConfigParams: IdwlParams): boolean; // 20230403: can be removed next year or so
     procedure DoLog(LogItem: PdwlLogItem);
     function Start_InitDataBase(ConfigParams: IdwlParams): IdwlMySQLSession;
-    procedure Start_PrepareParameters_Phase1(ConfigParams: IdwlParams);
-    procedure Start_PrepareParameters_Phase2(Session: IdwlMySQLSession; ConfigParams: IdwlParams);
+    procedure Start_ReadParameters_CommandLine_IniFile(ConfigParams: IdwlParams);
+    procedure Start_ReadParameters_MySQL(Session: IdwlMySQLSession; ConfigParams: IdwlParams);
     procedure Start_ProcessBindings(ConfigParams: IdwlParams);
     procedure Start_DetermineServerParams(ConfigParams: IdwlParams);
     procedure Start_LoadDLLHandlers(ConfigParams: IdwlParams);
@@ -46,6 +46,12 @@ uses
   System.Math, DWL.TCP.Consts, System.StrUtils, Winapi.Windows,
   System.Threading, DWL.Logging.Callback, Winapi.ShLwApi, DWL.Mail.Queue,
   DWL.Server.Handler.Mail, DWL.Server.Handler.DLL;
+
+const
+  TOPIC_BOOTSTRAP = 'bootstrap';
+  TOPIC_WRAPUP = 'wrapup';
+  TOPIC_DLL = 'dll';
+  TOPIC_ACME = 'acme';
 
 type
   TACMECheckThread = class(TdwlThread)
@@ -209,7 +215,7 @@ begin
         var FileName := '';
         try
           if FServer.UnRegisterHandler(EndPoint) then
-            TdwlLogger.Log('Unregistered DLL Handler at endpoint '+Endpoint, lsTrace);
+            TdwlLogger.Log('Unregistered DLL Handler at endpoint '+Endpoint, lsNotice, TOPIC_DLL);
           if SameText(Copy(URI, 1, 17), 'file://localhost/') then
             FileName := DLLBasePath+ReplaceStr(Copy(URI, 17, MaxInt), '/', '\')
           else
@@ -222,7 +228,7 @@ begin
           end;
           if not FileExists(FileName) then
           begin
-            TdwlLogger.Log('Missing DLL '+URI+' ('+FileName+') for endpoint '+Endpoint, lsError);
+            TdwlLogger.Log('Missing DLL '+URI+' ('+FileName+') for endpoint '+Endpoint, lsError, TOPIC_DLL);
             Continue;
           end;
           var DLLHandle := LoadLibrary(PChar(FileName));
@@ -234,7 +240,7 @@ begin
           begin
             var Handler := TdwlHTTPHandler_DLL.Create(DLLHandle, ProcessProc, AuthorizeProc, EndPoint, HandlerParams);
             FServer.RegisterHandler(EndPoint, Handler);
-            TdwlLogger.Log('Registered DLL Handler '+ExtractFileName(FileName)+' at endpoint '+Endpoint, lsTrace);
+            TdwlLogger.Log('Registered DLL Handler '+ExtractFileName(FileName)+' at endpoint '+Endpoint, lsNotice, TOPIC_DLL);
           end
           else
           begin
@@ -243,16 +249,16 @@ begin
           end;
         except
           on E: Exception do
-            TdwlLogger.Log('Failed loading DLL '+URI+'('+FileName+') on endpoint '+Endpoint+': '+E.Message, lsError);
+            TdwlLogger.Log('Failed loading DLL '+URI+'('+FileName+') on endpoint '+Endpoint+': '+E.Message, lsError, TOPIC_DLL);
         end;
       except
         on E: Exception do
-          TdwlLogger.Log('Error loading DLL handler at '+EndPoint+': '+E.Message, lsError);
+          TdwlLogger.Log('Error loading DLL handler at '+EndPoint+': '+E.Message, lsError, TOPIC_DLL);
       end;
     end;
   except
     on E: Exception do
-      TdwlLogger.Log('Error loading DLL handlers: '+E.Message, lsError);
+      TdwlLogger.Log('Error loading DLL handlers: '+E.Message, lsError,TOPIC_DLL);
   end;
 end;
 
@@ -270,7 +276,7 @@ begin
       FServer.AddURIAlias(Cmd.Reader.GetString(Get_UriAliases_Idx_alias), Cmd.Reader.GetString(Get_UriAliases_Idx_uri));
   except
     on E: Exception do
-      TdwlLogger.Log('Error loading URI Aliases: '+E.Message, lsError);
+      TdwlLogger.Log('Error loading URI Aliases: '+E.Message, lsError, TOPIC_BOOTSTRAP);
   end;
 end;
 
@@ -282,41 +288,41 @@ begin
   TTask.Run(procedure
   begin
     try
-      TdwlLogger.Log('DWL Server starting', lsTrace);
       var ConfigParams := New_Params;
-      DWL.Server.AssignServerProcs;
-      Start_PrepareParameters_Phase1(ConfigParams);
+      Start_ReadParameters_CommandLine_IniFile(ConfigParams);
       var Session := Start_InitDataBase(ConfigParams);
-      Start_PrepareParameters_Phase2(Session, ConfigParams);
+      Start_ReadParameters_MySQL(Session, ConfigParams);
+      TdwlMailQueue.Configure(ConfigParams, true);
+      Start_Enable_Logging(ConfigParams);
+      TdwlLogger.Log('DWL Server starting', lsTrace, TOPIC_BOOTSTRAP);
+      DWL.Server.AssignServerProcs;
       CheckACMEConfiguration(FServer, ConfigParams, true);
       Start_ProcessBindings(ConfigParams);
-      Start_Enable_Logging(ConfigParams);
       Start_LoadURIAliases(ConfigParams);
 
       if not FServer.IsSecure then
       begin
         FServer.OnlyLocalConnections := ConfigParams.BoolValue(Param_TestMode);
         if FServer.OnlyLocalConnections then
-          TdwlLogger.Log('SERVER IS NOT SECURE, only allowing local connections', lsWarning)
+          TdwlLogger.Log('SERVER IS NOT SECURE, only allowing local connections', lsWarning, TOPIC_BOOTSTRAP)
         else
-          TdwlLogger.Log('SERVER IS NOT SECURE, please configure or review ACME parameters', lsWarning);
+          TdwlLogger.Log('SERVER IS NOT SECURE, please configure or review ACME parameters', lsWarning, TOPIC_BOOTSTRAP);
       end
       else
         FServer.OnlyLocalConnections := false;
       Start_DetermineServerParams(ConfigParams);
       // Time to start the server
       FServer.Active := true;
-      TdwlLogger.Log('Enabled Server listening', lsNotice);
+      TdwlLogger.Log('Enabled Server listening', lsNotice, TOPIC_BOOTSTRAP);
       if FServer.IsSecure or FServer.OnlyLocalConnections then
       begin
-        TdwlMailQueue.Configure(ConfigParams, true);
         FServer.RegisterHandler(EndpointURI_Mail,  TdwlHTTPHandler_Mail.Create(ConfigParams));
         Start_LoadDLLHandlers(ConfigParams)
       end
       else
-        TdwlLogger.Log('Skipped loading of handlers because server is not secure', lsWarning);
+        TdwlLogger.Log('Skipped loading of handlers because server is not secure', lsWarning, TOPIC_DLL);
       FACMECheckThread := TACMECheckThread.Create(Self, ConfigParams);
-      TdwlLogger.Log('DWL Server started', lsTrace);
+      TdwlLogger.Log('DWL Server started', lsTrace, TOPIC_BOOTSTRAP);
       FServerStarted := true;
     except
       FServerStarted := false;
@@ -338,17 +344,18 @@ begin
   begin
     var Issuer :=  ConfigParams.StrValue(Param_BaseURI)+Default_EndpointURI_OAuth2;
     ConfigParams.WriteValue(Param_Issuer, Issuer);
-    TdwlLogger.Log('No issuer configured, default applied: '+Issuer, lsNotice);
+    TdwlLogger.Log('No issuer configured, default applied: '+Issuer, lsNotice, TOPIC_BOOTSTRAP);
   end;
 end;
 
 procedure TDWLServerSection.Start_Enable_Logging(ConfigParams: IdwlParams);
 begin
-  FServer.LogLevel := ConfigParams.IntValue(Param_LogLevel, httplogLevelWarning);
-  TdwlLogger.Log('Enabled Request logging (level '+FServer.LogLevel.ToString+')', lsTrace);
-  FLogHandler := TdwlHTTPHandler_Log.Create(ConfigParams); // init before activating DoLog!
+  TdwlLogger.SetDefaultOrigins('', 'dwlserver', '');
   FCallBackLogDispatcher := EnableLogDispatchingToCallback(false, DoLog);
+  FLogHandler := TdwlHTTPHandler_Log.Create(ConfigParams); // init before activating DoLog!
   FServer.RegisterHandler(EndpointURI_Log,  FLogHandler);
+  FServer.LogLevel := ConfigParams.IntValue(Param_LogLevel, httplogLevelWarning);
+  TdwlLogger.Log('Enabled Request logging (level '+FServer.LogLevel.ToString+')', lsTrace, TOPIC_BOOTSTRAP);
 end;
 
 function TDWLServerSection.Start_InitDataBase(ConfigParams: IdwlParams): IdwlMySQLSession;
@@ -377,7 +384,7 @@ begin
   Result.CreateCommand(SQL_CheckTable_HostNames).Execute;
 end;
 
-procedure TDWLServerSection.Start_PrepareParameters_Phase1(ConfigParams: IdwlParams);
+procedure TDWLServerSection.Start_ReadParameters_CommandLine_IniFile(ConfigParams: IdwlParams);
 begin
   // at first take parameters from the commandline
   TdwlParamsUtils.Import_CommandLine(ConfigParams);
@@ -387,7 +394,7 @@ begin
   // and later after Init of database parameters from the dwl database are added
 end;
 
-procedure TDWLServerSection.Start_PrepareParameters_Phase2(Session: IdwlMySQLSession; ConfigParams: IdwlParams);
+procedure TDWLServerSection.Start_ReadParameters_MySQL(Session: IdwlMySQLSession; ConfigParams: IdwlParams);
 const
   SQL_GetParameters =
     'SELECT `Key`, `Value` FROM dwl_parameters';
@@ -414,21 +421,21 @@ begin
   var BindingIP := ConfigParams.StrValue(Param_Binding_IP);
   var BindingPort := ConfigParams.IntValue(Param_Binding_Port, IfThen(Supports(FServer.IOHandler, IdwlSslIoHandler), PORT_HTTPS, PORT_HTTP));
   FServer.Bindings.Add(BindingIP, BindingPort);
-  TdwlLogger.Log('Bound to '+IfThen(BindingIP='', '*', BindingIP)+':'+BindingPort.ToString);
+  TdwlLogger.Log('Bound to '+IfThen(BindingIP='', '*', BindingIP)+':'+BindingPort.ToString, lsNotice, TOPIC_BOOTSTRAP);
 end;
 
 procedure TDWLServerSection.StopServer;
 begin
   if not FServerStarted then
     Exit;
-  TdwlLogger.Log('Stopping DWL Server', lsNotice);
+  TdwlLogger.Log('Stopping DWL Server', lsNotice, TOPIC_WRAPUP);
   FLogHandler := nil; // do not try to log when server goes down
   FreeAndNil(FACMECheckThread);
   FServer.Active := false;
   TdwlLogger.UnregisterDispatcher(FCallBackLogDispatcher);
   TdwlMailQueue.Configure(nil); // to stop sending
   FServer.Bindings.Clear;
-  TdwlLogger.Log('Stopped DWL Server', lsNotice);
+  TdwlLogger.Log('Stopped DWL Server', lsNotice, TOPIC_WRAPUP);
   TdwlLogger.FinalizeDispatching;
   FServerStarted := false;
 end;
@@ -454,7 +461,7 @@ begin
   Cmd.Parameters.SetTextDataBinding(CreateHostNameRecord_Idx_State, State);
   Cmd.Parameters.SetTextDataBinding(CreateHostNameRecord_Idx_City, City);
   Cmd.Execute;
-  TdwlLogger.Log('Migrated hostname '+HostName+' into dwl_hostnames');
+  TdwlLogger.Log('Migrated hostname '+HostName+' into dwl_hostnames', lsNotice, TOPIC_WRAPUP);
 end;
 
 { TACMECheckThread }
@@ -476,17 +483,11 @@ begin
     WaitForSingleObject(FWorkToDoEventHandle, CheckDelay);
     if Terminated then
       Break;
-        TThread.Queue(nil,  procedure
-          begin
-            FSection.StopServer;
-            FSection.StartServer;
-          end);
-          Continue;
     try
       TDWLServerSection.CheckACMEConfiguration(FSection.FServer, FConfigParams);
     except
       on E:Exception do
-        TdwlLogger.Log(E);
+        TdwlLogger.Log(E, lsError, TOPIC_ACME);
     end;
   end;
 end;

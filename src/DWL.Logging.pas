@@ -161,10 +161,12 @@ type
     /// <summary>
     ///   Posts a prepared logitem obtained before bu PrepareLogItem
     /// </summary>
-    class procedure Log(Exc: Exception; SeverityLevel: TdwlLogSeverityLevel=lsFatal); overload; static;
+    class procedure Log(Exc: Exception; SeverityLevel: TdwlLogSeverityLevel=lsFatal; const Topic: string=''; Channel: string=''; Source: string=''); overload; static;
     /// <summary>
-    ///   Sets the default Source, Channel and Topic that will be added fo
+    ///   Sets the default Source, Channel and Topic that will be added for
     ///   items when not provided
+    ///   These cannot be empty, if an empty string is provided the Source, Channel or Topic
+    ///   will stay on the current value
     /// </summary>
     class procedure SetDefaultOrigins(const Source, Channel, Topic: string); static;
     /// <summary>
@@ -244,6 +246,8 @@ begin
   FLogDispatchThread.FreeOnTerminate := true;
   FLogDispatchers := TdwlThreadList<IdwlLogDispatcher>.Create;
   FDefaultSource := TdwlFile.ExtractBareName(GetModuleName(hInstance));
+  FDefaultChannel := FDefaultSource;
+  FDefaultTopic := 'generic';
 end;
 
 class function TLogEngine.CreateLogItem: PdwlLogItem;
@@ -370,9 +374,12 @@ end;
 
 class procedure TdwlLogger.SetDefaultOrigins(const Source, Channel, Topic: string);
 begin
-  TLogEngine.FDefaultSource := Source;
-  TLogEngine.FDefaultChannel := Channel;
-  TLogEngine.FDefaultTopic := Topic;
+  if Source<>'' then
+    TLogEngine.FDefaultSource := Source;
+  if Channel<>'' then
+    TLogEngine.FDefaultChannel := Channel;
+  if Topic<>'' then
+    TLogEngine.FDefaultTopic := Topic;
 end;
 
 class procedure TdwlLogger.SetSuppression(DoSuppress: boolean; Duration: UInt64=3600000);
@@ -392,11 +399,14 @@ begin
   TLogEngine.PostLog(LogItem);
 end;
 
-class procedure TdwlLogger.Log(Exc: Exception; SeverityLevel: TdwlLogSeverityLevel=lsFatal);
+class procedure TdwlLogger.Log(Exc: Exception; SeverityLevel: TdwlLogSeverityLevel=lsFatal; const Topic: string=''; Channel: string=''; Source: string='');
 begin
   var LogItem := TLogEngine.CreateLogItem;
   LogItem.Msg := Exc.Message;
   LogItem.SeverityLevel := SeverityLevel;
+  LogItem.Source := Source;
+  LogItem.Channel := Channel;
+  LogItem.Topic := Topic;
   var S := Exc.StackTrace;
   if S<>'' then
   begin
