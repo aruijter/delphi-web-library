@@ -54,11 +54,14 @@ type
     lblSoort: TLabel;
     lblExtension: TLabel;
     SaveDialog: TSaveDialog;
+    Button3: TButton;
+    aiSaveCSV: TAction;
     procedure ApplicationEventsIdle(Sender: TObject; var Done: Boolean);
     procedure lbReleasesClick(Sender: TObject);
     procedure lbPackagesClick(Sender: TObject);
     procedure aiDownloadExecute(Sender: TObject);
     procedure aiUploadExecute(Sender: TObject);
+    procedure aiSaveCSVExecute(Sender: TObject);
   strict private
     FHaveBeenIdle: boolean;
     FConfigParams: IdwlParams;
@@ -86,7 +89,7 @@ implementation
 uses
   System.IOUtils, System.SysUtils, Winapi.WinInet,
   DWL.HTTP.Consts, System.DateUtils, System.Generics.Defaults, System.StrUtils,
-  DWL.DisCo.Consts, DWL.IOUtils, DWL.Compression;
+  DWL.DisCo.Consts, DWL.IOUtils, DWL.Compression, Winapi.ShellAPI;
 
 {$R *.dfm}
 
@@ -113,6 +116,17 @@ begin
   SaveDialog.FileName := FCurrentRelease.PackageName+' '+FCurrentRelease.Version+'.'+FCurrentRelease.FileExtension;
   if SaveDialog.Execute then
     TFile.WriteAllBytes(SaveDialog.FileName, Response.AsBytes);
+end;
+
+procedure TMainForm.aiSaveCSVExecute(Sender: TObject);
+
+begin
+  var S := 'sep=,'#13#10'PackageName,Version,ReleaseMoment'#13#10;
+  for var i := 0 to FPackages.Count-1 do
+    S := S + FPackages[i]+','+TReleases(FPackages.Objects[i])[0].Version+','+DateToISO8601(TReleases(FPackages.Objects[i])[0].ReleaseMoment, false)+#13#10;
+  var FileName := ExtractFilePath(ParamStr(0))+'packages.csv';
+  TFile.WriteAllText(FileName, S);
+  ShellExecute(0, nil, PWideChar(FileName), nil, nil, SW_SHOW);
 end;
 
 procedure TMainForm.aiUploadExecute(Sender: TObject);
@@ -197,7 +211,6 @@ begin
       Releases := TReleases(FPackages.Objects[Idx]);
     Releases.Add(Release);
   end;
-  lbPackages.Items.Assign(FPackages);
   for var i := 0 to FPackages.Count-1 do
   begin
     TReleases(FPackages.Objects[i]).Sort(TComparer<TRelease>.Construct(
@@ -215,6 +228,8 @@ begin
       end)
     );
   end;
+  for var i := 0 to FPackages.Count-1 do
+    lbPackages.Items.Add(FPackages[i]+#9+TReleases(FPackages.Objects[i])[0].Version);
   if CurrentPackagename<>'' then
   begin
     for var i := 0 to FPackages.Count-1 do
@@ -320,52 +335,59 @@ begin
   end;
   if FileVersion.Build<1 then
     FileVersion.Build := NextVersion.Build+1;
+  var DeleteTheFile := false;
   if FileExt<>'.7z' then
   begin
     var Fn7z := ChangeFileExt(FileName, '.7z');
     var Res := TdwlCompression.ZipFile(Fn7z, FileName);
+    FileName := Fn7z;
+    DeleteTheFile := true;
     if not Res.Success then
     begin
       ShowMessage('Error zipping '+Res.ErrorMsg);
       Exit;
     end;
-    FileName := Fn7z;
   end;
   // SENDING RELEASE
-  var Request := FApiSession.PrepareAPIRequest('upload/package', HTTP_COMMAND_POST);
-  var Bytes := TFile.ReadAllBytes(FileName);
-  Request.PostStream.Write(Bytes[0], Length(Bytes));
-  Request.Header['packagename'] := FCurrentRelease.PackageName;
-  Request.Header['version'] := FileVersion.GetAsString(true);
-  if FileVersion.IsPreRelease then
-    Request.Header['kind'] := discoreleasekindPreRelease.ToString
-  else
-    Request.Header['kind'] := discoreleasekindRelease.ToString;
-  Request.Header['fileextension'] := '7z';
-  var Response := Request.Execute;
-  var IsOk: boolean;
-  IsOk := Response.StatusCode=HTTP_STATUS_OK;
-  if IsOk then
-  begin
-    var JSON := TJSONObject.ParseJSONValue(Response.AsString);
-    try
-      IsOk := JSON.GetValue<boolean>('success', false);
-      if not IsOk then
-        ShowMessage('Upload failed: '+Response.AsString)
-      else
-      begin
-        if BatchMode then
-          Application.Terminate
+  try
+    var Request := FApiSession.PrepareAPIRequest('upload/package', HTTP_COMMAND_POST);
+    var Bytes := TFile.ReadAllBytes(FileName);
+    Request.PostStream.Write(Bytes[0], Length(Bytes));
+    Request.Header['packagename'] := FCurrentRelease.PackageName;
+    Request.Header['version'] := FileVersion.GetAsString(true);
+    if FileVersion.IsPreRelease then
+      Request.Header['kind'] := discoreleasekindPreRelease.ToString
+    else
+      Request.Header['kind'] := discoreleasekindRelease.ToString;
+    Request.Header['fileextension'] := '7z';
+    var Response := Request.Execute;
+    var IsOk: boolean;
+    IsOk := Response.StatusCode=HTTP_STATUS_OK;
+    if IsOk then
+    begin
+      var JSON := TJSONObject.ParseJSONValue(Response.AsString);
+      try
+        IsOk := JSON.GetValue<boolean>('success', false);
+        if not IsOk then
+          ShowMessage('Upload failed: '+Response.AsString)
         else
-          ShowMessage('Success! Uploaded file version '+FileVersion.GetAsString(true));
-        LoadReleases;
+        begin
+          if BatchMode then
+            Application.Terminate
+          else
+            ShowMessage('Success! Uploaded file version '+FileVersion.GetAsString(true));
+          LoadReleases;
+        end;
+      finally
+        JSON.Free;
       end;
-    finally
-      JSON.Free;
-    end;
-  end
-  else
-    ShowMessage('Upload failed');
+    end
+    else
+      ShowMessage('Upload failed');
+  finally
+    if DeleteTheFile then
+      TFile.Delete(FileName);
+  end;
 end;
 
 procedure TMainForm.UploadFromCommandLine(const FileName: string);

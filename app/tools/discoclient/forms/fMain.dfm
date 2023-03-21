@@ -35,30 +35,31 @@ object MainForm: TMainForm
     ExplicitWidth = 953
     ExplicitHeight = 810
     object Splitter1: TSplitter
-      Left = 198
+      Left = 310
       Top = 0
       Width = 5
       Height = 811
       Beveled = True
+      ExplicitLeft = 198
     end
     object pnlLeft: TPanel
       Left = 0
       Top = 0
-      Width = 198
+      Width = 310
       Height = 811
       Align = alLeft
       BevelOuter = bvNone
       TabOrder = 0
-      ExplicitHeight = 810
       object pnlLeftTop: TPanel
         Left = 0
         Top = 0
-        Width = 198
+        Width = 310
         Height = 35
         Align = alTop
         BevelOuter = bvNone
         ParentColor = True
         TabOrder = 0
+        ExplicitWidth = 198
         object lblPackages: TLabel
           Left = 8
           Top = 8
@@ -66,33 +67,42 @@ object MainForm: TMainForm
           Height = 20
           Caption = 'Packages'
         end
+        object Button3: TButton
+          Left = 232
+          Top = 4
+          Width = 72
+          Height = 25
+          Action = aiSaveCSV
+          TabOrder = 0
+        end
       end
       object lbPackages: TListBox
         Left = 0
         Top = 35
-        Width = 198
+        Width = 310
         Height = 776
         Align = alClient
         ItemHeight = 20
         TabOrder = 1
+        TabWidth = 100
         OnClick = lbPackagesClick
-        ExplicitHeight = 775
       end
     end
     object pnlRight: TPanel
-      Left = 203
+      Left = 315
       Top = 0
-      Width = 754
+      Width = 642
       Height = 811
       Align = alClient
       BevelOuter = bvNone
       TabOrder = 1
+      ExplicitLeft = 203
       ExplicitWidth = 750
       ExplicitHeight = 810
       object pnlRightTop: TPanel
         Left = 0
         Top = 0
-        Width = 754
+        Width = 642
         Height = 35
         Align = alTop
         BevelOuter = bvNone
@@ -117,7 +127,7 @@ object MainForm: TMainForm
       object pnlReleases: TPanel
         Left = 0
         Top = 35
-        Width = 754
+        Width = 642
         Height = 776
         Align = alClient
         BevelOuter = bvNone
@@ -161,13 +171,12 @@ object MainForm: TMainForm
             ItemHeight = 20
             TabOrder = 1
             OnClick = lbPackagesClick
-            ExplicitHeight = 740
           end
         end
         object pnlRelease: TPanel
           Left = 198
           Top = 0
-          Width = 556
+          Width = 444
           Height = 776
           Align = alClient
           BevelOuter = bvNone
@@ -241,7 +250,7 @@ object MainForm: TMainForm
           object Panel3: TPanel
             Left = 0
             Top = 0
-            Width = 556
+            Width = 444
             Height = 35
             Align = alTop
             BevelOuter = bvNone
@@ -282,6 +291,10 @@ object MainForm: TMainForm
     object aiUpload: TAction
       Caption = 'Upload'
       OnExecute = aiUploadExecute
+    end
+    object aiSaveCSV: TAction
+      Caption = '->CSV'
+      OnExecute = aiSaveCSVExecute
     end
   end
   object OpenDialog: TOpenDialog
