@@ -376,7 +376,7 @@ begin
       Start_DetermineServerParams(ConfigParams);
       // Time to start the server
       FServer.Active := true;
-      TdwlLogger.Log('Enabled Server listening', lsNotice, TOPIC_BOOTSTRAP);
+      TdwlLogger.Log('Enabled Server listening', lsTrace, TOPIC_BOOTSTRAP);
       if FServer.IsSecure or FServer.OnlyLocalConnections then
       begin
         FServer.RegisterHandler(EndpointURI_Mail,  TdwlHTTPHandler_Mail.Create(ConfigParams));
@@ -398,7 +398,7 @@ end;
 procedure TDWLServerSection.Start_DetermineServerParams(ConfigParams: IdwlParams);
 begin
   // The base uri is ALWAYS the standard port!!
-  // Listenport is not taken into account
+  // ports of bindings are not taken into account
   if FServer.IsSecure then
     ConfigParams.WriteValue(Param_BaseURI, 'https://'+(FServer.IoHandler as IdwlSslIoHandler).Environment.MainContext.HostName)
   else
@@ -418,7 +418,7 @@ begin
   FLogHandler := TdwlHTTPHandler_Log.Create(ConfigParams); // init before activating DoLog!
   FServer.RegisterHandler(EndpointURI_Log,  FLogHandler);
   FLogLevel := ConfigParams.IntValue(Param_LogLevel, httplogLevelWarning);
-  TdwlLogger.Log('Enabled Request logging (level '+FServer.LogLevel.ToString+')', lsTrace, TOPIC_BOOTSTRAP);
+  TdwlLogger.Log('Enabled Request logging (level '+FLogLevel.ToString+')', lsTrace, TOPIC_BOOTSTRAP);
 end;
 
 function TDWLServerSection.Start_InitDataBase(ConfigParams: IdwlParams): IdwlMySQLSession;

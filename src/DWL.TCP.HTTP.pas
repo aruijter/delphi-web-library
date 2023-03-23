@@ -332,7 +332,14 @@ end;
 procedure TdwlHTTPSocket.ReadProcessRequest;
 begin
   FTickStart := GetTickCount64;
-  var KeepAlive := (FProtocol<>HTTP10) and SameText(FRequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE);
+  // Check HTTP 1.1 Host against SNI Host
+  if (FState<>hcsError) and (Context_HostName<>'') and (not SameText(Context_HostName, RequestHeaders.StrValue(HTTP_FIELD_HOST))) then
+  begin
+    FState := hcsError;
+    StatusCode := HTTP_STATUS_BAD_REQUEST;
+    FReadError := 'SNI Host mismatch';
+  end;
+  var KeepAlive := (FState<>hcsError) and (FProtocol<>HTTP10) and SameText(RequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE);
   if FProtocol<>HTTP10 then
     FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));
   if FResponseDataStream=nil then
@@ -342,7 +349,8 @@ begin
     if FReadError<>'' then
     begin
       FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_TYPE, CONTENT_TYPE_HTML);
-      FResponseDataStream.WriteData('<html><body><h1>'+TNetEncoding.HTML.Encode(FReadError)+'</h1></body></html>');
+      var ErrStr := ansistring('<html><body><h1>'+TNetEncoding.HTML.Encode(FReadError)+'</h1></body></html>');
+      FResponseDataStream.WriteBuffer(PAnsiChar(ErrStr)^, Length(ErrStr));
     end;
   end
   else

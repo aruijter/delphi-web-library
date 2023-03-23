@@ -47,6 +47,7 @@ const
     FWritePos: PByte;
     FWriteBufLeft: cardinal;
     FCloseConnection: boolean;
+    FContext_HostName: string;
     FWritesInProgress: cardinal;
     procedure CreateRecvRequest;
     procedure HandleCurrentWriteBuffer;
@@ -71,6 +72,7 @@ const
     property Service: TdwlTCPService read FService;
     property SocketHandle: TSocket read FSocketHandle;
     property SocketVars: pointer read FSocketVars;
+    property Context_HostName: string read FContext_HostName write FContext_HostName;
     constructor Create(AService: TdwlTCPService); virtual;
     destructor Destroy; override;
     procedure ReadHandlingBuffer(HandlingBuffer: PdwlHandlingBuffer); virtual;

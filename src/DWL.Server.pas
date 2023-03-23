@@ -47,7 +47,6 @@ type
 
   TDWLServer = class(TdwlCustomHTTPServer)
   strict private
-    FLogLevel: byte;
     FURIAliases: TDictionary<string, string>;
     FOnlyLocalConnections: boolean;
     FExecutionTask: ITask;
@@ -60,7 +59,6 @@ type
     procedure InternalDeActivate; override;
   public
     property IsRunning: boolean read GetIsRunning;
-    property LogLevel: byte read FLogLevel write FLogLevel;
     property OnlyLocalConnections: boolean read FOnlyLocalConnections write FOnlyLocalConnections;
     constructor Create;
     destructor Destroy; override;

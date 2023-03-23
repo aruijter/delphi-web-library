@@ -97,10 +97,14 @@ begin
     if (OutData[0]=0) and (OutData[1]=(OutDataLen-2)) then
     begin
       var Len := OutData[4];
-      var ServerName: ansistring;
-      SetLength(ServerName, Len);
-      Move(OutData[5], ServerName[1], Len);
-      var NewContext := SocketVars.Context.Environment.GetContext(string(ServerName));
+      var AnsiHostName: ansistring;
+      SetLength(AnsiHostName, Len);
+      Move(OutData[5], AnsiHostName[1], Len);
+      var HostName := string(AnsiHostName);
+      // Set Context Hostname of Socket
+      SocketVars.SendBuf.Socket.Context_HostName := HostName;
+      // eventually switch context
+      var NewContext := SocketVars.Context.Environment.GetContext(HostName);
       if (NewContext<>nil) and (NewContext<>SocketVars.Context) then
       begin
         // switch context
@@ -186,7 +190,7 @@ begin
     FContexts.Add(HostName, NewCtx);
     if DeprCtx<>nil then
       FDeprecatedContexts.Add(DeprCtx); // keep for now (current connections), will be disposed in destroy of environment
-    TdwlLogger.Log(IfThen(DeprCtx=nil, 'Added', 'Replaced')+' SSL Certificate for hostname '+HostName)
+    TdwlLogger.Log(IfThen(DeprCtx=nil, 'Added', 'Replaced')+' SSL Certificate for hostname '+HostName);
   finally
     FMREW.EndWrite;
   end;
@@ -295,6 +299,9 @@ end;
 
 procedure TdwlSslIoHandler.SocketAfterConstruction(Socket: TdwlSocket);
 begin
+  // set hostname to unknown, in case we cannot determine (in client_hello),
+  // it will fail when doing SNI Check
+  Socket.Context_HostName := '<unknown>';
   PsslSocketVars(Socket.SocketVars).Context := FEnvironment.MainContext;
   PsslSocketVars(Socket.SocketVars).opSSL := SSL_new(PsslSocketVars(Socket.SocketVars).Context.opSSL_CTX);
   if PsslSocketVars(Socket.SocketVars).opSSL=nil then

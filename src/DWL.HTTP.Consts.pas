@@ -21,6 +21,7 @@ const
   HTTP_FIELD_TRANSFER_ENCODING = 'Transfer-Encoding';
   HTTP_FIELD_CACHE_CONTROL = 'Cache-Control';
   HTTP_FIELD_EXPECT = 'Expect';
+  HTTP_FIELD_HOST = 'Host';
 
   HTTP_SUBFIELD_CHARSET = 'charset';
 
