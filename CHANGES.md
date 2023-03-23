@@ -5,7 +5,7 @@ All notable (including breaking) changes to this project will be documented in t
 - Log request to a seperate table dwl_log_requests (and no longer via standard logging framework)
 - Changed fieldtype of TimeStamp fields in logging tables. Although not breaking I advise to change the TimeStamp fieldtypes to TIMESTAMP to improve on handling of timezones.
 - Another rename action to be RFC compliant: HTTP_COMMAND_* was renamed to HTTP_METHOD_*. Also some support functions/argument names are renamed to refer to Method instead of Command.
-
+- Added Check if SNI matches Host from Header
 
 ## March 21, 2023
 -  Added commandline functionality to DisCoClient
