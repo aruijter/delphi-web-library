@@ -207,9 +207,9 @@ end;
 procedure TDWLServerSection.LogRequest(Request: TdwlHTTPSocket);
 const
   SQL_InsertRequest =
-    'INSERT INTO dwl_log_requests (StatusCode, IP_Remote, Uri, ProcessingTime, Header, Params) VALUES (?,?,?,?,?,?)';
-  InsertRequest_Idx_StatusCode=0;  InsertRequest_Idx_IP_Remote=1;  InsertRequest_Idx_Uri=2;
-  InsertRequest_Idx_ProcessingTime=3; InsertRequest_Idx_Header=4; InsertRequest_Idx_Params=5;
+    'INSERT INTO dwl_log_requests (Method, StatusCode, IP_Remote, Uri, ProcessingTime, RequestHeader, RequestParams) VALUES (?,?,?,?,?,?,?)';
+  InsertRequest_Idx_Method=0;  InsertRequest_Idx_StatusCode=1;  InsertRequest_Idx_IP_Remote=2;  InsertRequest_Idx_Uri=3;
+  InsertRequest_Idx_ProcessingTime=4; InsertRequest_Idx_Header=5; InsertRequest_Idx_Params=6;
 begin
   try
     // in debugging always log everything
@@ -221,11 +221,12 @@ begin
       Exit;
     {$ENDIF}
     var Ticks := GetTickCount64-Request.TickStart;
+    var RequestMethodStr := dwlhttpMethodToString[Request.RequestMethod];
     // in debugging log to Server Console
     {$IFDEF DEBUG}
     var LogItem := TdwlLogger.PrepareLogitem;
     LogItem.Msg :=  Request.IP_Remote+':'+Request.Port_Local.ToString+' '+
-      dwlhttpCommandToString[Request.Command]+' '+Request.Uri+' '+Request.StatusCode.ToString+
+      RequestMethodStr+' '+Request.Uri+' '+Request.StatusCode.ToString+
         ' ('+Ticks.ToString+'ms)';
     Logitem.Topic := 'requests';
     LogItem.SeverityLevel := lsDebug;
@@ -236,6 +237,7 @@ begin
     Request.RequestParams.Values['password'] := '';
     // log request to table
     var Cmd := New_MySQLSession(FRequestLoggingParams).CreateCommand(SQL_InsertRequest);
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Method, RequestMethodStr);
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_StatusCode, Request.StatusCode);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_IP_Remote, Request.Ip_Remote);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, Request.Uri);
@@ -431,8 +433,8 @@ const
     'CREATE TABLE IF NOT EXISTS dwl_hostnames (Id SMALLINT NOT NULL AUTO_INCREMENT, HostName VARCHAR(50) NOT NULL, CountryCode CHAR(2) NOT NULL, State VARCHAR(50) NOT NULL, '+
     'City VARCHAR(50) NOT NULL, BindingIp VARCHAR(39), RootCert TEXT, Cert TEXT, PrivateKey TEXT, PRIMARY KEY(Id), UNIQUE INDEX HostName (HostName))';
   SQL_CheckTable_Log_Requests =
-    'CREATE TABLE IF NOT EXISTS dwl_log_requests (Id INT NOT NULL AUTO_INCREMENT, StatusCode SMALLINT NOT NULL, IP_Remote CHAR(15) NOT NULL,'+
-    'Uri VARCHAR(250) NOT NULL, ProcessingTime SMALLINT NOT NULL, Header TEXT NOT NULL, Params TEXT NOT NULL, PRIMARY KEY (Id))';
+    'CREATE TABLE IF NOT EXISTS dwl_log_requests (Id INT NOT NULL AUTO_INCREMENT, TimeStamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, Method CHAR(7) NOT NULL, StatusCode SMALLINT NOT NULL, IP_Remote CHAR(15) NOT NULL,'+
+    'Uri VARCHAR(250) NOT NULL, ProcessingTime SMALLINT NOT NULL, RequestHeader TEXT NOT NULL, RequestParams TEXT NOT NULL, PRIMARY KEY (Id))';
 begin
   if ConfigParams.StrValue(Param_Db)='' then
     ConfigParams.WriteValue(Param_Db, 'dwl');

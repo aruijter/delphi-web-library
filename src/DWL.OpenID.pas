@@ -136,7 +136,7 @@ function TdwlOIDC_Client.ExchangeReceivedCode(const Code: string; Session: PdwlO
 begin
   InitFromIssuer;
   var Request := New_HTTPRequest(FToken_Endpoint);
-  Request.Method := HTTP_COMMAND_POST;
+  Request.Method := HTTP_METHOD_POST;
   Request.Header['Content-Type'] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
   Request.WritePostData('code='+TNetEncoding.URL.Encode(Code)+
     '&client_id='+TNetEncoding.URL.Encode(FClient_id)+
@@ -156,7 +156,7 @@ function TdwlOIDC_Client.GetAccessTokenFromRefreshToken(var Refresh_Token: strin
 begin
   InitFromIssuer;
   var Request := New_HTTPRequest(FToken_Endpoint);
-  Request.Method := HTTP_COMMAND_POST;
+  Request.Method := HTTP_METHOD_POST;
   Request.Header['Content-Type'] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
   Request.WritePostData(keyREFRESH_TOKEN+'='+TNetEncoding.URL.Encode(Refresh_Token)+
     '&client_id='+TNetEncoding.URL.Encode(FClient_id)+

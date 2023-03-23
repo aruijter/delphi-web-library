@@ -112,7 +112,7 @@ end;
 
 procedure TMainForm.aiDownloadExecute(Sender: TObject);
 begin
-  var Response := FApiSession.ExecuteApiRequest('download/package', HTTP_COMMAND_GET, 'id='+FCurrentRelease.ID.ToString, true, false);
+  var Response := FApiSession.ExecuteApiRequest('download/package', HTTP_METHOD_GET, 'id='+FCurrentRelease.ID.ToString, true, false);
   SaveDialog.FileName := FCurrentRelease.PackageName+' '+FCurrentRelease.Version+'.'+FCurrentRelease.FileExtension;
   if SaveDialog.Execute then
     TFile.WriteAllBytes(SaveDialog.FileName, Response.AsBytes);
@@ -350,7 +350,7 @@ begin
   end;
   // SENDING RELEASE
   try
-    var Request := FApiSession.PrepareAPIRequest('upload/package', HTTP_COMMAND_POST);
+    var Request := FApiSession.PrepareAPIRequest('upload/package', HTTP_METHOD_POST);
     var Bytes := TFile.ReadAllBytes(FileName);
     Request.PostStream.Write(Bytes[0], Length(Bytes));
     Request.Header['packagename'] := FCurrentRelease.PackageName;

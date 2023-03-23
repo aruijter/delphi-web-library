@@ -3,14 +3,14 @@ unit DWL.HTTP.Consts;
 interface
 
 const
-  HTTP_COMMAND_UNKNOWN = 'UNKNOWN';
-  HTTP_COMMAND_HEAD = 'HEAD';
-  HTTP_COMMAND_GET ='GET';
-  HTTP_COMMAND_POST = 'POST';
-  HTTP_COMMAND_DELETE = 'DELETE';
-  HTTP_COMMAND_PUT = 'PUT';
-  HTTP_COMMAND_TRACE = 'TRACE';
-  HTTP_COMMAND_OPTIONS = 'OPTIONS';
+  HTTP_METHOD_UNKNOWN = 'UNKNOWN';
+  HTTP_METHOD_HEAD = 'HEAD';
+  HTTP_METHOD_GET ='GET';
+  HTTP_METHOD_POST = 'POST';
+  HTTP_METHOD_DELETE = 'DELETE';
+  HTTP_METHOD_PUT = 'PUT';
+  HTTP_METHOD_TRACE = 'TRACE';
+  HTTP_METHOD_OPTIONS = 'OPTIONS';
 
   HTTP_FIELD_CONNECTION = 'Connection';
   HTTP_FIELD_CONTENT_TYPE = 'Content-Type';
@@ -50,7 +50,7 @@ const
   EndpointURI_Mail = '/mail';
   Default_EndpointURI_OAuth2 = '/oauth2';
 
-  // HTTP Command consts
+  // HTTP Method consts
   dwlhttpUNKNOWN = 0;
   dwlhttpHEAD = 1;
   dwlhttpGET = 2;
@@ -60,8 +60,8 @@ const
   dwlhttpTRACE = 6;
   dwlhttpOPTIONS = 7;
 
-  dwlhttpCommandToString: array[dwlhttpUNKNOWN..dwlhttpOPTIONS] of string = (HTTP_COMMAND_UNKNOWN,
-    HTTP_COMMAND_HEAD,HTTP_COMMAND_GET, HTTP_COMMAND_POST, HTTP_COMMAND_DELETE, HTTP_COMMAND_PUT, HTTP_COMMAND_TRACE, HTTP_COMMAND_OPTIONS);
+  dwlhttpMethodToString: array[dwlhttpUNKNOWN..dwlhttpOPTIONS] of string = (HTTP_METHOD_UNKNOWN,
+    HTTP_METHOD_HEAD,HTTP_METHOD_GET, HTTP_METHOD_POST, HTTP_METHOD_DELETE, HTTP_METHOD_PUT, HTTP_METHOD_TRACE, HTTP_METHOD_OPTIONS);
 
   CodePageMIMEnameCombinations: array[0..139] of record Codepage: cardinal; MIMEname: string end = (
    (Codepage: 65001; MIMEname: 'utf-8'),

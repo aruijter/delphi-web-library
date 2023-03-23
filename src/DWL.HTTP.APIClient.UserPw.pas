@@ -50,7 +50,7 @@ begin
   if Username<>'' then
   begin
     var lRequest := New_HTTPRequest(FAuthorization_Endpoint+'/refreshtoken');
-    lRequest.Method := HTTP_COMMAND_POST;
+    lRequest.Method := HTTP_METHOD_POST;
     lRequest.WritePostData(Format('username=%s&password=%s', [TNetEncoding.URL.Encode(Username), TNetEncoding.URL.Encode(Password)]));
     lRequest.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
     var lResponse := lRequest.Execute;
@@ -78,7 +78,7 @@ end;
 procedure TdwlAPIUserNamePasswordAuthorizer.AcquireAccessToken;
 begin
   var lRequest := New_HTTPRequest(FAuthorization_Endpoint+'/accesstoken');
-  lRequest.Method := HTTP_COMMAND_POST;
+  lRequest.Method := HTTP_METHOD_POST;
   lRequest.WritePostData(Format('refreshtoken=%s', [GetRefreshToken]));
   lRequest.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
   var lResponse := lRequest.Execute;

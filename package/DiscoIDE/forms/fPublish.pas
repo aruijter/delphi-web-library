@@ -140,7 +140,7 @@ begin
             Exit;
           // SENDING RELEASE
           AddMessage(lsNotice, 'Sending release to server...');
-          var Request := FApiSession.PrepareAPIRequest('upload/package', HTTP_COMMAND_POST);
+          var Request := FApiSession.PrepareAPIRequest('upload/package', HTTP_METHOD_POST);
           var Bytes := TFile.ReadAllBytes(ZipTo);
           Request.PostStream.Write(Bytes[0], Length(Bytes));
           Request.Header['packagename'] := FPackagename;
@@ -245,7 +245,7 @@ begin
           FApiSession := TdwlAPISession.Create(TDisCoIde_General.FConfigParams.StrValue(paramDisco_Endpoint),
             New_UserPwAuthorizer(TDisCoIde_General.FConfigParams.StrValue(paramAuth_Endpoint), GetUsernamePassword));
           AddMessage(lsNotice, 'Fetching release info from '+FApiSession.ApiBaseUrl+'release');
-          var Response := FApiSession.ExecuteApiRequest('release', HTTP_COMMAND_GET, 'packagename='+FPackageName);
+          var Response := FApiSession.ExecuteApiRequest('release', HTTP_METHOD_GET, 'packagename='+FPackageName);
           if Response.StatusCode<>HTTP_STATUS_OK then
           begin
             if Response.StatusCode=HTTP_STATUS_NO_CONTENT then

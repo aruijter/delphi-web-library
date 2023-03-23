@@ -9,7 +9,7 @@ type
   end;
 
   TdwlHTTPUtils = record
-    class function StringTodwlhttpCommand(const HttpCommand: string): integer; static;
+    class function StringTodwlhttpMethod(const HttpMethod: string): integer; static;
     class function StatusCodeDescription(StatusCode: integer): string; static;
     class function ParseHTTPFieldValue(const Value: string): IdwlHTTPFieldValue; static;
     class function MIMEnameToCodepage(const Charset: string; Default: cardinal=CP_UTF8): integer; static;
@@ -96,9 +96,9 @@ begin
   end;
 end;
 
-class function TdwlHTTPUtils.StringTodwlhttpCommand(const HttpCommand: string): integer;
+class function TdwlHTTPUtils.StringTodwlhttpMethod(const HttpMethod: string): integer;
 begin
-  Result := IndexStr(HttpCommand, dwlhttpCommandToString);
+  Result := IndexStr(HttpMethod, dwlhttpMethodToString);
 end;
 
 { TdwlHTTPField }

@@ -61,7 +61,7 @@ begin
     Rq.PostStream.WriteData(@logItem.Content[0], Length(LogItem.Content));
     Rq.Header[HTTP_FIELD_CONTENT_TYPE] := LogItem.ContentType;
   end;
-  Rq.Method  := HTTP_COMMAND_POST;
+  Rq.Method  := HTTP_METHOD_POST;
   Rq.Execute;
 end;
 

@@ -42,10 +42,10 @@ type
     /// </summary>
     URI: PWideChar;
     /// <summary>
-    ///   The HTTP Request Command, provided from server side, do not change <br />
+    ///   The HTTP Request method, provided from server side, do not change <br />
     ///   This is a byte, definition of values can be found int DWL.HTTP.Consts f.e. 'GET'=dwlhttpGET=1
     /// </summary>
-    Command: byte;
+    RequestMethod: byte;
     /// <summary>
     ///   bi directional flags, not used by now <br />
     /// </summary>

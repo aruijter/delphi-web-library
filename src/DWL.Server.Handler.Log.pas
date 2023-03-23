@@ -118,7 +118,7 @@ const
     'CREATE TABLE IF NOT EXISTS dwl_log_debug ('+
     '`Id` INT(11) NOT NULL AUTO_INCREMENT, '+
     '`IpAddress` VARCHAR(50), '+
-    '`TimeStamp` DATETIME  DEFAULT CURRENT_TIMESTAMP, '+
+    '`TimeStamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP, '+
     '`Level` TINYINT  DEFAULT 0, '+
     '`Source` VARCHAR(50), '+
     '`Channel` VARCHAR(50), '+
@@ -131,7 +131,7 @@ const
     'CREATE TABLE IF NOT EXISTS dwl_log_messages ('+
     '`Id` INT(11) NOT NULL AUTO_INCREMENT, '+
     '`IpAddress` VARCHAR(50), '+
-    '`TimeStamp` DATETIME  DEFAULT CURRENT_TIMESTAMP, '+
+    '`TimeStamp` TIMESTAMP  DEFAULT CURRENT_TIMESTAMP, '+
     '`Level` TINYINT  DEFAULT 0, '+
     '`Source` VARCHAR(50), '+
     '`Channel` VARCHAR(50), '+
@@ -287,10 +287,10 @@ begin
   Result := false;
   if SameText(State.URI, '') then
   begin
-    if State.Command=dwlhttpPOST then
+    if State.RequestMethod=dwlhttpPOST then
       Result := Post_Log(State)
     else
-    if State.Command=dwlhttpOPTIONS then
+    if State.RequestMethod=dwlhttpOPTIONS then
       Result := Options_Log(State);
   end;
 end;

@@ -206,7 +206,7 @@ begin
   var State: PdwlHTTPHandlingState := AllocMem(SizeOf(TdwlHTTPHandlingState));
   try
     State._InternalServerStructure := AllocMem(SizeOf(TServerStructure));
-    State.Command := Request.Command;
+    State.RequestMethod := Request.RequestMethod;
     PServerStructure(State._InternalServerStructure).State_URI := Request.URI;
     PServerStructure(State._InternalServerStructure).Request := Request;
     ProcessRequest(State);

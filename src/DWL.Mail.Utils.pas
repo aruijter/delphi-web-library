@@ -71,7 +71,7 @@ begin
     Stream.Free;
   end;
   Request.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_OCTET_STREAM;
-  Request.Method  := HTTP_COMMAND_POST;
+  Request.Method  := HTTP_METHOD_POST;
   var Response := Request.Execute;
   if Response.StatusCode<>HTTP_STATUS_OK then
     Result.AddErrorMsg('Error '+Response.StatusCode.ToString);

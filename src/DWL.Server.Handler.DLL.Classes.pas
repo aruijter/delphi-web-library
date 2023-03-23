@@ -37,7 +37,7 @@ type
   protected
     class var FConfigParams: IdwlParams;
     class var FCallBackProcs: TdwlCallBackProcs;
-    class procedure RegisterHandling(const Command: byte; const URI: string; const handleProc: TEndpoint_HandleProc; const AllowedScopes: TArray<string>; Params: IdwlParams=nil);
+    class procedure RegisterHandling(const Method: byte; const URI: string; const handleProc: TEndpoint_HandleProc; const AllowedScopes: TArray<string>; Params: IdwlParams=nil);
     class function StateParams(const State: PdwlHTTPHandlingState): IdwlParams;
     class function ScopeOverlap(const State: PdwlHTTPHandlingState; const Scopes: TArray<string>): boolean; overload;
     class function Get_UserId(const State: PdwlHTTPHandlingState): integer;
@@ -151,7 +151,7 @@ type
 
 class function TdwlDLLHandling.Authorize(const State: PdwlHTTPHandlingState): boolean;
 begin
-  Result := State.Command=dwlhttpOPTIONS;
+  Result := State.RequestMethod=dwlhttpOPTIONS;
 end;
 
 class function TdwlDLLHandling.Body_JSON(const State: PdwlHTTPHandlingState): TJSONObject;
@@ -199,7 +199,7 @@ begin
   var Enum := Cmds.GetEnumerator;
   try
     while Enum.MoveNext do
-      Val := Val+', '+dwlhttpCommandToString[Enum.Current.Key];
+      Val := Val+', '+dwlhttpMethodToString[Enum.Current.Key];
   finally
     Enum.Free;
   end;
@@ -217,12 +217,12 @@ begin
     var Cmds: THandlingEndpoints_Dictionary;
     if FHandlingEndpoints.TryGetValue(State.URI, Cmds) then
     begin
-      if State.Command=dwlhttpOPTIONS then
+      if State.RequestMethod=dwlhttpOPTIONS then
         ProcessOptions(State, Success, Cmds)
       else
       begin
         var Props: THandlingEndpoint_Props;
-        if Cmds.TryGetValue(State.Command, Props) then
+        if Cmds.TryGetValue(State.RequestMethod, Props) then
         begin
           if not Props.ScopesAllowed(State) then
           begin
@@ -261,7 +261,7 @@ begin
   end;
 end;
 
-class procedure TdwlDLLHandling.RegisterHandling(const Command: byte; const URI: string; const HandleProc: TEndpoint_HandleProc; const AllowedScopes: TArray<string>; Params: IdwlParams=nil);
+class procedure TdwlDLLHandling.RegisterHandling(const Method: byte; const URI: string; const HandleProc: TEndpoint_HandleProc; const AllowedScopes: TArray<string>; Params: IdwlParams=nil);
 begin
   var Cmds: THandlingEndpoints_Dictionary;
   if not FHandlingEndpoints.TryGetValue(URI, Cmds) then
@@ -273,7 +273,7 @@ begin
   Props.HandleProc := HandleProc;
   Props.AllowedScopes := AllowedScopes;
   Props.Params := Params;
-  Cmds.Add(Command, Props);
+  Cmds.Add(Method, Props);
 end;
 
 class function TdwlDLLHandling.StateParams_Scopes(const State: PdwlHTTPHandlingState): TStringList;

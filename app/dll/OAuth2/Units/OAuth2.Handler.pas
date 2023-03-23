@@ -438,7 +438,7 @@ const
 begin
   Result := true;
   // OpenID Connect only allows POST with Form Serialization
-  if State.Command=dwlhttpPOST then
+  if State.RequestMethod=dwlhttpPOST then
   begin
     var ContType: string;
     if not TryGetHeaderValue(State, HTTP_FIELD_CONTENT_TYPE, ContType) or

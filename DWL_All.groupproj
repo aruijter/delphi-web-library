@@ -24,6 +24,9 @@
         <Projects Include="app\dll\DisCo\DisCo.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="app\tools\discoclient\DisCoClient.dproj">
+            <Dependencies/>
+        </Projects>
         <Projects Include="app\tools\cocon\CoCon.dproj">
             <Dependencies/>
         </Projects>
@@ -98,6 +101,15 @@
     <Target Name="DisCo:Make">
         <MSBuild Projects="app\dll\DisCo\DisCo.dproj" Targets="Make"/>
     </Target>
+    <Target Name="DisCoClient">
+        <MSBuild Projects="app\tools\discoclient\DisCoClient.dproj"/>
+    </Target>
+    <Target Name="DisCoClient:Clean">
+        <MSBuild Projects="app\tools\discoclient\DisCoClient.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DisCoClient:Make">
+        <MSBuild Projects="app\tools\discoclient\DisCoClient.dproj" Targets="Make"/>
+    </Target>
     <Target Name="CoCon">
         <MSBuild Projects="app\tools\cocon\CoCon.dproj"/>
     </Target>
@@ -108,13 +120,13 @@
         <MSBuild Projects="app\tools\cocon\CoCon.dproj" Targets="Make"/>
     </Target>
     <Target Name="Build">
-        <CallTarget Targets="DWL;DisCoIde;dwlserver_sv;dwlserver_debug;HelloWorld;OAuth2;DisCo;CoCon"/>
+        <CallTarget Targets="DWL;DisCoIde;dwlserver_sv;dwlserver_debug;HelloWorld;OAuth2;DisCo;DisCoClient;CoCon"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="DWL:Clean;DisCoIde:Clean;dwlserver_sv:Clean;dwlserver_debug:Clean;HelloWorld:Clean;OAuth2:Clean;DisCo:Clean;CoCon:Clean"/>
+        <CallTarget Targets="DWL:Clean;DisCoIde:Clean;dwlserver_sv:Clean;dwlserver_debug:Clean;HelloWorld:Clean;OAuth2:Clean;DisCo:Clean;DisCoClient:Clean;CoCon:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="DWL:Make;DisCoIde:Make;dwlserver_sv:Make;dwlserver_debug:Make;HelloWorld:Make;OAuth2:Make;DisCo:Make;CoCon:Make"/>
+        <CallTarget Targets="DWL:Make;DisCoIde:Make;dwlserver_sv:Make;dwlserver_debug:Make;HelloWorld:Make;OAuth2:Make;DisCo:Make;DisCoClient:Make;CoCon:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

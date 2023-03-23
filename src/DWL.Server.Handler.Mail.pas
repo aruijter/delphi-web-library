@@ -87,10 +87,10 @@ begin
   Result := false;
   if SameText(State.URI, '') then
   begin
-    if State.Command=dwlhttpPOST then
+    if State.RequestMethod=dwlhttpPOST then
       Result := Post_Mail(State)
     else
-    if State.Command=dwlhttpOPTIONS then
+    if State.RequestMethod=dwlhttpOPTIONS then
       Result := Options_Mail(State);
   end;
 end;

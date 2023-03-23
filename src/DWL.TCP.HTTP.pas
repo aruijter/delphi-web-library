@@ -27,7 +27,7 @@ type
 
   TdwlHTTPSocket = class(TdwlSocket)
   strict private
-    FCommand: byte;
+    FRequestMethod: byte;
     FUri: string;
     FState: TdwlHTTPServerConnectionState;
     FPendingLine: string;
@@ -48,7 +48,7 @@ type
     procedure ReadProcessRequest;
     procedure ReadProcessURI;
   public
-    property Command: byte read FCommand;
+    property RequestMethod: byte read FRequestMethod;
     property RequestBodyStream: TMemoryStream read FRequestBodyStream;
     property RequestHeaders: IdwlParams read FRequestHeaders;
     property RequestParams: TStringList read FRequestParams;
@@ -287,16 +287,16 @@ begin
           Exit;
         end;
       end;
-      var Cmd := TdwlHTTPUtils.StringTodwlhttpCommand(Parts[0]);
-      if Cmd<0 then
+      var Method := TdwlHTTPUtils.StringTodwlhttpMethod(Parts[0]);
+      if Method<0 then
       begin
         FState := hcsError;
         FStatusCode := HTTP_STATUS_VERSION_NOT_SUP;
-        FReadError := 'Cannot handle command '+Parts[0];
+        FReadError := 'Cannot handle method '+Parts[0];
         Exit;
       end
       else
-        FCommand := Cmd;
+        FRequestMethod := Method;
       FUri := Parts[1];
       FState := hcsReadHeader;
     end;
@@ -353,7 +353,7 @@ begin
     if not TdwlCustomHTTPServer(FService).HandleRequest(Self) then
       StatusCode := HTTP_STATUS_NOT_FOUND;
   end;
-  // Remember to not write Content-Length when Command CONNECT is added later
+  // Remember to not write Content-Length when method CONNECT is added later
   FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_LENGTH, FResponseDataStream.Size.ToString);
   // Write HTTP protocol line
   WriteStr('HTTP/1.');

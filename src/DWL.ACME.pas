@@ -58,7 +58,7 @@ type
     FHTTPRequestSeen: boolean;
     FDaysLeft: integer;
     FChallengeIP: string;
-    function DoRequest(var State: TACMECheckState; const URL: string; Method: string=HTTP_COMMAND_GET; const Payload: string=''): IdwlHTTPResponse;
+    function DoRequest(var State: TACMECheckState; const URL: string; Method: string=HTTP_METHOD_GET; const Payload: string=''): IdwlHTTPResponse;
     function GetReplayNonce(var State:TACMECheckState): string;
     procedure Log(const Msg: string; SeverityLevel: TdwlLogSeverityLevel);
     function PrepareKey(var State:TACMECheckState): boolean;
@@ -230,14 +230,14 @@ begin
   FDirectory := ExtractFilePath(ParamStr(0))+'Cert_ACME';
 end;
 
-function TdwlACMEClient.DoRequest(var State: TACMECheckState; const URL: string; Method: string=HTTP_COMMAND_GET; const Payload: string=''): IdwlHTTPResponse;
+function TdwlACMEClient.DoRequest(var State: TACMECheckState; const URL: string; Method: string=HTTP_METHOD_GET; const Payload: string=''): IdwlHTTPResponse;
 var
   Request: IdwlHTTPRequest;
   Nonce: string;
 begin
   Request := New_HTTPRequest(URL);
   Request.Method := Method;
-  if (Method=HTTP_COMMAND_POST) then
+  if (Method=HTTP_METHOD_POST) then
   begin
     Request.Header[HTTP_FIELD_CONTENT_TYPE] := 'application/jose+json';
     var JWS := New_JWS;
@@ -301,7 +301,7 @@ begin
   for i := 0 to csr_LEN - 1 do
     csr_BUF[i] := ord(csr_TXT[i+1]);
 
-  Response := DoRequest(State, State.URLFinalize, HTTP_COMMAND_POST, '{"csr":"'+TNetEncoding.Base64URL.EncodeBytesToString(csr_BUF)+'"}');
+  Response := DoRequest(State, State.URLFinalize, HTTP_METHOD_POST, '{"csr":"'+TNetEncoding.Base64URL.EncodeBytesToString(csr_BUF)+'"}');
   if Response.StatusCode<>HTTP_STATUS_OK then
   begin
     Log('Error in finalize request: '+Response.AsString, lsError);
@@ -344,7 +344,7 @@ var
   Response: IdwlHTTPResponse;
 begin
   Result := false;
-  Response := DoRequest(State, State.URLCertificate, HTTP_COMMAND_POST);
+  Response := DoRequest(State, State.URLCertificate, HTTP_METHOD_POST);
   if Response.StatusCode<>HTTP_STATUS_OK then
   begin
     Log('Error downloading Certificate: '+Response.AsString, lsError);
@@ -407,7 +407,7 @@ end;
 function TdwlACMEClient.InitAccount(var State:TACMECheckState): boolean;
 begin
   // contact information is not required, only agree to terms of service
-  var Response := DoRequest(State, State.URLNewAccount, HTTP_COMMAND_POST, '{"termsOfServiceAgreed":true}');
+  var Response := DoRequest(State, State.URLNewAccount, HTTP_METHOD_POST, '{"termsOfServiceAgreed":true}');
   Result := (Response.StatusCode in [HTTP_STATUS_OK, HTTP_STATUS_CREATED]);
   if Result then
     State.URLAccount := Response.Header[HTTP_FIELD_LOCATION]
@@ -461,7 +461,7 @@ begin
   Result := false;
   try
     // Submit order
-    var Response := DoRequest(State, State.URLNewOrder, HTTP_COMMAND_POST, '{"identifiers":[{"type":"dns","value":"'+Domain+'"}]}');
+    var Response := DoRequest(State, State.URLNewOrder, HTTP_METHOD_POST, '{"identifiers":[{"type":"dns","value":"'+Domain+'"}]}');
     if Response.StatusCode=HTTP_STATUS_CREATED then
     begin
       //fetch order details
@@ -472,7 +472,7 @@ begin
         // start authorizations
         for AuthNo := 0 to URLAuthorizations.Count-1 do
         begin
-          Response := DoRequest(State, URLAuthorizations.Items[AuthNo].Value, HTTP_COMMAND_POST);
+          Response := DoRequest(State, URLAuthorizations.Items[AuthNo].Value, HTTP_METHOD_POST);
           if Response.StatusCode<>HTTP_STATUS_OK then
           begin
             Log('Error getting authorization: '+Response.AsString, lsError);
@@ -514,7 +514,7 @@ begin
                     begin
                       // Get the status, the first time this will start the challenge
                       var JWS := New_JWS;
-                      Response := DoRequest(State, ChallURL, HTTP_COMMAND_POST, ChallPayLoad);
+                      Response := DoRequest(State, ChallURL, HTTP_METHOD_POST, ChallPayLoad);
                       // the next time we don't start the challende, just polling, so change payload to Post-As-Get
                       ChallPayLoad := '';
                       if Response.StatusCode=HTTP_STATUS_OK then

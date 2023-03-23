@@ -180,7 +180,7 @@ end;
 
 class function TdwlDiscoClient.CheckPreReleaseUpdate: TdwlResult;
 begin
-  var Response := TdwlDisco.FApiSession.ExecuteJSONRequest('release', HTTP_COMMAND_GET, 'packagename='+AppName);
+  var Response := TdwlDisco.FApiSession.ExecuteJSONRequest('release', HTTP_METHOD_GET, 'packagename='+AppName);
   if (not Response.Success) or (Response.Data.GetValue<integer>('kind')<>discoreleasekindPreRelease) then
   begin
     Result.AddErrorMsg('No PreRelease available right now.');
@@ -252,7 +252,7 @@ begin
   try
     ProgressMsg('Downloading '+PackageName);
     try
-      var Response := FApiSession.ExecuteApiRequest('download/package', HTTP_COMMAND_GET, 'packagename='+TNetEncoding.URL.Encode(PackageName)+'&kind='+
+      var Response := FApiSession.ExecuteApiRequest('download/package', HTTP_METHOD_GET, 'packagename='+TNetEncoding.URL.Encode(PackageName)+'&kind='+
         IfThen(RequestPrerelease, discoreleasekindPreRelease, discoreleasekindRelease).ToString, true, false, FProgressBytesFunc);
       if (Response=nil) or (Response.StatusCode<>HTTP_STATUS_OK) then
         Exit;
@@ -307,7 +307,7 @@ begin
   {$ENDIF}
   var Response: IdwlAPIResponse := nil;
   try
-    Response := FApiSession.ExecuteJSONRequest('phonehome', HTTP_COMMAND_GET, 'appname='+AppName.ToLower+IfThen(Profile<>'', '&profile='+Profile));
+    Response := FApiSession.ExecuteJSONRequest('phonehome', HTTP_METHOD_GET, 'appname='+AppName.ToLower+IfThen(Profile<>'', '&profile='+Profile));
   except
     Response := nil;
   end;
