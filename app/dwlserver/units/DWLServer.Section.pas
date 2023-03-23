@@ -6,19 +6,23 @@ interface
 
 uses
   DWL.Server, DWL.Params, DWL.MySQL, DWL.TCP.SSL, DWL.TCP.Server,
-  DWL.SyncObjs, DWL.Server.Handler.Log, DWL.Logging;
+  DWL.SyncObjs, DWL.Server.Handler.Log, DWL.Logging, DWL.TCP.HTTP,
+  System.SyncObjs;
 
 type
   TDWLServerSection = class
   strict private
+    FLogLevel: byte;
     FACMECheckThread: TdwlThread;
     FLogHandler: TdwlHTTPHandler_Log;
     FCallBackLogDispatcher: IdwlLogDispatcher;
     FServerStarted: boolean;
     FServerStarting: boolean;
+    FRequestLoggingParams: IdwlParams;
     class procedure InsertOrUpdateDbParameter(Session: IdwlMySQLSession; const Key, Value: string);
     class function TryHostNameMigration(ConfigParams: IdwlParams): boolean; // 20230403: can be removed next year or so
     procedure DoLog(LogItem: PdwlLogItem);
+    procedure LogRequest(Request: TdwlHTTPSocket);
     function Start_InitDataBase(ConfigParams: IdwlParams): IdwlMySQLSession;
     procedure Start_ReadParameters_CommandLine_IniFile(ConfigParams: IdwlParams);
     procedure Start_ReadParameters_MySQL(Session: IdwlMySQLSession; ConfigParams: IdwlParams);
@@ -45,13 +49,22 @@ uses
   DWL.Params.Consts, DWL.HTTP.Consts, DWL.ACME, DWL.OpenSSL,
   System.Math, DWL.TCP.Consts, System.StrUtils, Winapi.Windows,
   System.Threading, DWL.Logging.Callback, Winapi.ShLwApi, DWL.Mail.Queue,
-  DWL.Server.Handler.Mail, DWL.Server.Handler.DLL;
+  DWL.Server.Handler.Mail, DWL.Server.Handler.DLL, Winapi.WinInet;
 
 const
   TOPIC_BOOTSTRAP = 'bootstrap';
   TOPIC_WRAPUP = 'wrapup';
   TOPIC_DLL = 'dll';
   TOPIC_ACME = 'acme';
+
+  httpLogLevelEmergency = 0;
+  httplogLevelFailedRequests=3;
+  httplogLevelWarning=4;
+  httplogLevelAllRequests=6;
+  httplogLevelDebug=6;
+  httplogLevelEverything=9;
+
+  Param_LogLevel = 'loglevel'; ParamDef_LogLevel = httplogLevelWarning;
 
 type
   TACMECheckThread = class(TdwlThread)
@@ -70,6 +83,7 @@ procedure TDWLServerSection.AfterConstruction;
 begin
   inherited AfterConstruction;
   FServer := TDWLServer.Create;
+  FServer.OnLog := LogRequest;
 end;
 
 procedure TDWLServerSection.BeforeDestruction;
@@ -190,6 +204,51 @@ begin
   Cmd.Execute;
 end;
 
+procedure TDWLServerSection.LogRequest(Request: TdwlHTTPSocket);
+const
+  SQL_InsertRequest =
+    'INSERT INTO dwl_log_requests (StatusCode, IP_Remote, Uri, ProcessingTime, Header, Params) VALUES (?,?,?,?,?,?)';
+  InsertRequest_Idx_StatusCode=0;  InsertRequest_Idx_IP_Remote=1;  InsertRequest_Idx_Uri=2;
+  InsertRequest_Idx_ProcessingTime=3; InsertRequest_Idx_Header=4; InsertRequest_Idx_Params=5;
+begin
+  try
+    // in debugging always log everything
+    {$IFNDEF DEBUG}
+    if FLogLevel<httplogLevelFailedRequests then
+      Exit;
+    if (FLogLevel<httplogLevelAllRequests) and
+      ((Request.StatusCode=HTTP_STATUS_OK) or (Request.StatusCode=HTTP_STATUS_REDIRECT)) then
+      Exit;
+    {$ENDIF}
+    var Ticks := GetTickCount64-Request.TickStart;
+    // in debugging log to Server Console
+    {$IFDEF DEBUG}
+    var LogItem := TdwlLogger.PrepareLogitem;
+    LogItem.Msg :=  Request.IP_Remote+':'+Request.Port_Local.ToString+' '+
+      dwlhttpCommandToString[Request.Command]+' '+Request.Uri+' '+Request.StatusCode.ToString+
+        ' ('+Ticks.ToString+'ms)';
+    Logitem.Topic := 'requests';
+    LogItem.SeverityLevel := lsDebug;
+    LogItem.Destination := logdestinationServerConsole;
+    TdwlLogger.Log(LogItem);
+    {$ENDIF}
+    // clear sensitive information before logging
+    Request.RequestParams.Values['password'] := '';
+    // log request to table
+    var Cmd := New_MySQLSession(FRequestLoggingParams).CreateCommand(SQL_InsertRequest);
+    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_StatusCode, Request.StatusCode);
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_IP_Remote, Request.Ip_Remote);
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, Request.Uri);
+    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Ticks);
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Header, Request.RequestHeaders.GetAsNameValueText);
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Params, Request.RequestParams.Text);
+    Cmd.Execute;
+  except
+    on E: Exception do
+      TdwlLogger.Log(E);
+  end;
+end;
+
 procedure TDWLServerSection.Start_LoadDLLHandlers(ConfigParams: IdwlParams);
 const
   SQL_GetHandlers =
@@ -292,6 +351,8 @@ begin
       Start_ReadParameters_CommandLine_IniFile(ConfigParams);
       var Session := Start_InitDataBase(ConfigParams);
       Start_ReadParameters_MySQL(Session, ConfigParams);
+      FRequestLoggingParams := New_Params;
+      ConfigParams.AssignTo(FRequestLoggingParams);
       TdwlMailQueue.Configure(ConfigParams, true);
       Start_Enable_Logging(ConfigParams);
       TdwlLogger.Log('DWL Server starting', lsTrace, TOPIC_BOOTSTRAP);
@@ -354,7 +415,7 @@ begin
   FCallBackLogDispatcher := EnableLogDispatchingToCallback(false, DoLog);
   FLogHandler := TdwlHTTPHandler_Log.Create(ConfigParams); // init before activating DoLog!
   FServer.RegisterHandler(EndpointURI_Log,  FLogHandler);
-  FServer.LogLevel := ConfigParams.IntValue(Param_LogLevel, httplogLevelWarning);
+  FLogLevel := ConfigParams.IntValue(Param_LogLevel, httplogLevelWarning);
   TdwlLogger.Log('Enabled Request logging (level '+FServer.LogLevel.ToString+')', lsTrace, TOPIC_BOOTSTRAP);
 end;
 
@@ -369,6 +430,9 @@ const
   SQL_CheckTable_HostNames =
     'CREATE TABLE IF NOT EXISTS dwl_hostnames (Id SMALLINT NOT NULL AUTO_INCREMENT, HostName VARCHAR(50) NOT NULL, CountryCode CHAR(2) NOT NULL, State VARCHAR(50) NOT NULL, '+
     'City VARCHAR(50) NOT NULL, BindingIp VARCHAR(39), RootCert TEXT, Cert TEXT, PrivateKey TEXT, PRIMARY KEY(Id), UNIQUE INDEX HostName (HostName))';
+  SQL_CheckTable_Log_Requests =
+    'CREATE TABLE IF NOT EXISTS dwl_log_requests (Id INT NOT NULL AUTO_INCREMENT, StatusCode SMALLINT NOT NULL, IP_Remote CHAR(15) NOT NULL,'+
+    'Uri VARCHAR(250) NOT NULL, ProcessingTime SMALLINT NOT NULL, Header TEXT NOT NULL, Params TEXT NOT NULL, PRIMARY KEY (Id))';
 begin
   if ConfigParams.StrValue(Param_Db)='' then
     ConfigParams.WriteValue(Param_Db, 'dwl');
@@ -382,6 +446,7 @@ begin
   Result.CreateCommand(SQL_CheckTable_UriAliases).Execute;
   Result.CreateCommand(SQL_CheckTable_Parameters).Execute;
   Result.CreateCommand(SQL_CheckTable_HostNames).Execute;
+  Result.CreateCommand(SQL_CheckTable_Log_Requests).Execute;
 end;
 
 procedure TDWLServerSection.Start_ReadParameters_CommandLine_IniFile(ConfigParams: IdwlParams);

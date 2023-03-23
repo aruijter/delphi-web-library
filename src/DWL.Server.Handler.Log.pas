@@ -13,9 +13,6 @@ uses
   System.RegularExpressions;
 
 const
-  logdestinationServerConsole='serverconsole';
-
-const
   Param_EMail_To = 'email_to';
   Param_Email_From = 'email_from';
   Param_EMail_FromName = 'email_fromname';
@@ -76,7 +73,7 @@ uses
   DWL.Params.Consts, DWL.MySQL, DWL.HTTP.Consts, DWL.Logging,
   DWL.Server.Globals, DWL.Server.Utils, System.Masks, System.Classes,
   IdMessage, System.StrUtils, IdAttachmentMemory, DWL.Mail.Queue,
-  Winapi.WinInet, Winapi.Windows, System.Math, System.Hash;
+  Winapi.WinInet, Winapi.Windows, System.Math, System.Hash, DWL.Server.Consts;
 
 const
   TRIGGER_RELOAD_MSECS = 60000; // 1 minute
@@ -282,7 +279,6 @@ begin
   if not SubmitLog(IpAddress, Level, Source, Channel, Topic, Msg, ContentType, Content) then
     State.StatusCode := HTTP_STATUS_SERVER_ERROR;
   serverProcs.SetHeaderValueProc(State, 'Access-Control-Allow-Origin', '*');
-  State.Flags := State.Flags or HTTP_FLAG_NOLOGGING;
   Result := true;
 end;
 

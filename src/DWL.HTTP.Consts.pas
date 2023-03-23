@@ -63,13 +63,6 @@ const
   dwlhttpCommandToString: array[dwlhttpUNKNOWN..dwlhttpOPTIONS] of string = (HTTP_COMMAND_UNKNOWN,
     HTTP_COMMAND_HEAD,HTTP_COMMAND_GET, HTTP_COMMAND_POST, HTTP_COMMAND_DELETE, HTTP_COMMAND_PUT, HTTP_COMMAND_TRACE, HTTP_COMMAND_OPTIONS);
 
-  httpLogLevelEmergency = 0;
-  httplogLevelFailedRequests=3;
-  httplogLevelWarning=4;
-  httplogLevelAllRequests=6;
-  httplogLevelDebug=6;
-  httplogLevelEverything=9;
-
   CodePageMIMEnameCombinations: array[0..139] of record Codepage: cardinal; MIMEname: string end = (
    (Codepage: 65001; MIMEname: 'utf-8'),
    (Codepage: 20127; MIMEname: 'us-ascii'),

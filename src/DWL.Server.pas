@@ -139,7 +139,6 @@ type
   TServerStructure = record
     State_URI: string;
     FinalHandler: TdwlHTTPHandler;
-    Tick: UInt64;
     WebSocketsReceiveProc: TdwlHTTPWebSocket_OnData;
     ContentBuffer: pointer;
     ContentLength: cardinal;
@@ -165,7 +164,6 @@ end;
 constructor TDWLServer.Create;
 begin
   inherited Create;
-  FLogLevel := httplogLevelWarning;
   FRootHandlerAccess := TMultiReadExclusiveWriteSynchronizer.Create;
   FRootHandler := TdwlHTTPHandler_PassThrough.Create(Self);
 end;
@@ -195,17 +193,6 @@ begin
 end;
 
 function TDWLServer.HandleRequest(Request: TdwlHTTPSocket): boolean;
-  function GetLogLine(State: PdwlHTTPHandlingState): string;
-  begin
-    var FinalHandler := PServerStructure(State._InternalServerStructure).FinalHandler;
-    if FinalHandler<>nil then
-      Result := FinalHandler.URI
-    else
-      Result := '';
-    Result := 'Rq '+Request.IP_Remote+':'+Request.Port_Local.ToString+' '+
-      dwlhttpCommandToString[State.Command]+' '+Result+PServerStructure(State._InternalServerStructure).State_URI+' '+
-      State.StatusCode.ToString+' ('+(GetTickCount64-PServerStructure(State._InternalServerStructure).Tick).ToString+'ms)';
-  end;
 begin
   Result := false;
   if OnlyLocalConnections then
@@ -233,27 +220,7 @@ begin
   end;
   Request.StatusCode := State.StatusCode;
   Request.ResponseDataStream.WriteBuffer(PServerStructure(State._InternalServerStructure).ContentBuffer^, PServerStructure(State._InternalServerStructure).ContentLength);
-
-  if (State.Flags and HTTP_FLAG_NOLOGGING)=0 then
-  begin
-    if Assigned(PServerStructure(State._InternalServerStructure).WebSocketsReceiveProc) then
-      TdwlLogger.Log(GetLogLine(State)+' (websocket closed)', lsTrace)
-    else
-    begin
-      if (State.StatusCode<>HTTP_STATUS_OK) and ((State.StatusCode<>HTTP_STATUS_REDIRECT)) and (LogLevel>=httplogLevelFailedRequests) then
-        TdwlLogger.Log(GetLogLine(State), lsNotice)
-      else
-      begin
-        if Loglevel>=httplogLevelAllRequests then
-          TdwlLogger.Log(GetLogLine(State), lsTrace)
-      end;
-    end;
-  end
-  else
-  begin
-    if LogLevel>=httplogLevelEverything then
-      TdwlLogger.Log(GetLogLine(State), lsTrace);
-  end;
+  // freeing up resources
   if  PServerStructure(State._InternalServerStructure).ContentOwned then
     FreeMem(PServerStructure(State._InternalServerStructure).ContentBuffer);
   if Assigned(PServerStructure(State._InternalServerStructure).FinalHandler) and
@@ -287,8 +254,6 @@ begin
   // We arranged this by putting the strings that are referenced in the serverstructure
   State.URI := PWideChar(PServerStructure(State._InternalServerStructure).State_URI);
   State.Flags := 0;
-  if (LogLevel>=httplogLevelFailedRequests) then
-    PServerStructure(State._InternalServerStructure).Tick := GetTickCount64;
   State.SetHeaderValue(HTTP_FIELD_CACHE_CONTROL, 'no-cache');
   FRootHandlerAccess.BeginRead;
   try

@@ -12,11 +12,16 @@ type
 
 type
   TdwlHTTPSocket=class;
+  TdwlHTTPServer_OnLog=procedure(Request: TdwlHTTPSocket) of object;
+
 
   TdwlCustomHTTPServer = class(TdwlTCPServer)
+  strict private
+    FOnLog: TdwlHTTPServer_Onlog;
   protected
     function HandleRequest(Request: TdwlHTTPSocket): boolean; virtual;
   public
+    property OnLog: TdwlHTTPServer_Onlog read FOnLog write FOnLog;
     constructor Create;
   end;
 
@@ -33,6 +38,7 @@ type
     FResponseDataStream: TMemoryStream;
     FContentLength: integer;
     FStatusCode: integer;
+    FTickStart: UInt64;
     FProtocol: TdwlHTTPProtocol;
     FReadError: string;
     procedure ClearCurrentRequest;
@@ -50,6 +56,7 @@ type
     property StatusCode: integer read FStatusCode write FStatusCode;
     property Uri: string read FUri;
     property ResponseDataStream: TMemoryStream read FResponseDataStream;
+    property TickStart: UInt64 read FTickStart;
     constructor Create(AService: TdwlTCPService); override;
     destructor Destroy; override;
     procedure ReadHandlingBuffer(HandlingBuffer: PdwlHandlingBuffer); override;
@@ -324,6 +331,7 @@ end;
 
 procedure TdwlHTTPSocket.ReadProcessRequest;
 begin
+  FTickStart := GetTickCount64;
   var KeepAlive := (FProtocol<>HTTP10) and SameText(FRequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE);
   if FProtocol<>HTTP10 then
     FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));
@@ -367,6 +375,8 @@ begin
     WriteBuf(PByte(FResponseDataStream.Memory), FResponseDataStream.Size);
   // finalize
   FlushWrites(not KeepAlive);
+  if Assigned(TdwlCustomHTTPServer(FService).OnLog) then
+    TdwlCustomHTTPServer(FService).OnLog(Self);
   if KeepAlive then
     ClearCurrentRequest
   else

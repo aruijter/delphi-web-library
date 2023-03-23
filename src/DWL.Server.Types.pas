@@ -6,10 +6,6 @@ unit DWL.Server.Types;
 
 interface
 
-const
-  // the flags we're using
-  HTTP_FLAG_NOLOGGING = 1;  // do not log this request on server level
-
 type
   PdwlHTTPHandlingState = ^TdwlHTTPHandlingState;
 
@@ -51,7 +47,7 @@ type
     /// </summary>
     Command: byte;
     /// <summary>
-    ///   bi directional flags, for now only suppress logging <br />
+    ///   bi directional flags, not used by now <br />
     /// </summary>
     Flags: integer;
     /// <summary>

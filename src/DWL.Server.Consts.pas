@@ -16,6 +16,8 @@ const
   Param_DLLBasePath = 'dllbasepath';
   Param_TestMode = 'testmode';
 
+  logdestinationServerConsole='serverconsole';
+
 implementation
 
 end.
