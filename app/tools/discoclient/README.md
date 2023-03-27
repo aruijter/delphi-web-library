@@ -1,5 +1,5 @@
 # DisCoClient
-A simple Windows client for consulting the packages and releases of the DisCo framework. In this initial version, due to the current actual usage, the authentication is handled by a json file and currently only username/password authentication is supported. In a later stage this client will become fully compliant with OAuth2
+A simple Windows client for working with the packages and releases of the DisCo framework. In this initial version, due to the current actual usage, the authentication is handled by a json file and currently only username/password authentication is supported. In a later stage this client will become fully compliant with OAuth2
 
 ## Configuration
 The configuration needs to be provided by the json file named DisCoClient.config that needs to be placed in the same directory as the executable.
@@ -22,7 +22,6 @@ An example of the contents of the config file:
   "password" : "youwouldliketoknowisntit"
 }
 ```
-
 
 ## Functionality
 When the application is started the actual situation of the DisCo database is loaded.

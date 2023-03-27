@@ -39,26 +39,26 @@ If external OpenID Connect Providers are configured, the authentication form not
 The handler relies on a MySQL database for configuration and storing user identifities, access rights, etc. If needed the database structure will be initialized or upgraded by the handler.
 
 ### Params
-The DLL exported function Configure needs to be fed with params. These params are a combination of the global Argus parameter definition, extended with parameters from the params field in the argus_resthandlers table. This configuration sequence does not differ from the Argus configuration method for all DLL handlers.
+The DLL exported function Configure needs to be fed with params. These params are a combination of the global DWL parameter definition, extended with parameters from the params field in the dwl_handlers table. This configuration sequence does not differ from the DWL configuration method for all DLL handlers.
 
 The following configuration parameters need to be provided:
 
 |Key Name|Default|Description|
 |-|-|-|
-|host|\<value from argus\>|The host name of the MySQL Server|
-|port|<value from argus\>|The port of the MySQL Server|
-|username|<value from argus\>|The username used when connecting to the MySQL Server|
-|password|<value from argus\>|The password used when connecting to the MySQL Server|
-|db|<value from argus\>|The MySQL database where the information resides|
-|usertable|argus_oauth2_users|The tablename of the usertable to be used|
+|host|\<value from dwl\>|The host name of the MySQL Server|
+|port|<value from dwl\>|The port of the MySQL Server|
+|username|<value from dwl\>|The username used when connecting to the MySQL Server|
+|password|<value from dwl\>|The password used when connecting to the MySQL Server|
+|db|<value from adwl\>|The MySQL database where the information resides|
+|usertable|dwl_oauth2_users|The tablename of the usertable to be used|
 |field_md5|-|It configured, the handler will perform migration from a legacy md5 hash stored in this field. On login, when the user password is available, the salt and pwd will be updated in the database|
-|issuer|\<value from argus\> or otherwise the mounted endpoint|The issuer uri. This uri will be used as base url for the well known configuration and will be put into the iss field of the JSON Web Tokens. Please take care that this issuer url is the same as one of the endpoints on which the handler is mounted.
+|issuer|\<value from dwl\> or otherwise the mounted endpoint|The issuer uri. This uri will be used as base url for the well known configuration and will be put into the iss field of the JSON Web Tokens. Please take care that this issuer url is the same as one of the endpoints on which the handler is mounted.
 
 ### Providers Table
-The argus_oauth2_providers database table may be filled with one or more external OpenID Connect Providers. These provider definitions will be used to offer the user the possibility to use and external Identity Provider. The records must be populated with the following information
+The dwl_oauth2_providers database table may be filled with one or more external OpenID Connect Providers. These provider definitions will be used to offer the user the possibility to use and external Identity Provider. The records must be populated with the following information
 |FieldName|Default|Description|
 |-|-|-|
-|id|-|And auto incremented unique id|
+|id|-|An auto incremented unique id|
 |techname|-|The internal identification used to refer to this provider|
 |displayname|-|The external description used to describe this provider on the authentication page|
 |imgdata|-|An embedded image definition to be put near the displayname on the authentication page. For example `data:image/gif;base64,R0lG....`|
@@ -67,11 +67,11 @@ The argus_oauth2_providers database table may be filled with one or more externa
 |client_secret|-|The optional client_secret to be used. A PKCE is always used when communicating with the provider. When configured a client_secret will be added where applicable|
 
 ### Clients Table
-The argus_oauth2_clients database table must be filled with one or more clients. A client_id is a requirement when communicating with this handler, the configured properties of the client are:
+The dwl_oauth2_clients database table must be filled with one or more clients. A client_id is a requirement when communicating with this handler, the configured properties of the client are:
 
 |FieldName|Default|Description|
 |-|-|-|
-|id|-|And auto incremented unique id|
+|id|-|An auto incremented unique id|
 |client_id|-|A character sequence uniquely defining this client|
 |client_secret|-|The optional client_secret of this client. Used in code flow when no PKCE is applied|
 |redirect_uri|-|An obligated redirect uri for check and redirect purposes|
