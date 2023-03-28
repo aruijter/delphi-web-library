@@ -1,6 +1,9 @@
 # Release Notes
 All notable (including breaking) changes to this project will be documented in this file.
 
+## March 28, 2023
+- DisCo: Added possibility to download support DLL's without authentication. This is needed because for authentication you simply need some dlls ;-)
+
 ## March 23, 2023
 - Log request to a seperate table dwl_log_requests (and no longer via standard logging framework)
 - Changed fieldtype of TimeStamp fields in logging tables. Although not breaking I advise to change the TimeStamp fieldtypes to TIMESTAMP to improve on handling of timezones.

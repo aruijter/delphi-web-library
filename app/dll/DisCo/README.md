@@ -20,7 +20,9 @@ The following configuration parameters needs to be provided:
 |password|<value from dwl\>|The password used when connecting to the MySQL Server|
 |db|<value from dwl\>|The MySQL database where the information resides|
 |scope_admin|disco_admin|The scope that will give access to the admin API endpoints of this handler.|
-|additional_parameters_sql|\<empty\>|An optional SQL that will be executed to get additional key/value pairs to be added when assembling the phonehome reply. The $(appname) and $(profile) in this SQL statement will be resolved and the expected result of this query has two fields. First the key and secondly the value. These key/values from the result will be added to the phonehome reply.
+|additional_parameters_sql|\<empty\>|An optional SQL that will be executed to get additional key/value pairs to be added when assembling the phonehome reply. The $(appname) and $(profile) in this SQL|
+|supportpackages|7z64,libcrypto-3-x64|A comma separeted text of packagenames that are allowed to be downloaded without authentication| 
+statement will be resolved and the expected result of this query has two fields. First the key and secondly the value. These key/values from the result will be added to the phonehome reply.
 
 ### AppPackages Table
 The dwl_disco_apppackages database table may be filled with one or more pakcages that can be downloaded by clients. The package with the same name as the application is always inclusive, this package must not be configured. Only additional packages are registered in this table. The table serves as the 'filter' of the versioninfo that is provided to the client when calling phonehome.
