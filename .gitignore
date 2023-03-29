@@ -28,5 +28,5 @@ app/dll/DisCo/DisCo.res
 app/dll/DisCo/Win64/
 package/DiscoIDE/DisCoIde.res
 app/tools/cocon/CoCon.res
-app/tools/discoclient/Win64/
-app/tools/discoclient/DisCoClient.res
+app/tools/DiscoAgent/Win64/
+app/tools/DisCoAgent/DisCoAgent.res

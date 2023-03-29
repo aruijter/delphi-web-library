@@ -1,4 +1,4 @@
-program DisCoClient;
+program DisCoAgent;
 
 uses
   Vcl.Forms,
