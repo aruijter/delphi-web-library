@@ -228,6 +228,7 @@ begin
       end)
     );
   end;
+  lbPackages.Clear;
   for var i := 0 to FPackages.Count-1 do
     lbPackages.Items.Add(FPackages[i]+#9+TReleases(FPackages.Objects[i])[0].Version);
   if CurrentPackagename<>'' then
