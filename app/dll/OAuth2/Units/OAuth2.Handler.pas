@@ -324,6 +324,7 @@ end;
 class function THandler_OAuth2.CreateAccesstoken(UserID: integer; const ConvertedScope: string): string;
 begin
   var JWT := New_JWT;
+  JWT.Header.Values[joseheaderALGORITHM] := algorithm_RS256;
   JWT.Header.Values[joseheaderKEYID] := FSign_KeyID;
   JWT.Payload.Values[jwtclaimISSUER] := FIssuerUri;
   JWT.Payload.Values[jwtclaimSUBJECT] := UserID.ToString;
@@ -344,6 +345,7 @@ begin
     EnrichUserInfo(@UserInfo, OutputEMail, OutputProfile);
   end;
   var JWT := New_JWT;
+  JWT.Header.Values[joseheaderALGORITHM] := algorithm_RS256;
   JWT.Header.Values[joseheaderKEYID] := FSign_KeyID;
   JWT.Payload.Values[jwtclaimISSUER] := FIssuerUri;
   JWT.Payload.Values[jwtclaimSUBJECT] := UserInfo.Subject;
@@ -361,6 +363,7 @@ end;
 class function THandler_OAuth2.CreateRefreshtoken(UserID, Refreshtoken_order: integer; const GrantToken: string; const Scope: string): string;
 begin
   var JWT := New_JWT;
+  JWT.Header.Values[joseheaderALGORITHM] := algorithm_RS256;
   JWT.Header.Values[joseheaderKEYID] := FSign_KeyID;
   JWT.Payload.Values[jwtclaimISSUER] := FIssuerUri;
   JWT.Payload.IntValues[jwtclaimEXPIRATION_TIME] :=   TUnixEpoch.Now+GRANT_DURATION;
