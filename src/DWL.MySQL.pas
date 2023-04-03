@@ -554,9 +554,7 @@ uses
   System.SysUtils;
 
 const
-  TIMEOUT_CONNECTION = 10000; //msecs = 10 sec;
-  TIMEOUT_LAST_CONNECTION = 300000; // 5min
-
+  TIMEOUT_CONNECTION = 300000; //msecs = 5 min
 
 type
   TConnectionProperties = record
@@ -588,6 +586,7 @@ type
     FBecamePassiveTick: UInt64;
     procedure MySqlChk(Res: longint);
     function PrepareStatement(const Query: UTF8String): PMYSQL_Stmt;
+    function IsTimedOut: boolean;
   public
     constructor Create(const AHost: string; APort: cardinal; const ADatabaseName, AUserName, APassword: string; ACreateDatabase: boolean=true; AUseSSL: boolean=false);
     destructor Destroy; override;
@@ -640,21 +639,9 @@ type
     destructor Destroy; override;
   end;
 
-  TCheckPassiveThread = class(TThread)
-  strict private
-    FManager: TdwlMySQLManager;
-  protected
-    procedure Execute; override;
-  public
-    constructor Create(Manager: TdwlMySQLManager);
-  end;
-
   TdwlMySQLManager = class
-  strict private
-    FCheckPassiveThread: TCheckPassiveThread;
   private
     class var FInstance: TdwlMySQLManager;
-    FCheckPassiveThreadRunning: boolean;
     FAccess: TCriticalSection;
     FConnectionPools: TObjectDictionary<string, TConnectionPool>;
     class function CreateSession(Params: IdwlParams): IdwlMySQLSession;
@@ -883,6 +870,11 @@ begin
     MySqlChk(Execresult);
   except
   end;
+end;
+
+function TdwlMySQLConnection.IsTimedOut: boolean;
+begin
+  Result := (GetTickCount64-FBecamePassiveTick)>=TIMEOUT_CONNECTION;
 end;
 
 procedure TdwlMySQLConnection.MySqlChk(Res: longint);
@@ -1737,9 +1729,6 @@ begin
   inherited Create;
   FAccess := TCriticalSection.Create;
   FConnectionPools := TObjectDictionary<string, TConnectionPool>.Create([doOwnsValues]);
-  FCheckPassiveThreadRunning := true;
-  FCheckPassiveThread := TCheckPassiveThread.Create(Self);
-  FCheckPassiveThread.FreeOnTerminate := true;
 end;
 
 class constructor TdwlMySQLManager.Create;
@@ -1825,15 +1814,19 @@ function TConnectionPool.GetConnection: TdwlMySQLConnection;
 begin
    Result := nil;
   // try to get a passive one
-  FAccess.Enter;
-  try
-    if FPassiveConnections.Count>0 then
-    begin
+  while Result=nil do
+  begin
+    FAccess.Enter;
+    try
+      if FPassiveConnections.Count=0 then
+        Break;
       Result := FPassiveConnections[0];
       FPassiveConnections.Delete(0);
+    finally
+      FAccess.Leave;
     end;
-  finally
-    FAccess.Leave;
+    if Result.IsTimedOut then
+      FreeAndNil(Result);
   end;
   // feed result (and create one if needed)
   FAccess.Enter;
@@ -1860,9 +1853,6 @@ end;
 
 destructor TdwlMySQLManager.Destroy;
 begin
-  FCheckPassiveThread.Terminate;
-  while FCheckPassiveThreadRunning do
-    Sleep(100);
   FConnectionPools.Free;
   FAccess.Free;
   inherited Destroy;
@@ -1910,50 +1900,6 @@ function TConnectionProperties.UniqueIdentifier: string;
 begin
   // better is a proper hash, but I'm lazy...
   Result := Host.ToLower+'##'+UserName+'##'+Database+'##'+Port.ToString+'##'+UseSSL.ToString;
-end;
-
-{ TCheckPassiveThread }
-
-constructor TCheckPassiveThread.Create(Manager: TdwlMySQLManager);
-begin
-  FManager := Manager;
-  inherited Create;
-end;
-
-procedure TCheckPassiveThread.Execute;
-begin
-  while not Terminated do
-  begin
-    // do your thing
-    var PoolIdents: TArray<String>;
-    FManager.FAccess.Enter;
-    try
-      // First get all connectionpool identifiers
-      PoolIdents := FManager.FConnectionPools.Keys.ToArray
-    finally
-      FManager.FAccess.Leave;
-    end;
-    for var i := 0 to High(PoolIdents) do
-    begin
-      if Terminated then
-        Break;
-      FManager.FAccess.Enter;
-      try
-        var Pool: TConnectionPool;
-        if FManager.FConnectionPools.TryGetValue(PoolIdents[i], Pool ) then
-          Pool.FreePassiveSessions(TIMEOUT_CONNECTION, TIMEOUT_LAST_CONNECTION);
-      finally
-        FManager.FAccess.Leave;
-      end;
-    end;
-    var i := 50;// sleep for five seconds, but respond earlier to canceled state
-    while (i>0) and (not Terminated) do
-    begin
-      Sleep(100);
-      dec(i);
-    end;
-  end;
-  FManager.FCheckPassiveThreadRunning := false;
 end;
 
 { TMySQLNullDataBinding }
