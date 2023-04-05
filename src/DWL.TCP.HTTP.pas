@@ -332,13 +332,6 @@ end;
 procedure TdwlHTTPSocket.ReadProcessRequest;
 begin
   FTickStart := GetTickCount64;
-  // Check HTTP 1.1 Host against SNI Host
-  if (FState<>hcsError) and (Context_HostName<>'') and (not SameText(Context_HostName, RequestHeaders.StrValue(HTTP_FIELD_HOST))) then
-  begin
-    FState := hcsError;
-    StatusCode := HTTP_STATUS_BAD_REQUEST;
-    FReadError := 'SNI Host mismatch';
-  end;
   var KeepAlive := (FState<>hcsError) and (FProtocol<>HTTP10) and SameText(RequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE);
   if FProtocol<>HTTP10 then
     FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));

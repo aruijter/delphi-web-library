@@ -299,9 +299,6 @@ end;
 
 procedure TdwlSslIoHandler.SocketAfterConstruction(Socket: TdwlSocket);
 begin
-  // set hostname to unknown, in case we cannot determine (in client_hello),
-  // it will fail when doing SNI Check
-  Socket.Context_HostName := '<unknown>';
   PsslSocketVars(Socket.SocketVars).Context := FEnvironment.MainContext;
   PsslSocketVars(Socket.SocketVars).opSSL := SSL_new(PsslSocketVars(Socket.SocketVars).Context.opSSL_CTX);
   if PsslSocketVars(Socket.SocketVars).opSSL=nil then
