@@ -641,16 +641,14 @@ type
 
   TdwlMySQLManager = class
   private
-    class var FInstance: TdwlMySQLManager;
-    FAccess: TCriticalSection;
-    FConnectionPools: TObjectDictionary<string, TConnectionPool>;
+    class var
+      FAccess: TCriticalSection;
+      FConnectionPools: TObjectDictionary<string, TConnectionPool>;
     class function CreateSession(Params: IdwlParams): IdwlMySQLSession;
   public
     class constructor Create;
     class destructor Destroy;
-    constructor Create;
-    destructor Destroy; override;
-  end;
+ end;
 
   { Class: TMySQLValueTypeDataBinding
     Description: Base class for implementing Value Type data bindings
@@ -1724,16 +1722,10 @@ end;
 // The expectation is that the amount of connection pools will be very low
 // but if you want to make the manager perfect: go and do your job
 
-constructor TdwlMySQLManager.Create;
-begin
-  inherited Create;
-  FAccess := TCriticalSection.Create;
-  FConnectionPools := TObjectDictionary<string, TConnectionPool>.Create([doOwnsValues]);
-end;
-
 class constructor TdwlMySQLManager.Create;
 begin
-  FInstance := TdwlMySQLManager.Create;
+  FAccess := TCriticalSection.Create;
+  FConnectionPools := TObjectDictionary<string, TConnectionPool>.Create([doOwnsValues]);
 end;
 
 class function TdwlMySQLManager.CreateSession(Params: IdwlParams): IdwlMySQLSession;
@@ -1748,19 +1740,20 @@ begin
   ConnectionProperties.Database := Params.StrValue(Param_Db);
   ConnectionProperties.UseSSL := Params.BoolValue(Param_UseSSL, ParamDef_UseSSL);
   var ConnectionPool: TConnectionPool;
-  FInstance.FAccess.Enter;
+  FAccess.Enter;
   try
-    if not FInstance.FConnectionPools.TryGetValue(ConnectionProperties.UniqueIdentifier, ConnectionPool) then
+    if not FConnectionPools.TryGetValue(ConnectionProperties.UniqueIdentifier, ConnectionPool) then
       ConnectionPool := TConnectionPool.Create(ConnectionProperties, Params.StrValue(Param_Password), CreateDataBase, TestConnection);
   finally
-    FInstance.FAccess.Leave;
+    FAccess.Leave;
   end;
   Result := TdwlMySQLSession.Create(ConnectionPool);
 end;
 
 class destructor TdwlMySQLManager.Destroy;
 begin
-  FInstance.Free;
+  FConnectionPools.Free;
+  FAccess.Free;
 end;
 
 { TdwlConnectionPool }
@@ -1775,11 +1768,19 @@ begin
   FPassword := APassword;
 
   if TestConnection then
-    ReleaseConnection(TdwlMySQLConnection.Create(FConnectionProperties.Host, FConnectionProperties.Port, FConnectionProperties.Database, FConnectionProperties.UserName, FPassword, CreateDatabase, FConnectionProperties.UseSSL));
+  begin
+    var Conn := nil;
+    try
+      Conn := TdwlMySQLConnection.Create(FConnectionProperties.Host, FConnectionProperties.Port, FConnectionProperties.Database, FConnectionProperties.UserName, FPassword, CreateDatabase, FConnectionProperties.UseSSL);
+    finally
+      if Conn<>nil then
+       ReleaseConnection(Conn);
+    end;
+  end;
 
   // no need to do thread protection here
   // this create is only called from within a critical section in TdwlMySQLManager.CreateSession
-  TdwlMySQLManager.FInstance.FConnectionPools.Add(FConnectionProperties.UniqueIdentifier, Self);
+  TdwlMySQLManager.FConnectionPools.Add(FConnectionProperties.UniqueIdentifier, Self);
 end;
 
 destructor TConnectionPool.Destroy;
@@ -1849,13 +1850,6 @@ begin
   finally
     FAccess.Leave;
   end;
-end;
-
-destructor TdwlMySQLManager.Destroy;
-begin
-  FConnectionPools.Free;
-  FAccess.Free;
-  inherited Destroy;
 end;
 
 { TdwlMySQLSession }
