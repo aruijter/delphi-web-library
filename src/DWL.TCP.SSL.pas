@@ -19,7 +19,7 @@ type
     property Environment: TdwlSslEnvironment read FEnvironment;
     property HostName: string read FHostName;
     property opSSL_CTX: pSSL_CTX read FopSSL_CTX;
-    constructor Create(AEnvironment: TdwlSslEnvironment; const AHostName, RootCert, Cert, Key: string; const ABindingIP: string='');
+    constructor Create(AEnvironment: TdwlSslEnvironment; const AHostName, Cert, Key: string; const ABindingIP: string='');
     destructor Destroy; override;
   end;
 
@@ -33,7 +33,7 @@ type
     property MainContext: TdwlSslContext read FMainContext;
     constructor Create;
     destructor Destroy; override;
-    procedure AddContext(const HostName, RootCert, Cert, Key: string);
+    procedure AddContext(const HostName, Cert, Key: string);
     function ContextCount: cardinal;
     function GetContext(const HostName: string; const BindingIP: string=''): TdwlSslContext;
   end;
@@ -117,7 +117,7 @@ end;
 
 { TdwlSslContext }
 
-constructor TdwlSslContext.Create(AEnvironment: TdwlSslEnvironment; const AHostName, RootCert, Cert, Key: string; const ABindingIP: string='');
+constructor TdwlSslContext.Create(AEnvironment: TdwlSslEnvironment; const AHostName, Cert, Key: string; const ABindingIP: string='');
 const
   HDR_BEGIN = '-----BEGIN ';
   HDR_END = '-----END ';
@@ -155,12 +155,6 @@ begin
     end;
     CertBegin := pos(HDR_BEGIN, Cert, CertEnd+1);
   end;
-  // Load Root Cert
-  var X509Cert := TdwlOpenSSL.New_Cert_FromPEMStr(RootCert);
-  if X509Cert=nil then
-    raise Exception.Create('Error loading RootCert');
-  if SSL_CTX_add_extra_chain_cert(FopSSL_CTX, X509Cert.X509(true))=0 then
-    raise Exception.Create('Error SSL_CTX_use_certificate');
   // Load Private Key
   var PrivKey := TdwlOpenSSL.New_PrivateKey_FromPEMStr(Key);
   if SSL_CTX_use_PrivateKey(FopSSL_CTX, PrivKey.key)=0 then
@@ -175,11 +169,11 @@ end;
 
 { TdwlSSLEnvironment }
 
-procedure TdwlSslEnvironment.AddContext(const HostName, RootCert, Cert, Key: string);
+procedure TdwlSslEnvironment.AddContext(const HostName, Cert, Key: string);
 begin
   FMREW.BeginWrite;
   try
-    var NewCtx := TdwlSslContext.Create(Self, HostName, RootCert, Cert, Key);
+    var NewCtx := TdwlSslContext.Create(Self, HostName, Cert, Key);
     var DeprCtx: TdwlSslContext;
     if not FContexts.TryGetValue(HostName.ToLower, DeprCtx) then
       DeprCtx := nil;

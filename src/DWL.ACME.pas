@@ -1,5 +1,5 @@
 /// <summary>
-///   This is an ACME client with all functionality to request a certificat
+///   This is an ACME client with all functionality to request a certificate
 ///   from LetsEncrypt. It complies to RFC8555
 /// </summary>
 unit DWL.ACME;
@@ -48,7 +48,6 @@ type
     FDomain: string;
     FCallBackPortNumber: integer;
     FPrivateKey: IdwlOpenSSLKey;
-    FRootCertificate: string;
     FProfileCountryCode: string;
     FProfileCity: string;
     FProfileState: string;
@@ -67,7 +66,6 @@ type
     function SubmitOrderAndDoChallenges(var State: TACMECheckState): boolean;
     function CreateCSRandFinalizeOrder(var State: TACMECheckState): boolean;
     function RetrieveCertificate(var State: TACMECheckState): boolean;
-    function RetrieveCACertificate: boolean;
   public
     /// <summary>
     ///   The Private Key of the ACME account, must be stored and set for renewals, will be created is not set
@@ -97,11 +95,6 @@ type
     ///   defaults to 30 (The LetsEncrypt advised period)
     /// </summary>
     property RenewalDays: byte read FRenewalDays write FRenewalDays;
-    /// <summary>
-    ///   The full path/filename of the applicable root certificate. Will be generated
-    ///   automatically, but you can override it is needed
-    /// </summary>
-    property RootCertificate: string read FRootCertificate write FRootCertificate;
     /// <summary>
     ///   The full path/filename of file with the private key. Will be generated
     ///   automatically, but you can override it is needed
@@ -322,23 +315,6 @@ begin
   Result := true;
 end;
 
-function TdwlACMEClient.RetrieveCACertificate: boolean;
-var
-  Response: IdwlHTTPResponse;
-begin
-  Result := false;
-  Log('Retrieving Root certificate', lsTrace);
-  Response := New_HTTPRequest('https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem').Execute;
-  if Response.StatusCode<>HTTP_STATUS_OK then
-  begin
-    Log('Error downloading Root Certificate: '+Response.AsString, lsError);
-    Exit;
-  end;
-  RootCertificate := Response.AsString;
-  Log('Root Certificate retrieval succeeded', lsNotice);
-  Result := true;
-end;
-
 function TdwlACMEClient.RetrieveCertificate(var State: TACMECheckState): boolean;
 var
   Response: IdwlHTTPResponse;
@@ -378,8 +354,6 @@ begin
     if not CreateCSRandFinalizeOrder(State) then
       Exit;
     if not RetrieveCertificate(State) then
-      Exit;
-    if not RetrieveCACertificate then
       Exit;
     CheckCertificate; {To get status and date etc}
   finally

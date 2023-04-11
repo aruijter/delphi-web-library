@@ -96,12 +96,12 @@ end;
 class procedure TDWLServerSection.CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams; TryUpgrade: boolean=false);
 const
   SQL_GetHostNames =
-    'SELECT HostName, RootCert, Cert, PrivateKey, CountryCode, State, City, BindingIp, Id FROM dwl_hostnames';
-  GetHostNames_Idx_HostName=0; GetHostNames_Idx_RootCert=1; GetHostNames_Idx_Cert=2; GetHostNames_Idx_PrivateKey=3;
-  GetHostNames_Idx_CountyCode=4; GetHostNames_Idx_State=5; GetHostNames_Idx_City=6; GetHostNames_Idx_BindingIp=7; GetHostNames_Idx_Id=8;
+    'SELECT HostName, Cert, PrivateKey, CountryCode, State, City, BindingIp, Id FROM dwl_hostnames';
+  GetHostNames_Idx_HostName=0; GetHostNames_Idx_Cert=1; GetHostNames_Idx_PrivateKey=2;
+  GetHostNames_Idx_CountyCode=3; GetHostNames_Idx_State=4; GetHostNames_Idx_City=5; GetHostNames_Idx_BindingIp=6; GetHostNames_Idx_Id=7;
   SQL_Update_Cert =
-    'UPDATE dwl_hostnames SET RootCert=?, Cert=?, PrivateKey=? WHERE Id=?';
-  Update_Cert_Idx_RootCert=0; Update_Cert_Idx_Cert=1; Update_Cert_Idx_PrivateKey=2; Update_Cert_Idx_Id=3;
+    'UPDATE dwl_hostnames SET Cert=?, PrivateKey=? WHERE Id=?';
+  Update_Cert_Idx_Cert=0; Update_Cert_Idx_PrivateKey=1; Update_Cert_Idx_Id=2;
 begin
   var SslIoHandler: IdwlSslIoHandler;
   var HostnameSeen := false;
@@ -126,18 +126,15 @@ begin
       ACMECLient.Domain := Cmd.Reader.GetString(GetHostNames_Idx_HostName);
       ACMECLient.ChallengeIP := Cmd.Reader.GetString(GetHostNames_Idx_BindingIp, true);
       // First Check ACME Certificate
-      var RootCertificate := Cmd.Reader.GetString(GetHostNames_Idx_RootCert, true);
       var Certificate := Cmd.Reader.GetString(GetHostNames_Idx_Cert, true);
       var PrivateKey := Cmd.Reader.GetString(GetHostNames_Idx_PrivateKey, true);
       if Certificate<>'' then
       begin
-        ACMEClient.RootCertificate := RootCertificate;
         ACMEClient.Certificate := Certificate;
         ACMEClient.PrivateKey := TdwlOpenSSL.New_PrivateKey_FromPEMStr(PrivateKey);
       end
       else
       begin
-        ACMECLient.RootCertificate := '';
         ACMEClient.Certificate := '';
         ACMECLient.PrivateKey := nil;
       end;
@@ -146,7 +143,7 @@ begin
       if ACMECLient.CertificateStatus=certstatOk then
       begin
         if SslIoHandler.Environment.GetContext(ACMECLient.Domain)=nil then
-          SslIoHandler.Environment.AddContext(ACMECLient.Domain, RootCertificate, Certificate, PrivateKey);
+          SslIoHandler.Environment.AddContext(ACMECLient.Domain, Certificate, PrivateKey);
         Continue;
       end;
       // Hostname found without or with an old certificate: do a retrieve
@@ -162,18 +159,16 @@ begin
       end;
       if ACMEClient.CertificateStatus=certstatOk then
       begin // process newly retrieved certificate
-        RootCertificate := ACMECLient.RootCertificate;
         Certificate := ACMECLient.Certificate;
         PrivateKey := ACMECLient.PrivateKey.PEMString;
         var CmdUpdate := Session.CreateCommand(SQL_Update_Cert);
-        CmdUpdate.Parameters.SetTextDataBinding(Update_Cert_Idx_RootCert, RootCertificate);
         CmdUpdate.Parameters.SetTextDataBinding(Update_Cert_Idx_Cert, Certificate);
         CmdUpdate.Parameters.SetTextDataBinding(Update_Cert_Idx_PrivateKey, PrivateKey);
         CmdUpdate.Parameters.SetIntegerDataBinding(Update_Cert_Idx_Id, Cmd.Reader.GetInteger(GetHostNames_Idx_Id));
         CmdUpdate.Execute;
       end;
       if ACMEClient.CertificateStatus in [certstatAboutToExpire, certstatOk] then
-        SslIoHandler.Environment.AddContext(ACMECLient.Domain, RootCertificate, Certificate, PrivateKey);
+        SslIoHandler.Environment.AddContext(ACMECLient.Domain, Certificate, PrivateKey);
     end;
   finally
     ACMEClient.Free;
@@ -402,7 +397,7 @@ begin
   if FServer.IsSecure then
     ConfigParams.WriteValue(Param_BaseURI, 'https://'+(FServer.IoHandler as IdwlSslIoHandler).Environment.MainContext.HostName)
   else
-    ConfigParams.WriteValue(Param_BaseURI, 'https//localhost');
+    ConfigParams.WriteValue(Param_BaseURI, 'http://localhost');
   if ConfigParams.StrValue(Param_Issuer)='' then
   begin
     var Issuer :=  ConfigParams.StrValue(Param_BaseURI)+Default_EndpointURI_OAuth2;
@@ -431,7 +426,7 @@ const
     'CREATE TABLE IF NOT EXISTS dwl_parameters (Id SMALLINT NOT NULL AUTO_INCREMENT, `Key` VARCHAR(50) NOT NULL, `Value` TEXT, PRIMARY KEY(Id), UNIQUE INDEX KeyIndex (`Key`))';
   SQL_CheckTable_HostNames =
     'CREATE TABLE IF NOT EXISTS dwl_hostnames (Id SMALLINT NOT NULL AUTO_INCREMENT, HostName VARCHAR(50) NOT NULL, CountryCode CHAR(2) NOT NULL, State VARCHAR(50) NOT NULL, '+
-    'City VARCHAR(50) NOT NULL, BindingIp VARCHAR(39), RootCert TEXT, Cert TEXT, PrivateKey TEXT, PRIMARY KEY(Id), UNIQUE INDEX HostName (HostName))';
+    'City VARCHAR(50) NOT NULL, BindingIp VARCHAR(39), Cert TEXT, PrivateKey TEXT, PRIMARY KEY(Id), UNIQUE INDEX HostName (HostName))';
   SQL_CheckTable_Log_Requests =
     'CREATE TABLE IF NOT EXISTS dwl_log_requests (Id INT NOT NULL AUTO_INCREMENT, TimeStamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, Method CHAR(7) NOT NULL, StatusCode SMALLINT NOT NULL, IP_Remote CHAR(15) NOT NULL,'+
     'Uri VARCHAR(250) NOT NULL, ProcessingTime SMALLINT NOT NULL, RequestHeader TEXT NOT NULL, RequestParams TEXT NOT NULL, PRIMARY KEY (Id))';

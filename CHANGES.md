@@ -14,6 +14,9 @@ All notable (including breaking) changes to this project will be documented in t
 - Another rename action to be RFC compliant: HTTP_COMMAND_* was renamed to HTTP_METHOD_*. Also some support functions/argument names are renamed to refer to Method instead of Command.
 - Added Check if SNI matches Host from Header
 
+## April 11, 2023
+- Removed root certificate functionality, it was obsolete. Root certificates are not part of SSL cert chain.
+
 ## March 21, 2023
 -  Added commandline functionality to DisCoClient
 -  Improved DisCoClient interface. f.e. versions visible in list
