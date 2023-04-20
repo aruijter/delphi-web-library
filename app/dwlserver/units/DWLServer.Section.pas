@@ -231,6 +231,7 @@ begin
     LogItem.SeverityLevel := lsDebug;
     LogItem.Destination := logdestinationServerConsole;
     TdwlLogger.Log(LogItem);
+    {$ENDIF}
     // clear sensitive information before logging
     Request.RequestParams.Values['password'] := '';
     // log request to table
