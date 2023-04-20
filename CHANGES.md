@@ -1,6 +1,9 @@
 # Release Notes
 All notable (including breaking) changes to this project will be documented in this file.
 
+## April 20, 2023
+- Restructured the Issuer used in JSON Web tokens. It's now based on hostname, unless a global issuer is provided
+ 
 ## March 29, 2023
 - Renamed DisCoClient to DisCoAgent, client was a badly chosen name, it isn't a client at all, it's an agent to upload and view releases
 - Repaired an updating error in the package list that appeared after uploading a release

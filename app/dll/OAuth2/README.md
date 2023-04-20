@@ -52,7 +52,7 @@ The following configuration parameters need to be provided:
 |db|<value from adwl\>|The MySQL database where the information resides|
 |usertable|dwl_oauth2_users|The tablename of the usertable to be used|
 |field_md5|-|It configured, the handler will perform migration from a legacy md5 hash stored in this field. On login, when the user password is available, the salt and pwd will be updated in the database|
-|issuer|\<value from dwl\> or otherwise the mounted endpoint|The issuer uri. This uri will be used as base url for the well known configuration and will be put into the iss field of the JSON Web Tokens. Please take care that this issuer url is the same as one of the endpoints on which the handler is mounted.
+|migration_issuer||When retrieving tokens, the issuer in the JSON Web token is checked against the expected issuer. In case of migration an additional allowed issuer can be configured in this key.|
 
 ### Providers Table
 The dwl_oauth2_providers database table may be filled with one or more external OpenID Connect Providers. These provider definitions will be used to offer the user the possibility to use and external Identity Provider. The records must be populated with the following information

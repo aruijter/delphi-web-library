@@ -29,15 +29,21 @@ type
   /// </summary>
   TdwlDLLHandling = class
   strict private
-    class var FHandlingEndpoints: TObjectDictionary<string, THandlingEndpoints_Dictionary>;
+    class var
+      FHandlingEndpoints: TObjectDictionary<string, THandlingEndpoints_Dictionary>;
+      FEndpoint: string;
+      FMainHostName: string;
     class procedure ProcessOptions(const State: PdwlHTTPHandlingState; var Success: boolean; Cmds: THandlingEndpoints_Dictionary);
     class function Body_JSON(const State: PdwlHTTPHandlingState): TJSONObject;
   private
     class function StateParams_Scopes(const State: PdwlHTTPHandlingState): TStringList;
   protected
-    class var FConfigParams: IdwlParams;
-    class var FCallBackProcs: TdwlCallBackProcs;
+    class var
+      FConfigParams: IdwlParams;
+      FCallBackProcs: TdwlCallBackProcs;
     class procedure RegisterHandling(const Method: byte; const URI: string; const handleProc: TEndpoint_HandleProc; const AllowedScopes: TArray<string>; Params: IdwlParams=nil);
+    class function MainHostName: string;
+    class function Request_Issuer(const State: PdwlHTTPHandlingState): string;
     class function StateParams(const State: PdwlHTTPHandlingState): IdwlParams;
     class function ScopeOverlap(const State: PdwlHTTPHandlingState; const Scopes: TArray<string>): boolean; overload;
     class function Get_UserId(const State: PdwlHTTPHandlingState): integer;
@@ -122,7 +128,7 @@ type
 
   TdwlDLLHandling_OpenID = class(TdwlDLLHandling)
   strict private
-    class var FOIDC_Client: TdwlOIDC_Client;
+    class var FOIDC_Clients: TObjectDictionary<string, TdwlOIDC_Client>;
   public
     class function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
     class procedure Configure(const Params: string); override;
@@ -134,7 +140,7 @@ implementation
 uses
   DWL.HTTP.Consts, System.SysUtils, DWL.JOSE, DWL.Types, DWL.Params.Consts,
   System.Rtti, System.DateUtils, DWL.Logging, DWL.Logging.API,
-  DWL.Server.Utils, DWL.Server.Globals;
+  DWL.Server.Utils, DWL.Server.Globals, DWL.Server.Consts;
 
 const
   Param_Body_JSON='body_json';
@@ -190,7 +196,15 @@ begin
   FHandlingEndpoints := TObjectDictionary<string, THandlingEndpoints_Dictionary>.Create([doOwnsValues]);
   FConfigParams := New_Params;
   FConfigParams.WriteNameValueText(Params);
-  EnableLogDispatchingToAPI(FConfigParams.StrValue(Param_BaseURI)+EndpointURI_Log, FConfigParams.StrValue(Param_LogSecret));
+  FEndpoint := FConfigParams.StrValue(Param_Endpoint);
+  FMainHostName := FConfigParams.StrValue(Param_Hostnames);
+  var P := pos(',', FMainHostName);
+  if P>0 then
+    FMainHostName := Copy(FMainHostName, 1, P-1);
+  if FMainHostName='' then  {localhost test mode}
+    EnableLogDispatchingToAPI('http://localhost'+EndpointURI_Log, FConfigParams.StrValue(Param_LogSecret))
+  else
+    EnableLogDispatchingToAPI('https://'+MainHostName+EndpointURI_Log, FConfigParams.StrValue(Param_LogSecret));
 end;
 
 class procedure TdwlDLLHandling.ProcessOptions(const State: PdwlHTTPHandlingState; var Success: boolean; Cmds: THandlingEndpoints_Dictionary);
@@ -375,6 +389,12 @@ begin
   Result := StrToIntDef(StateParams(State).StrValue(Param_Subject), -1);
 end;
 
+class function TdwlDLLHandling.Request_Issuer(const State: PdwlHTTPHandlingState): string;
+begin
+  if not State.TryGetRequestParamStr(SpecialRequestParam_Context_Issuer, Result) then
+    Result := '';
+end;
+
 class function TdwlDLLHandling.Response_JSON(const State: PdwlHTTPHandlingState): TJSONObject;
 begin
   if State._InternalHandlingStructure=nil then
@@ -422,6 +442,11 @@ begin
     Pair.JSONValue := TJSONBool.Create(IsSuccess)
   else
     Response_JSON(State).AddPair('success', TJSONBool.Create(IsSuccess));
+end;
+
+class function TdwlDLLHandling.MainHostName: string;
+begin
+  Result := FMainHostName;
 end;
 
 class function TdwlDLLHandling.MySQLCommand(const State: PdwlHTTPHandlingState; const Query: string): IdwlMySQLCommand;
@@ -498,11 +523,18 @@ begin
   if AccessToken='' then
     Exit;
   try
+    var OIDC_Client: TdwlOIDC_Client;
+    var Issuer := Request_Issuer(State);
+    if not FOIDC_Clients.TryGetValue(Issuer, OIDC_Client) then
+    begin
+      OIDC_Client := TdwlOIDC_Client.Create(Issuer, '', '');
+      FOIDC_Clients.Add(Issuer, OIDC_Client);
+    end;
     var JWT := New_JWT_FromSerialization(AccessToken);
-    if not FOIDC_Client.CheckJWT(JWT).Success then
+    if not OIDC_Client.CheckJWT(JWT).Success then
       Exit;
     if not  (JWT.Payload.IntValues[jwtclaimEXPIRATION_TIME]>TUnixEpoch.Now) and
-      SameText(JWT.Payload.Values[jwtclaimISSUER], FOIDC_Client.Issuer_Uri) then
+      SameText(JWT.Payload.Values[jwtclaimISSUER], Issuer) then
       Exit;
     // all ok store authentication information
     var JWTScopes := JWT.Payload.Values[jwt_key_SCOPE].Split([' ']);
@@ -521,21 +553,14 @@ end;
 class procedure TdwlDLLHandling_OpenID.Configure(const Params: string);
 begin
   inherited Configure(Params);
-  // get the Issuer,
-  var Issuer := FConfigParams.StrValue(Param_Issuer);
-  if Issuer='' then
-  begin
-    Issuer :=  FConfigParams.StrValue(Param_BaseURI)+Default_EndpointURI_OAuth2;
-    TdwlLogger.Log('No issuer configured, default applied: '+Issuer, lsNotice);
-  end;
-  // we only need this client for JWT checking purposes
-  FOIDC_Client := TdwlOIDC_Client.Create(Issuer, '', '');
+  // OIDC_Clients are needed for JWT checking purposes
+  FOIDC_Clients := TObjectDictionary<string, TdwlOIDC_Client>.Create([doOwnsValues]);
 end;
 
 class procedure TdwlDLLHandling_OpenID.WrapUp(const State: PdwlHTTPHandlingState);
 begin
   if State=nil then
-    FOIDC_Client.Free;
+    FOIDC_Clients.Free;
   inherited WrapUp(State);
 end;
 

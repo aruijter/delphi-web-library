@@ -101,8 +101,6 @@ begin
       SetLength(AnsiHostName, Len);
       Move(OutData[5], AnsiHostName[1], Len);
       var HostName := string(AnsiHostName);
-      // Set Context Hostname of Socket
-      SocketVars.SendBuf.Socket.Context_HostName := HostName;
       // eventually switch context
       var NewContext := SocketVars.Context.Environment.GetContext(HostName);
       if (NewContext<>nil) and (NewContext<>SocketVars.Context) then
@@ -110,6 +108,7 @@ begin
         // switch context
         SSL_set_SSL_CTX(opSSL, NewContext.opSSL_CTX);
         SocketVars.Context := NewContext;
+        SocketVars.SendBuf.Socket.Context_HostName := HostName;
       end;
     end;
   end;
@@ -294,6 +293,7 @@ end;
 procedure TdwlSslIoHandler.SocketAfterConstruction(Socket: TdwlSocket);
 begin
   PsslSocketVars(Socket.SocketVars).Context := FEnvironment.MainContext;
+  Socket.Context_HostName := FEnvironment.MainContext.HostName;
   PsslSocketVars(Socket.SocketVars).opSSL := SSL_new(PsslSocketVars(Socket.SocketVars).Context.opSSL_CTX);
   if PsslSocketVars(Socket.SocketVars).opSSL=nil then
     raise Exception.Create('Error creating OpenSSL Object');

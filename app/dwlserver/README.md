@@ -105,6 +105,7 @@ The extensive list of applicable configuration keys:
 |acmeport|80|If needed in the case of port redirection, you can change the port on which the ACME client responds to HTTP challenge requests.|
 |loglevel|4|The loglevel of the http requests; 3:failed, 4:warning, 6:all, 9:everything|
 |logsecret||The secret that needs to be provided when calling the log handler (If left empty it will be auto generated in the first run)|
+|issuer|https://\<hostname\>/oauth2|The global issuer used in JSON Web tokens (Refresh-, Access- and OpenID tokens). If not configured, a hostname specific default is used.|
 
 ## Configuration Table dwl_handlers
 The table dwl_handlers has a record for each DLL that will be dynamically loaded. The fields must contain the following information:
@@ -113,6 +114,8 @@ The table dwl_handlers has a record for each DLL that will be dynamically loaded
 |endpoint|The endpoint on which the handler will be registered. All calls that start with this url will be routed through this handler|
 |handler_uri|The uri from which the DLL executable will be loaded. At this moment only uri's starting with file://localhost/ are supported. The uri that follows hereafter is the subpath to the DLL to load. The local path that is configured will point internally the actual DLL locations|
 |params|A memofield with one key-value pair per line (separated by =) containing the configuration information for this handler. The configuration requirements of the handler are documented in the handler description. A special parameter evaluated on initialization is *enabled*. If set to false the handler will not be loaded. Another global parameter is *alloworigin* to define comma separated allowable origins (*=all)|
+
+Please be aware that the often configured OAuth2 handler must be mounted at endpoint /oauth2. If you deviate from this, you also must configure a global issuer.
 
 ## Configuration Table dwl_hostnames
 The table dwl_hostnames has a record for each hostname that the server will work with.  The fields of this record must contain the following information:

@@ -42,15 +42,6 @@ const
 
   TRANSFER_ENCODING_CHUNCKED = 'chuncked';
 
-  Param_BaseURI= 'baseuri';
-  Param_Endpoint= 'endpoint';
-  Param_Issuer = 'issuer';
-  Param_LogSecret = 'logsecret';
-
-  EndpointURI_Log = '/log';
-  EndpointURI_Mail = '/mail';
-  Default_EndpointURI_OAuth2 = '/oauth2';
-
   // HTTP Method consts
   dwlhttpUNKNOWN = 0;
   dwlhttpHEAD = 1;

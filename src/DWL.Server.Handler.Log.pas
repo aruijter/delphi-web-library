@@ -250,7 +250,7 @@ begin
     Exit;
   if not State.TryGetRequestParamStr('msg', Msg) then
     Exit;
-  if not State.TryGetRequestParamStr('remoteip', IpAddress) then
+  if not State.TryGetRequestParamStr(SpecialRequestParam_RemoteIP, IpAddress) then
     IpAddress := '';
   var LevelStr: string;
   if not (State.TryGetRequestParamStr('level', LevelStr) and integer.TryParse(LevelStr, Level)) then

@@ -15,6 +15,17 @@ const
   Param_Binding_Port = 'binding_port';
   Param_DLLBasePath = 'dllbasepath';
   Param_TestMode = 'testmode';
+  Param_Hostnames = 'hostnames';
+  Param_Issuer = 'issuer';
+  Param_Endpoint= 'endpoint';
+  Param_LogSecret = 'logsecret';
+
+  EndpointURI_Log = '/log';
+  EndpointURI_Mail = '/mail';
+  EndpointURI_OAuth2 = '/oauth2';
+
+  SpecialRequestParam_RemoteIP = 'remoteip';
+  SpecialRequestParam_Context_Issuer = 'context_issuer';
 
   logdestinationServerConsole='serverconsole';
 

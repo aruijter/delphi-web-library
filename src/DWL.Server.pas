@@ -17,7 +17,6 @@ type
   ///   you own handler to process requests
   /// </summary>
   TdwlHTTPHandler = class
-    FServer: TDWLServer;
   protected
     /// <summary>
     ///   If the variable FWrapupProc is assigned, it will be called everytime a request has finished
@@ -26,6 +25,7 @@ type
     ///   to indicate that globals resources can be freed
     /// </summary>
     FWrapupProc: TdwlWrapupProc;
+    FServer: TDWLServer;
     function LogDescription: string; virtual;
   public
     FURI: string;
@@ -52,12 +52,14 @@ type
     FExecutionTask: ITask;
     FRootHandlerAccess: TMultiReadExclusiveWriteSynchronizer;
     FRootHandler: TdwlHTTPHandler;
+    FGlobalIssuer: string;
   private
     function GetIsRunning: boolean;
   protected
     function HandleRequest(Request: TdwlHTTPSocket): boolean; override;
     procedure InternalDeActivate; override;
   public
+    property GlobalIssuer: string read FGlobalIssuer write FGlobalIssuer;
     property IsRunning: boolean read GetIsRunning;
     property OnlyLocalConnections: boolean read FOnlyLocalConnections write FOnlyLocalConnections;
     constructor Create;
@@ -363,11 +365,9 @@ begin
     State.URI := PWideChar(PServerStructure(State._InternalServerStructure).State_URI);
     // Do a security check
     // Before passing request to the found handler
+    PServerStructure(State._InternalServerStructure).FinalHandler := Handler;
     if Handler.Authorize(State) then
-    begin
-      PServerStructure(State._InternalServerStructure).FinalHandler := Handler;
       Result := Handler.ProcessRequest(State)
-    end
     else
     begin
       // We issue a not found (instead of a denied), because this doesn't reveal unneeded information
@@ -504,9 +504,25 @@ begin
   end;
   if not ValueFound then
   begin
-    ValueFound := SameText(Key, 'remoteip');
+    ValueFound := SameText(Key, SpecialRequestParam_RemoteIP);
     if ValueFound then
       FoundStr := PServerStructure(State._InternalServerStructure).Request.IP_Remote;
+  end;
+  if not ValueFound then
+  begin
+    ValueFound := SameText(Key, SpecialRequestParam_Context_Issuer);
+    if ValueFound then
+    begin
+      FoundStr := PServerStructure(State._InternalServerStructure).FinalHandler.FServer.GlobalIssuer;
+      if FoundStr='' then
+      begin
+        var HostName := PServerStructure(State._InternalServerStructure).Request.Context_HostName;
+        if HostName='' then // This is a non-ssl localhost connection, for SSl a Context_HosName is altijd non-empty
+          FoundStr := 'http://localhost'+EndpointURI_OAuth2
+        else
+          FoundStr := 'https://'+HostName+EndpointURI_OAuth2
+      end;
+    end;
   end;
   if ValueFound then
   begin

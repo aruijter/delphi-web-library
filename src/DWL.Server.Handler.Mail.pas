@@ -25,7 +25,7 @@ implementation
 
 uses
   DWL.HTTP.Consts, DWL.Server.Globals, DWL.Server.Utils,
-  System.SysUtils, DWL.Classes, IdMessage, DWL.Mail.Queue;
+  System.SysUtils, DWL.Classes, IdMessage, DWL.Mail.Queue, DWL.Server.Consts;
 
 
 { TdwlHTTPHandler_Mail }

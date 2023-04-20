@@ -27,7 +27,6 @@ type
     procedure Start_ReadParameters_CommandLine_IniFile(ConfigParams: IdwlParams);
     procedure Start_ReadParameters_MySQL(Session: IdwlMySQLSession; ConfigParams: IdwlParams);
     procedure Start_ProcessBindings(ConfigParams: IdwlParams);
-    procedure Start_DetermineServerParams(ConfigParams: IdwlParams);
     procedure Start_LoadDLLHandlers(ConfigParams: IdwlParams);
     procedure Start_Enable_Logging(ConfigParams: IdwlParams);
     procedure Start_LoadURIAliases(ConfigParams: IdwlParams);
@@ -104,7 +103,7 @@ const
   Update_Cert_Idx_Cert=0; Update_Cert_Idx_PrivateKey=1; Update_Cert_Idx_Id=2;
 begin
   var SslIoHandler: IdwlSslIoHandler;
-  var HostnameSeen := false;
+  var HostNames := '';
   if not Supports(Server.IOHandler, IdwlSslIoHandler, SslIoHandler)  then
     SslIoHandler := nil;
   var ACMECLient := TdwlACMEClient.Create;
@@ -117,13 +116,16 @@ begin
     Cmd.Execute;
     while Cmd.Reader.Read do
     begin
-      HostnameSeen := true;
+      var HostName := Cmd.Reader.GetString(GetHostNames_Idx_HostName);
+      if HostNames<>'' then
+        Hostnames := HostNames+',';
+      HostNames := Hostnames+HostName;
       if SslIoHandler=nil then // we need one!
       begin
         Server.IOHandler := TdwlSslIoHandler.Create;
         SslIoHandler := Server.IOHandler as IdwlSslIoHandler;
       end;
-      ACMECLient.Domain := Cmd.Reader.GetString(GetHostNames_Idx_HostName);
+      ACMECLient.Domain := HostName;
       ACMECLient.ChallengeIP := Cmd.Reader.GetString(GetHostNames_Idx_BindingIp, true);
       // First Check ACME Certificate
       var Certificate := Cmd.Reader.GetString(GetHostNames_Idx_Cert, true);
@@ -173,11 +175,13 @@ begin
   finally
     ACMEClient.Free;
   end;
-  if TryUpgrade and (not HostnameSeen) then
+  if HostNames='' then
   begin
-    if TryHostNameMigration(ConfigParams) then
+    if TryUpgrade and TryHostNameMigration(ConfigParams) then
       CheckACMEConfiguration(Server, ConfigParams);
-  end;
+  end
+  else
+    ConfigParams.WriteValue(Param_Hostnames, HostNames);
 end;
 
 procedure TDWLServerSection.DoLog(LogItem: PdwlLogItem);
@@ -227,7 +231,6 @@ begin
     LogItem.SeverityLevel := lsDebug;
     LogItem.Destination := logdestinationServerConsole;
     TdwlLogger.Log(LogItem);
-    {$ENDIF}
     // clear sensitive information before logging
     Request.RequestParams.Values['password'] := '';
     // log request to table
@@ -236,7 +239,12 @@ begin
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_StatusCode, Request.StatusCode);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_IP_Remote, Request.Ip_Remote);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, Request.Uri);
+    // When debugging Ticks can be very high, resulting in out-of-bounds mysql error, just post 1 if debugging
+    {$IFDEF DEBUG}
+    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, 1);
+    {$ELSE}
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Ticks);
+    {$ENDIF}
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Header, Request.RequestHeaders.GetAsNameValueText);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Params, Request.RequestParams.Text);
     Cmd.Execute;
@@ -348,6 +356,7 @@ begin
       Start_ReadParameters_CommandLine_IniFile(ConfigParams);
       var Session := Start_InitDataBase(ConfigParams);
       Start_ReadParameters_MySQL(Session, ConfigParams);
+      FServer.GlobalIssuer := ConfigParams.StrValue(Param_Issuer);
       FRequestLoggingParams := New_Params;
       ConfigParams.AssignTo(FRequestLoggingParams);
       TdwlMailQueue.Configure(ConfigParams, true);
@@ -368,7 +377,6 @@ begin
       end
       else
         FServer.OnlyLocalConnections := false;
-      Start_DetermineServerParams(ConfigParams);
       // Time to start the server
       FServer.Active := true;
       TdwlLogger.Log('Enabled Server listening', lsTrace, TOPIC_BOOTSTRAP);
@@ -388,22 +396,6 @@ begin
     end;
     FServerStarting := false;
   end);
-end;
-
-procedure TDWLServerSection.Start_DetermineServerParams(ConfigParams: IdwlParams);
-begin
-  // The base uri is ALWAYS the standard port!!
-  // ports of bindings are not taken into account
-  if FServer.IsSecure then
-    ConfigParams.WriteValue(Param_BaseURI, 'https://'+(FServer.IoHandler as IdwlSslIoHandler).Environment.MainContext.HostName)
-  else
-    ConfigParams.WriteValue(Param_BaseURI, 'http://localhost');
-  if ConfigParams.StrValue(Param_Issuer)='' then
-  begin
-    var Issuer :=  ConfigParams.StrValue(Param_BaseURI)+Default_EndpointURI_OAuth2;
-    ConfigParams.WriteValue(Param_Issuer, Issuer);
-    TdwlLogger.Log('No issuer configured, default applied: '+Issuer, lsNotice, TOPIC_BOOTSTRAP);
-  end;
 end;
 
 procedure TDWLServerSection.Start_Enable_Logging(ConfigParams: IdwlParams);
