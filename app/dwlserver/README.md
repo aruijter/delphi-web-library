@@ -126,7 +126,6 @@ The table dwl_hostnames has a record for each hostname that the server will work
 |State|The state that will be used when requesting the certificate.|
 |City|The city that will be used when requesting the certificate.
 |BindingIP|If NULL all bindings will be accessible throught this hostname, Otherwise access is limited to to specific given IP.|
-|RootCert|Leave empty when configuring. The system will put the Root Certificate in this field.|
 |Cert|Leave empty when configuring. The system will put the Certificate in this field.|
 |PrivateKey|Leave empty when configuring. The system will put the Private Key of the Certificate in this field.|
 
@@ -148,6 +147,7 @@ There is also a configuration table dwl_log_triggers. In this table triggers can
 |Topic|The topic from which the messages are requested, this a RegEx expression, set to NULL (not empty string) to receive messages from all topics|
 |Parameters|Parameters that define the addressing of the push message. At this moment only E=Mail destinations can be configured.
 |SuppressDuplicateSeconds|If non NULL it will suppress triggers for recurring identical messages for X seconds.
+|SuppressEvaluateContent|If non NULL / nonzero the content will also be evaluated to conclude if it is a duplicate.
 
 ### dwl log trigger parameters
 |Key|Description|

@@ -28,6 +28,7 @@ type
     FTopic: TRegEx;
     FParameters: string;
     FSuppressDuplicateMSecs: cardinal;
+    FSuppressEvaluateContent: boolean;
     // suppresshash is a list of hashes and the tick when the hashed value should not longer be suppressed
     FSuppressHashes: TDictionary<integer, UInt64>;
     // cleanup is done every TRIGGER_CLEANUP_COUNT trigger events
@@ -41,7 +42,8 @@ type
     property Topic: TRegEx read FTopic write FTopic;
     property Parameters: string read FParameters write FParameters;
     property SuppressDuplicateMSecs: cardinal read FSuppressDuplicateMSecs write SetSuppressDuplicateMSecs;
-    function IsSuppressed(Level: Byte; const Source, Channel, Topic, Msg: string): boolean;
+    property SuppressEvaluateContent: boolean read FSuppressEvaluateContent write FSuppressEvaluateContent;
+    function IsSuppressed(Level: Byte; const Source, Channel, Topic, Msg: string; Content: TBytes): boolean;
   public
     constructor Create(AId: integer);
     destructor Destroy; override;
@@ -149,6 +151,7 @@ const
     '`Topic` VARCHAR(50), '+
     '`Parameters` TEXT, '+
     '`SuppressDuplicateSeconds` INT, '+
+    '`SuppressEvaluateContent` TINYINT, '+
     'PRIMARY KEY (`ID`))';
 begin
   FMySQL_Profile.WriteValue(Param_CreateDatabase, true);
@@ -164,7 +167,10 @@ end;
 procedure TdwlHTTPHandler_Log.CheckTriggers(TrigList: TList<TLogTrigger>);
 const
   SQL_Get_Triggers=
-    'SELECT Id, Level_From, Level_to, Channel, Topic, Parameters, SuppressDuplicateSeconds FROM dwl_log_triggers';
+    'SELECT Id, Level_From, Level_to, Channel, Topic, Parameters, SuppressDuplicateSeconds, SuppressEvaluateContent FROM dwl_log_triggers';
+  GetTriggers_Idx_Id=0; GetTriggers_Idx_Level_From=1; GetTriggers_Idx_Level_to=2;
+  GetTriggers_Idx_Channel=3; GetTriggers_Idx_Topic=4; GetTriggers_Idx_Parameters=5;
+  GetTriggers_Idx_SuppressDuplicateSeconds=6; GetTriggers_Idx_SuppressEvaluateContent=7;
 begin
   try
     var Tick := GetTickCount64;
@@ -181,7 +187,7 @@ begin
       Cmd.Execute;
       while Cmd.Reader.Read do
       begin
-        var TriggerId := Cmd.Reader.GetInteger(0);
+        var TriggerId := Cmd.Reader.GetInteger(GetTriggers_Idx_Id);
         var Trigger: TLogTrigger;
         if not PreviousTriggers.TryGetValue(TriggerId, Trigger) then
           Trigger := TLogTrigger.Create(TriggerId)
@@ -190,24 +196,25 @@ begin
         // never have triggers for levels below lsNotice
         // said in another way: triggering only acts on the items put in the dwl_log_messages table
         // (ignore the items from dwl_log_debug)
-        Trigger.MinLevel := Max(integer(lsNotice), Cmd.Reader.GetInteger(1, true));
-        Trigger.MaxLevel := Cmd.Reader.GetInteger(2, true, integer(lsFatal));
-        var RegExStr := Cmd.Reader.GetString(3, true, '.*');
+        Trigger.MinLevel := Max(integer(lsNotice), Cmd.Reader.GetInteger(GetTriggers_Idx_Level_From, true));
+        Trigger.MaxLevel := Cmd.Reader.GetInteger(GetTriggers_Idx_Level_to, true, integer(lsFatal));
+        var RegExStr := Cmd.Reader.GetString(GetTriggers_Idx_Channel, true, '.*');
         try
           Trigger.Channel := TRegEx.Create(RegExStr, [roCompiled, roSingleLine]);
         except
           TdwlLogger.Log('Invalid regex for Channel (TriggerID='+TriggerID.ToString+'): '+RegExStr);
           Trigger.Channel := TRegEx.Create('.*', [roCompiled, roSingleLine]);
         end;
-        RegExStr := Cmd.Reader.GetString(4, true, '.*');
+        RegExStr := Cmd.Reader.GetString(GetTriggers_Idx_Topic, true, '.*');
         try
           Trigger.Topic := TRegEx.Create(RegExStr, [roCompiled, roSingleLine]);
         except
           TdwlLogger.Log('Invalid regex for Topic (TriggerID='+TriggerID.ToString+'): '+RegExStr);
           Trigger.Topic := TRegEx.Create('.*', [roCompiled, roSingleLine]);
         end;
-        Trigger.Parameters := Cmd.Reader.GetString(5, true);
-        Trigger.SuppressDuplicateMSecs := Max(0, Cmd.Reader.GetInteger(6, true))*1000;
+        Trigger.Parameters := Cmd.Reader.GetString(GetTriggers_Idx_Parameters, true);
+        Trigger.SuppressDuplicateMSecs := Max(0, Cmd.Reader.GetInteger(GetTriggers_Idx_SuppressDuplicateSeconds, true))*1000;
+        Trigger.SuppressEvaluateContent := Cmd.Reader.GetInteger(GetTriggers_Idx_SuppressEvaluateContent, true)<>0;
         TrigList.Add(Trigger);
       end;
       // dispose no longer used triggers
@@ -305,7 +312,7 @@ begin
       begin
         if Trig.Channel.IsMatch(Channel) and Trig.Topic.IsMatch(Topic) and
           (Level>=Trig.MinLevel) and (Level<=Trig.MaxLevel) and
-          (not Trig.IsSuppressed(Level, Source, Channel, Topic, Msg)) then
+          (not Trig.IsSuppressed(Level, Source, Channel, Topic, Msg, Content)) then
         begin
           var Parms := TStringList.Create;
           try
@@ -425,7 +432,7 @@ begin
   inherited Destroy;
 end;
 
-function TLogTrigger.IsSuppressed(Level: Byte; const Source, Channel, Topic, Msg: string): boolean;
+function TLogTrigger.IsSuppressed(Level: Byte; const Source, Channel, Topic, Msg: string; Content: TBytes): boolean;
 begin
   if FSuppressHashes=nil then
     Exit(false);
@@ -453,6 +460,8 @@ begin
   Hash.Update(Source);
   Hash.Update(Channel);
   Hash.Update(Topic);
+  if SuppressEvaluateContent then
+    Hash.Update(Content);
   // is hash present in
   var SuppressUntilLogTick: UInt64;
   Result := FSuppressHashes.TryGetValue(Hash.HashAsInteger, SuppressUntilLogTick);
