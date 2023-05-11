@@ -20,7 +20,6 @@ type
     FServerStarting: boolean;
     FRequestLoggingParams: IdwlParams;
     class procedure InsertOrUpdateDbParameter(Session: IdwlMySQLSession; const Key, Value: string);
-    class function TryHostNameMigration(ConfigParams: IdwlParams): boolean; // 20230403: can be removed next year or so
     procedure DoLog(LogItem: PdwlLogItem);
     procedure LogRequest(Request: TdwlHTTPSocket);
     function Start_InitDataBase(ConfigParams: IdwlParams): IdwlMySQLSession;
@@ -32,7 +31,7 @@ type
     procedure Start_LoadURIAliases(ConfigParams: IdwlParams);
   private
     FServer: TDWLServer;
-    class procedure CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams; TryUpgrade: boolean=false);
+    class procedure CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams);
   public
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
@@ -92,7 +91,7 @@ begin
   inherited BeforeDestruction;
 end;
 
-class procedure TDWLServerSection.CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams; TryUpgrade: boolean=false);
+class procedure TDWLServerSection.CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams);
 const
   SQL_GetHostNames =
     'SELECT HostName, Cert, PrivateKey, CountryCode, State, City, BindingIp, Id FROM dwl_hostnames';
@@ -175,13 +174,7 @@ begin
   finally
     ACMEClient.Free;
   end;
-  if HostNames='' then
-  begin
-    if TryUpgrade and TryHostNameMigration(ConfigParams) then
-      CheckACMEConfiguration(Server, ConfigParams);
-  end
-  else
-    ConfigParams.WriteValue(Param_Hostnames, HostNames);
+  ConfigParams.WriteValue(Param_Hostnames, HostNames);
 end;
 
 procedure TDWLServerSection.DoLog(LogItem: PdwlLogItem);
@@ -364,7 +357,7 @@ begin
       Start_Enable_Logging(ConfigParams);
       TdwlLogger.Log('DWL Server starting', lsTrace, TOPIC_BOOTSTRAP);
       DWL.Server.AssignServerProcs;
-      CheckACMEConfiguration(FServer, ConfigParams, true);
+      CheckACMEConfiguration(FServer, ConfigParams);
       Start_ProcessBindings(ConfigParams);
       Start_LoadURIAliases(ConfigParams);
 
@@ -493,30 +486,6 @@ begin
   TdwlLogger.Log('Stopped DWL Server', lsNotice, TOPIC_WRAPUP);
   TdwlLogger.FinalizeDispatching;
   FServerStarted := false;
-end;
-
-class function TDWLServerSection.TryHostNameMigration(ConfigParams: IdwlParams): boolean;
-const
-  SQL_CreateHostNameRecord = 'INSERT INTO dwl_hostnames (HostName, CountryCode, State, City) VALUES (?,?,?,?)';
-  CreateHostNameRecord_Idx_HostName=0; CreateHostNameRecord_Idx_CountryCode=1; CreateHostNameRecord_Idx_State=2; CreateHostNameRecord_Idx_City=3;
-begin
-  // try migration from params based hostname to table dwl_hostnames
-  var HostName := ConfigParams.StrValue(Param_ACMEDomain);
-  Result := HostName<>'';
-  if not Result then
-    Exit;
-  var CountryCode := ConfigParams.StrValue(Param_ACMECountry);
-  var State := ConfigParams.StrValue(Param_ACMEState);
-  var City := ConfigParams.StrValue(Param_ACMECity);
-  if (CountryCode='') or (State='') or (City='') then
-    Exit;
-  var Cmd := New_MySQLSession(ConfigParams).CreateCommand(SQL_CreateHostNameRecord);
-  Cmd.Parameters.SetTextDataBinding(CreateHostNameRecord_Idx_HostName, HostName);
-  Cmd.Parameters.SetTextDataBinding(CreateHostNameRecord_Idx_CountryCode, CountryCode);
-  Cmd.Parameters.SetTextDataBinding(CreateHostNameRecord_Idx_State, State);
-  Cmd.Parameters.SetTextDataBinding(CreateHostNameRecord_Idx_City, City);
-  Cmd.Execute;
-  TdwlLogger.Log('Migrated hostname '+HostName+' into dwl_hostnames', lsNotice, TOPIC_WRAPUP);
 end;
 
 { TACMECheckThread }
