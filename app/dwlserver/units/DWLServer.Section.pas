@@ -233,7 +233,6 @@ begin
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_StatusCode, Request.StatusCode);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_IP_Remote, Request.Ip_Remote);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, Request.Uri);
-    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, 1);
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Min(High(smallint), Ticks));
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Header, Request.RequestHeaders.GetAsNameValueText);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Params, Request.RequestParams.Text);
