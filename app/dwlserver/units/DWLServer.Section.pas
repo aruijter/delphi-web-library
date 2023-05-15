@@ -233,12 +233,8 @@ begin
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_StatusCode, Request.StatusCode);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_IP_Remote, Request.Ip_Remote);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, Request.Uri);
-    // When debugging Ticks can be very high, resulting in out-of-bounds mysql error, just post 1 if debugging
-    {$IFDEF DEBUG}
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, 1);
-    {$ELSE}
-    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Ticks);
-    {$ENDIF}
+    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Min(High(smallint), Ticks));
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Header, Request.RequestHeaders.GetAsNameValueText);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Params, Request.RequestParams.Text);
     Cmd.Execute;
