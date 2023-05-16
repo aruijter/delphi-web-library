@@ -371,6 +371,7 @@ end;
 class function TdwlLogger.PrepareLogitem: PdwlLogItem;
 begin
   Result := TLogEngine.CreateLogItem;
+  Result.SeverityLevel := lsNotice;
 end;
 
 class procedure TdwlLogger.SetDefaultOrigins(const Source, Channel, Topic: string);

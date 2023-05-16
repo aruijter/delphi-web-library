@@ -53,7 +53,6 @@ type
     FProfileState: string;
     FRenewalDays: byte;
     FAPIEndpoint: string;
-    FDirectory: string;
     FHTTPRequestSeen: boolean;
     FDaysLeft: integer;
     FChallengeIP: string;
@@ -85,11 +84,6 @@ type
     ///   automatically, but you can provide it if needed
     /// </summary>
     property Certificate: string read FCertificate write FCertificate;
-    /// <summary>
-    ///   The directory where the results and the account information will be
-    ///   saved. Defaults to &lt;appdir&gt;/Cert_ACME
-    /// </summary>
-    property Directory: string read FDirectory write FDirectory;
     /// <summary>
     ///   The minimum remaining days when te certificate will be renewed,
     ///   defaults to 30 (The LetsEncrypt advised period)
@@ -220,7 +214,6 @@ begin
   FRenewalDays := 30; //Let's encrypt recommendation
   FAPIEndpoint := DefaultAPIEndpoint;
   FCallBackPortNumber := PORT_HTTP;
-  FDirectory := ExtractFilePath(ParamStr(0))+'Cert_ACME';
 end;
 
 function TdwlACMEClient.DoRequest(var State: TACMECheckState; const URL: string; Method: string=HTTP_METHOD_GET; const Payload: string=''): IdwlHTTPResponse;
@@ -342,7 +335,6 @@ begin
       Exit;
     var State: TACMECheckState;
     FillChar(State, SizeOf(State), 0);
-    ForceDirectories(Directory);
     if not PrepareKey(State) then
       Exit;
     if not InitializeACMEDirectory(State) then

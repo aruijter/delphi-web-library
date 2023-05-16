@@ -3,7 +3,7 @@ All notable (including breaking) changes to this project will be documented in t
 
 ## May 3, 2023
 - Added the SuppressEvaluateContent column to table dwl_log_triggers. It is now able to use content in equality comparison. Migration: manually add new column to database table.
-- 
+
 ## April 20, 2023
 - Restructured the Issuer used in JSON Web tokens. It's now based on hostname, unless a global issuer is provided
  
@@ -33,7 +33,7 @@ All notable (including breaking) changes to this project will be documented in t
   
 ## March 9, 2023
 - Added HTTP field support to DWLServer. Small breaking change is that the consts HTTP_HEADER_* are renamed to HTTP_FIELD_* to be RFC compliant
-- ACME implementation now also uses DWL HTTP server for callback implementation and not longer depends on Indy.
+- ACME implementation now also uses DWL HTTP server for callback implementation and no longer depends on Indy.
 
 ## March 7, 2023
 - Renamed namespace DWL.HTTP.Server.* to DWL.Server.*. as DWLServer is becoming a big thing in itself. Sorry this is a breaking change, good luck with changing your uses, but in this stage I thought that sanilty is more important than this little inconvenience.

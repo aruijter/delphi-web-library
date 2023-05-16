@@ -3,7 +3,7 @@ unit DWL.Mail.Utils;
 interface
 
 uses
-  IdMessage, DWL.Classes;
+  IdMessage, System.SysUtils, DWL.Classes;
 
 type
   TdwlMailCheckOption=(mcEmptyStringIsValid, mcDoNotTrimSpaces, mcEvaluateCommaSeparatedList);
@@ -12,15 +12,27 @@ type
   TdwlMailUtils = record
     class function IsValidEmailAddress(const Value: string; Options: TdwlMailCheckOptions=[]): boolean; static;
     class function SendMailToAPI(const Endpoint, LogSecret: string; Msg: TIdMessage): TdwlResult; static;
+    class function IdMessageToBytes(Msg: TIdMessage): TBytes; static;
   end;
 
 implementation
 
 uses
   System.RegularExpressions, System.Classes, DWL.HTTP.Client, DWL.HTTP.Consts,
-  System.NetEncoding, System.SysUtils, Winapi.WinInet;
+  System.NetEncoding, Winapi.WinInet;
 
 { TdwlMailUtils }
+
+class function TdwlMailUtils.IdMessageToBytes(Msg: TIdMessage): TBytes;
+begin
+  var Stream := TBytesStream.Create;
+  try
+    Msg.SaveToStream(Stream);
+    Result := Stream.Bytes;
+  finally
+    Stream.Free;
+  end;
+end;
 
 class function TdwlMailUtils.IsValidEmailAddress(const Value: string; Options: TdwlMailCheckOptions=[]): boolean;
 const
