@@ -116,8 +116,8 @@ const
   SQL_CheckTable = 'CREATE TABLE IF NOT EXISTS dwl_mailqueue (' +
     'Id INT UNSIGNED NOT NULL AUTO_INCREMENT, ' +
     'MomentInQueue DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, ' +
-    'Status TINYINT NOT NULL DEFAULT ''0'', ' +
-    'Attempts TINYINT NULL DEFAULT ''0'', ' +
+    'Status TINYINT UNSIGNED NOT NULL DEFAULT ''0'', ' +
+    'Attempts TINYINT UNSIGNED NULL DEFAULT ''0'', ' +
     'DelayedUntil DATETIME NULL DEFAULT NULL, ' +
     'MomentSent DATETIME NULL DEFAULT NULL, ' +
     'ProcessingLog TEXT NULL, ' +

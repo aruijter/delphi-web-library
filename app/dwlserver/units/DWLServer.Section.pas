@@ -233,7 +233,7 @@ begin
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_StatusCode, Request.StatusCode);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_IP_Remote, Request.Ip_Remote);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, Request.Uri);
-    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Min(High(smallint), Ticks));
+    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Min(High(word), Ticks));
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Header, Request.RequestHeaders.GetAsNameValueText);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Params, Request.RequestParams.Text);
     Cmd.Execute;
@@ -400,17 +400,17 @@ end;
 function TDWLServerSection.Start_InitDataBase(ConfigParams: IdwlParams): IdwlMySQLSession;
 const
   SQL_CheckTable_Handlers =
-    'CREATE TABLE IF NOT EXISTS dwl_handlers (id INT AUTO_INCREMENT, open_order SMALLINT, endpoint VARCHAR(50), handler_uri VARCHAR(255), `params` TEXT NULL, INDEX `primaryindex` (`id`))';
+    'CREATE TABLE IF NOT EXISTS dwl_handlers (id INT UNSIGNED AUTO_INCREMENT, open_order SMALLINT, endpoint VARCHAR(50), handler_uri VARCHAR(255), `params` TEXT NULL, INDEX `primaryindex` (`id`))';
   SQL_CheckTable_UriAliases =
-    'CREATE TABLE IF NOT EXISTS dwl_urialiases (id INT AUTO_INCREMENT, alias VARCHAR(255), uri VARCHAR(255), PRIMARY KEY (id))';
+    'CREATE TABLE IF NOT EXISTS dwl_urialiases (id INT UNSIGNED AUTO_INCREMENT, alias VARCHAR(255), uri VARCHAR(255), PRIMARY KEY (id))';
   SQL_CheckTable_Parameters =
-    'CREATE TABLE IF NOT EXISTS dwl_parameters (Id SMALLINT NOT NULL AUTO_INCREMENT, `Key` VARCHAR(50) NOT NULL, `Value` TEXT, PRIMARY KEY(Id), UNIQUE INDEX KeyIndex (`Key`))';
+    'CREATE TABLE IF NOT EXISTS dwl_parameters (Id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT, `Key` VARCHAR(50) NOT NULL, `Value` TEXT, PRIMARY KEY(Id), UNIQUE INDEX KeyIndex (`Key`))';
   SQL_CheckTable_HostNames =
-    'CREATE TABLE IF NOT EXISTS dwl_hostnames (Id SMALLINT NOT NULL AUTO_INCREMENT, HostName VARCHAR(50) NOT NULL, CountryCode CHAR(2) NOT NULL, State VARCHAR(50) NOT NULL, '+
+    'CREATE TABLE IF NOT EXISTS dwl_hostnames (Id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT, HostName VARCHAR(50) NOT NULL, CountryCode CHAR(2) NOT NULL, State VARCHAR(50) NOT NULL, '+
     'City VARCHAR(50) NOT NULL, BindingIp VARCHAR(39), Cert TEXT, PrivateKey TEXT, PRIMARY KEY(Id), UNIQUE INDEX HostName (HostName))';
   SQL_CheckTable_Log_Requests =
-    'CREATE TABLE IF NOT EXISTS dwl_log_requests (Id INT NOT NULL AUTO_INCREMENT, TimeStamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, Method CHAR(7) NOT NULL, StatusCode SMALLINT NOT NULL, IP_Remote CHAR(15) NOT NULL,'+
-    'Uri VARCHAR(250) NOT NULL, ProcessingTime SMALLINT NOT NULL, RequestHeader TEXT NOT NULL, RequestParams TEXT NOT NULL, PRIMARY KEY (Id))';
+    'CREATE TABLE IF NOT EXISTS dwl_log_requests (Id INT UNSIGNED NOT NULL AUTO_INCREMENT, TimeStamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, Method CHAR(7) NOT NULL, StatusCode SMALLINT UNSIGNED NOT NULL, IP_Remote CHAR(15) NOT NULL,'+
+    'Uri VARCHAR(250) NOT NULL, ProcessingTime SMALLINT UNSIGNED NOT NULL, RequestHeader TEXT NOT NULL, RequestParams TEXT NOT NULL, PRIMARY KEY (Id))';
 begin
   if ConfigParams.StrValue(Param_Db)='' then
     ConfigParams.WriteValue(Param_Db, 'dwl');

@@ -118,10 +118,10 @@ procedure TdwlHTTPHandler_Log.InitializeDatabase;
 const
   SQL_CheckTable_LogDebug=
     'CREATE TABLE IF NOT EXISTS dwl_log_debug ('+
-    '`Id` INT(11) NOT NULL AUTO_INCREMENT, '+
+    '`Id` INT UNSIGNED NOT NULL AUTO_INCREMENT, '+
     '`IpAddress` VARCHAR(50), '+
     '`TimeStamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP, '+
-    '`Level` TINYINT  DEFAULT 0, '+
+    '`Level` TINYINT UNSIGNED DEFAULT 0, '+
     '`Source` VARCHAR(50), '+
     '`Channel` VARCHAR(50), '+
     '`Topic` VARCHAR(50), '+
@@ -131,10 +131,10 @@ const
     'PRIMARY KEY (`ID`))';
   SQL_CheckTable_LogMessages=
     'CREATE TABLE IF NOT EXISTS dwl_log_messages ('+
-    '`Id` INT(11) NOT NULL AUTO_INCREMENT, '+
+    '`Id` INT UNSIGNED NOT NULL AUTO_INCREMENT, '+
     '`IpAddress` VARCHAR(50), '+
     '`TimeStamp` TIMESTAMP  DEFAULT CURRENT_TIMESTAMP, '+
-    '`Level` TINYINT  DEFAULT 0, '+
+    '`Level` TINYINT UNSIGNED DEFAULT 0, '+
     '`Source` VARCHAR(50), '+
     '`Channel` VARCHAR(50), '+
     '`Topic` VARCHAR(50), '+
@@ -144,15 +144,15 @@ const
     'PRIMARY KEY (`ID`))';
   SQL_CheckTable_LogTriggers=
     'CREATE TABLE IF NOT EXISTS `dwl_log_triggers` ('+
-    '`Id` INT(11) NOT NULL AUTO_INCREMENT, '+
-    '`Level_From` TINYINT, '+
-    '`Level_To` TINYINT, '+
+    '`Id` INT UNSIGNED NOT NULL AUTO_INCREMENT, '+
+    '`Level_From` TINYINT UNSIGNED, '+
+    '`Level_To` TINYINT UNSIGNED, '+
     '`Channel` VARCHAR(50), '+
     '`Topic` VARCHAR(50), '+
     '`Parameters` TEXT, '+
-    '`SuppressDuplicateSeconds` INT, '+
-    '`SuppressEvaluateContent` TINYINT, '+
-    'PRIMARY KEY (`ID`))';
+    '`SuppressDuplicateSeconds` SMALLINT UNSIGNED, '+
+    '`SuppressEvaluateContent` TINYINT UNSIGNED, '+
+    'PRIMARY KEY (`Id`))';
 begin
   FMySQL_Profile.WriteValue(Param_CreateDatabase, true);
   FMySQL_Profile.WriteValue(Param_TestConnection, true);
