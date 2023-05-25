@@ -28,8 +28,10 @@ type
     procedure GetData_BlobRef(AStmt: PMYSQL_STMT; AIdx: Integer; cbUseBlob: TdwlMySQLUseOutputBindingCallback); virtual;
     function GetData_DateTime(AStmt: PMYSQL_STMT; AIdx: Integer): TDateTime; virtual;
     function GetData_Double(AStmt: PMYSQL_STMT; AIdx: Integer): double; virtual;
+    function GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal; virtual;
     function GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer; virtual;
     function GetData_Int64(AStmt: PMYSQL_STMT; AIdx: Integer): Int64; virtual;
+    function GetData_UInt64(AStmt: PMYSQL_STMT; AIdx: Integer): UInt64; virtual;
     function GetData_String(AStmt: PMYSQL_STMT; AIdx: Integer): string; virtual;
     function GetDataSizeBuffer: PCardinal; virtual;
     function GetBuffer: Pointer; virtual;
@@ -118,6 +120,30 @@ type
     /// </param>
     procedure SetNullDataBinding(AIdx: integer);
     /// <summary>
+    ///   sets the value of the binding by providing a cardinal
+    /// </summary>
+    /// <param name="AIdx">
+    ///   the index of the field
+    /// </param>
+    /// <param name="AValue">
+    ///   the value to set
+    /// </param>
+    procedure SetCardinalDataBinding(AIdx: Integer; AValue: Cardinal);
+    /// <summary>
+    ///   sets the value of the binding by providing a ref to a cardinal.
+    /// </summary>
+    /// <param name="AIdx">
+    ///   the index of the field
+    /// </param>
+    /// <param name="AValueBuffer">
+    ///   the buffer containing the integer
+    /// </param>
+    /// <remarks>
+    ///   This reference needs to be active until command is executed. Do NOT
+    ///   free before
+    /// </remarks>
+    procedure SetCardinalRefDataBinding(AIdx: Integer; AValueBuffer: PCardinal);
+    /// <summary>
     ///   sets the value of the binding by providing an integer
     /// </summary>
     /// <param name="AIdx">
@@ -152,7 +178,7 @@ type
     /// </param>
     procedure SetBigIntegerDataBinding(AIdx: Integer; AValue: Int64);
     /// <summary>
-    ///   sets the value of the binding by providing a reference to a bit
+    ///   sets the value of the binding by providing a reference to a big
     ///   integer (64 bit)
     /// </summary>
     /// <param name="AIdx">
@@ -166,6 +192,31 @@ type
     ///   free before
     /// </remarks>
     procedure SetBigIntegerRefDataBinding(AIdx: Integer; AValueBuffer: PInt64);
+    /// <summary>
+    ///   sets the value of the binding by providing an unsigned Big integer (64 bit)
+    /// </summary>
+    /// <param name="AIdx">
+    ///   the index of the field
+    /// </param>
+    /// <param name="AValue">
+    ///   the value to set
+    /// </param>
+    procedure SetUnsignedBigIntegerDataBinding(AIdx: Integer; AValue: UInt64);
+    /// <summary>
+    ///   sets the value of the binding by providing a reference to an unsigned big
+    ///   integer (64 bit)
+    /// </summary>
+    /// <param name="AIdx">
+    ///   the index of the field
+    /// </param>
+    /// <param name="AValueBuffer">
+    ///   the buffer containing the big integer
+    /// </param>
+    /// <remarks>
+    ///   This reference needs to be active until command is executed. Do NOT
+    ///   free before
+    /// </remarks>
+    procedure SetUnsignedBigIntegerRefDataBinding(AIdx: Integer; AValueBuffer: PUInt64);
     /// <summary>
     ///   sets the value of the binding by providing a datetime value
     /// </summary>
@@ -330,6 +381,23 @@ type
     /// </returns>
     function IsDbNull(AIdx: Integer): Boolean;
     /// <summary>
+    ///   Returns the cardinal value of a field. In the case the field is NULL
+    ///   an error is thrown unless NullReturnsDefault is set to true and an
+    ///   actual default is provided
+    /// </summary>
+    /// <param name="AIdx">
+    ///   The index of the field for which the value is retrieved
+    /// </param>
+    /// <param name="NullReturnsDefault">
+    ///   if false an exception will be trown in the case of NULL, if true the
+    ///   Default will be returned
+    /// </param>
+    /// <param name="Default">
+    ///   The default to be returned, set NullReturnsDefault to true to
+    ///   effectivly use it.
+    /// </param>
+    function GetCardinal(AIdx: Integer; NullReturnsDefault: boolean=false; Default: cardinal=0): cardinal;
+    /// <summary>
     ///   Returns the integer value of a field. In the case the field is NULL
     ///   an error is thrown unless NullReturnsDefault is set to true and an
     ///   actual default is provided
@@ -363,6 +431,23 @@ type
     ///   effectivly use it.
     /// </param>
     function GetInt64(AIdx: Integer; NullReturnsDefault: boolean=false; Default: Int64=0): Int64;
+    /// <summary>
+    ///   Returns the unsigned integer64 value of a field. In the case the field is NULL
+    ///   an error is thrown unless NullReturnsDefault is set to true and an
+    ///   actual default is provided
+    /// </summary>
+    /// <param name="AIdx">
+    ///   The index of the field for which the value is retrieved
+    /// </param>
+    /// <param name="NullReturnsDefault">
+    ///   if false an exception will be trown in the case of NULL, if true the
+    ///   Default will be returned
+    /// </param>
+    /// <param name="Default">
+    ///   The default to be returned, set NullReturnsDefault to true to
+    ///   effectivly use it.
+    /// </param>
+    function GetUInt64(AIdx: Integer; NullReturnsDefault: boolean=false; Default: UInt64=0): UInt64;
     /// <summary>
     ///   Returns the double value of a field. In the case the field is NULL an
     ///   error is thrown unless NullReturnsDefault is set to true and an
@@ -669,25 +754,55 @@ type
     class function BufferType: Enum_Field_Types; override;
   end;
 
-  TMySQLTinyIntDataBinding = class(TMySQLValueTypeDataBinding<ShortInt>)
+  TMySQLByteDataBinding = class(TMySQLValueTypeDataBinding<Byte>)
   protected
     class function BufferType: Enum_Field_Types; override;
     function GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer; override;
+    function GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal; override;
+  end;
+
+  TMySQLShortIntDataBinding = class(TMySQLValueTypeDataBinding<ShortInt>)
+  protected
+    class function BufferType: Enum_Field_Types; override;
+    function GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer; override;
+    function GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal; override;
+  end;
+
+  TMySQLWordDataBinding = class(TMySQLValueTypeDataBinding<Word>)
+  protected
+    class function BufferType: Enum_Field_Types; override;
+    function GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer; override;
+    function GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal; override;
   end;
 
   TMySQLSmallIntDataBinding = class(TMySQLValueTypeDataBinding<SmallInt>)
   protected
     class function BufferType: Enum_Field_Types; override;
     function GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer; override;
+    function GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal; override;
+  end;
+
+  TMySQLCardinalDataBinding = class(TMySQLValueTypeDataBinding<Cardinal>)
+  protected
+    class function BufferType: Enum_Field_Types; override;
+    function GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer; override;
+    function GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal; override;
   end;
 
   TMySQLIntegerDataBinding = class(TMySQLValueTypeDataBinding<Integer>)
   protected
     class function BufferType: Enum_Field_Types; override;
     function GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer; override;
+    function GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal; override;
   end;
 
-  TMySQLBigIntDataBinding = class(TMySQLValueTypeDataBinding<Int64>)
+  TMySQLUInt64DataBinding = class(TMySQLValueTypeDataBinding<UInt64>)
+  protected
+    class function BufferType: Enum_Field_Types; override;
+    function GetData_UInt64(AStmt: PMYSQL_STMT; AIdx: Integer): UInt64; override;
+  end;
+
+  TMySQLInt64DataBinding = class(TMySQLValueTypeDataBinding<Int64>)
   protected
     class function BufferType: Enum_Field_Types; override;
     function GetData_Int64(AStmt: PMYSQL_STMT; AIdx: Integer): Int64; override;
@@ -751,10 +866,16 @@ type
     constructor CreateInputInstance(AValueBuffer: Pointer);
   end;
 
+  TMySQLCardinalRefDataBinding = class(TMySQLReferencedValueTypeDataBinding<Cardinal, TMySQLCardinalDataBinding>)
+  end;
+
   TMySQLIntegerRefDataBinding = class(TMySQLReferencedValueTypeDataBinding<Integer, TMySQLIntegerDataBinding>)
   end;
 
-  TMySQLBigIntRefDataBinding = class(TMySQLReferencedValueTypeDataBinding<Int64, TMySQLBigIntDataBinding>)
+  TMySQLInt64RefDataBinding = class(TMySQLReferencedValueTypeDataBinding<Int64, TMySQLInt64DataBinding>)
+  end;
+
+  TMySQLUInt64RefDataBinding = class(TMySQLReferencedValueTypeDataBinding<UInt64, TMySQLUInt64DataBinding>)
   end;
 
   TMySQLDoubleRefDataBinding = class(TMySQLReferencedValueTypeDataBinding<Double, TMySQLDoubleDataBinding>)
@@ -1057,6 +1178,12 @@ begin
     Result := FFields[AIdx].FBinding.GetData_String(FStmt, AIdx);
 end;
 
+function TdwlMySQLDataReader.GetUInt64(AIdx: Integer; NullReturnsDefault: boolean; Default: UInt64): UInt64;
+begin
+  if not ReturnDefaultOnNull<UInt64>(AIdx, NullReturnsDefault, Default, Result) then
+    Result := FFields[AIdx].FBinding.GetData_UInt64(FStmt, AIdx);
+end;
+
 function TdwlMySQLDataReader.GetUUID(AIdx: Integer): TdwlUUID;
 begin
   // In the base type we always do type conversion
@@ -1094,6 +1221,12 @@ begin
   end
   else
     FFields[AIdx].FBinding.GetData_BlobRef(FStmt, AIdx, cbUseBlob);
+end;
+
+function TdwlMySQLDataReader.GetCardinal(AIdx: Integer; NullReturnsDefault: boolean; Default: cardinal): cardinal;
+begin
+  if not ReturnDefaultOnNull<cardinal>(AIdx, NullReturnsDefault, Default, Result) then
+    Result := FFields[AIdx].FBinding.GetData_Cardinal(FStmt, AIdx);
 end;
 
 { TdwlMySQLDataBinding }
@@ -1145,6 +1278,25 @@ begin
       if not MemoryOwnerShipTaken then
         FreeMem(ABind.buffer);
     end;
+  finally
+    FreeMem(ABind);
+  end;
+end;
+
+function TdwlMySQLDataBinding.GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal;
+begin
+  // In the base type we always do type conversion
+  var IsNull: ByteBool;
+  var ABind:PMySQL_Bind;
+  ABind := mysql_bind_init(1);
+  try
+    // first get length
+    ABind.buffer_type := MYSQL_TYPE_LONG;
+    ABind.buffer := @Result;
+    ABind.is_null := @IsNull;
+    ABind.is_unsigned := true;
+    if mysql_stmt_fetch_column(AStmt, ABind, AIdx, 0)<>0 then
+      raise Exception.Create('DB Error');
   finally
     FreeMem(ABind);
   end;
@@ -1262,6 +1414,25 @@ begin
   end;
 end;
 
+function TdwlMySQLDataBinding.GetData_UInt64(AStmt: PMYSQL_STMT; AIdx: Integer): UInt64;
+begin
+  // In the base type we always do type conversion
+  var IsNull: ByteBool;
+  var ABind:PMySQL_Bind;
+  ABind := mysql_bind_init(1);
+  try
+    // first get length
+    ABind.buffer_type := MYSQL_TYPE_LONGLONG;
+    ABind.buffer := @Result;
+    ABind.is_null := @IsNull;
+    ABind.is_unsigned := true;
+    if mysql_stmt_fetch_column(AStmt, ABind, AIdx, 0)<>0 then
+      raise Exception.Create('DB Error');
+  finally
+    FreeMem(ABind);
+  end;
+end;
+
 { TdwlMySQLResultField }
 
 constructor TdwlMySQLResultField.Create(AIdx: Integer; AField: PMYSQL_FIELD; ABinds: PMySQL_Bind);
@@ -1278,11 +1449,35 @@ end;
 procedure TdwlMySQLResultField.CreateOutputBinding;
 begin
   case FField._type of
-    MYSQL_TYPE_TINY: FBinding := TMySQLTinyIntDataBinding.Create;
-    MYSQL_TYPE_SHORT: FBinding := TMySQLSmallIntDataBinding.Create;
+    MYSQL_TYPE_TINY: 
+      begin
+        if (FField.flags and UNSIGNED_FLAG)>0 then
+          FBinding := TMySQLByteDataBinding.Create
+        else
+          FBinding := TMySQLShortIntDataBinding.Create;
+      end;
+    MYSQL_TYPE_SHORT:
+      begin
+        if (FField.flags and UNSIGNED_FLAG)>0 then
+          FBinding := TMySQLWordDataBinding.Create
+        else
+          FBinding := TMySQLSmallIntDataBinding.Create;
+      end;
     MYSQL_TYPE_INT24,
-    MYSQL_TYPE_LONG: FBinding := TMySQLIntegerDataBinding.Create;
-    MYSQL_TYPE_LONGLONG: FBinding := TMySQLBigIntDataBinding.Create;
+    MYSQL_TYPE_LONG: 
+      begin
+        if (FField.flags and UNSIGNED_FLAG)>0 then
+          FBinding := TMySQLCardinalDataBinding.Create
+        else
+          FBinding := TMySQLIntegerDataBinding.Create;
+      end;
+    MYSQL_TYPE_LONGLONG:
+      begin
+        if (FField.flags and UNSIGNED_FLAG)>0 then
+          FBinding := TMySQLUInt64DataBinding.Create
+        else
+          FBinding := TMySQLInt64DataBinding.Create;
+      end;
     MYSQL_TYPE_FLOAT: FBinding := TMySQLFloatDataBinding.Create;
     MYSQL_TYPE_DOUBLE: FBinding := TMySQLDoubleDataBinding.Create;
     MYSQL_TYPE_NULL: FBinding := TMySQLNullDataBinding.Create;
@@ -1376,12 +1571,12 @@ end;
 
 procedure TdwlMySQLDataBindingCollection.SetBigIntegerDataBinding(AIdx: Integer; AValue: Int64);
 begin
-  SetParameter(AIdx, TMySQLBigIntDataBinding.CreateInputInstance(AValue));
+  SetParameter(AIdx, TMySQLInt64DataBinding.CreateInputInstance(AValue));
 end;
 
 procedure TdwlMySQLDataBindingCollection.SetBigIntegerRefDataBinding(AIdx: Integer; AValueBuffer: PInt64);
 begin
-  SetParameter(AIdx, TMySQLBigIntRefDataBinding.CreateInputInstance(AValueBuffer));
+  SetParameter(AIdx, TMySQLInt64RefDataBinding.CreateInputInstance(AValueBuffer));
 end;
 
 procedure TdwlMySQLDataBindingCollection.SetDateTimeDataBinding(AIdx: Integer; AValue: TDateTime);
@@ -1419,9 +1614,29 @@ begin
   Result := SetParameter(AIdx, TMySQLBlobDataBinding.CreateInputInstance(Buffer, BufferSize, True));
 end;
 
+procedure TdwlMySQLDataBindingCollection.SetCardinalDataBinding(AIdx: Integer; AValue: Cardinal);
+begin
+  SetParameter(AIdx, TMySQLCardinalDataBinding.CreateInputInstance(AValue));
+end;
+
+procedure TdwlMySQLDataBindingCollection.SetCardinalRefDataBinding(AIdx: Integer; AValueBuffer: PCardinal);
+begin
+  SetParameter(AIdx, TMySQLCardinalRefDataBinding.CreateInputInstance(AValueBuffer));
+end;
+
 procedure TdwlMySQLDataBindingCollection.SetTextDataBinding(AIdx: Integer; const AValue: string);
 begin
   SetParameter(AIdx, TMySQLTextDataBinding.CreateInputInstance(AValue));
+end;
+
+procedure TdwlMySQLDataBindingCollection.SetUnsignedBigIntegerDataBinding(AIdx: Integer; AValue: UInt64);
+begin
+  SetParameter(AIdx, TMySQLUInt64DataBinding.CreateInputInstance(AValue));
+end;
+
+procedure TdwlMySQLDataBindingCollection.SetUnsignedBigIntegerRefDataBinding(AIdx: Integer; AValueBuffer: PUInt64);
+begin
+  SetParameter(AIdx, TMySQLUInt64RefDataBinding.CreateInputInstance(AValueBuffer));
 end;
 
 procedure TdwlMySQLDataBindingCollection.SetUUIDDataBinding(AIdx: Integer; const AValue: TdwlUUID);
@@ -1500,15 +1715,53 @@ begin
   FValueBuffer := AValueBuffer;
 end;
 
-{ TMySQLTinyIntDataBinding }
+{ TMySQLByteDataBinding }
 
-class function TMySQLTinyIntDataBinding.BufferType: Enum_Field_Types;
+class function TMySQLByteDataBinding.BufferType: Enum_Field_Types;
 begin
   Result := MYSQL_TYPE_TINY;
 end;
 
-function TMySQLTinyIntDataBinding.GetData_Integer(AStmt: PMYSQL_STMT;
-  AIdx: Integer): integer;
+function TMySQLByteDataBinding.GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal;
+begin
+  Result := FValue;
+end;
+
+function TMySQLByteDataBinding.GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer;
+begin
+  Result := FValue;
+end;
+
+{ TMySQLShortIntDataBinding }
+
+class function TMySQLShortIntDataBinding.BufferType: Enum_Field_Types;
+begin
+  Result := MYSQL_TYPE_TINY;
+end;
+
+function TMySQLShortIntDataBinding.GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal;
+begin
+  Result := FValue;
+end;
+
+function TMySQLShortIntDataBinding.GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer;
+begin
+  Result := FValue;
+end;
+
+{ TMySQLWordDataBinding }
+
+class function TMySQLWordDataBinding.BufferType: Enum_Field_Types;
+begin
+  Result := MYSQL_TYPE_SHORT;
+end;
+
+function TMySQLWordDataBinding.GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal;
+begin
+  Result := FValue;
+end;
+
+function TMySQLWordDataBinding.GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer;
 begin
   Result := FValue;
 end;
@@ -1520,8 +1773,29 @@ begin
   Result := MYSQL_TYPE_SHORT;
 end;
 
-function TMySQLSmallIntDataBinding.GetData_Integer(AStmt: PMYSQL_STMT;
-  AIdx: Integer): integer;
+function TMySQLSmallIntDataBinding.GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal;
+begin
+  Result := FValue;
+end;
+
+function TMySQLSmallIntDataBinding.GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer;
+begin
+  Result := FValue;
+end;
+
+{ TMySQLCardinalDataBinding }
+
+class function TMySQLCardinalDataBinding.BufferType: Enum_Field_Types;
+begin
+  Result := MYSQL_TYPE_LONG;
+end;
+
+function TMySQLCardinalDataBinding.GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal;
+begin
+  Result := FValue;
+end;
+
+function TMySQLCardinalDataBinding.GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer;
 begin
   Result := FValue;
 end;
@@ -1533,20 +1807,36 @@ begin
   Result := MYSQL_TYPE_LONG;
 end;
 
-function TMySQLIntegerDataBinding.GetData_Integer(AStmt: PMYSQL_STMT;
-  AIdx: Integer): integer;
+function TMySQLIntegerDataBinding.GetData_Cardinal(AStmt: PMYSQL_STMT; AIdx: Integer): cardinal;
 begin
   Result := FValue;
 end;
 
-{ TMySQLBigIntDataBinding }
+function TMySQLIntegerDataBinding.GetData_Integer(AStmt: PMYSQL_STMT; AIdx: Integer): integer;
+begin
+  Result := FValue;
+end;
 
-class function TMySQLBigIntDataBinding.BufferType: Enum_Field_Types;
+{ TMySQLUInt64DataBinding }
+
+class function TMySQLUInt64DataBinding.BufferType: Enum_Field_Types;
 begin
   Result := MYSQL_TYPE_LONGLONG;
 end;
 
-function TMySQLBigIntDataBinding.GetData_Int64(AStmt: PMYSQL_STMT; AIdx: Integer): Int64;
+function TMySQLUInt64DataBinding.GetData_UInt64(AStmt: PMYSQL_STMT; AIdx: Integer): UInt64;
+begin
+  Result := FValue;
+end;
+
+{ TMySQLInt64DataBinding }
+
+class function TMySQLInt64DataBinding.BufferType: Enum_Field_Types;
+begin
+  Result := MYSQL_TYPE_LONGLONG;
+end;
+
+function TMySQLInt64DataBinding.GetData_Int64(AStmt: PMYSQL_STMT; AIdx: Integer): Int64;
 begin
   Result := FValue;
 end;
@@ -1558,8 +1848,7 @@ begin
   Result := MYSQL_TYPE_FLOAT;
 end;
 
-function TMySQLFloatDataBinding.GetData_Double(AStmt: PMYSQL_STMT;
-  AIdx: Integer): double;
+function TMySQLFloatDataBinding.GetData_Double(AStmt: PMYSQL_STMT; AIdx: Integer): double;
 begin
   Result := FValue;
 end;
@@ -1571,8 +1860,7 @@ begin
   Result := MYSQL_TYPE_DOUBLE;
 end;
 
-function TMySQLDoubleDataBinding.GetData_Double(AStmt: PMYSQL_STMT;
-  AIdx: Integer): double;
+function TMySQLDoubleDataBinding.GetData_Double(AStmt: PMYSQL_STMT; AIdx: Integer): double;
 begin
   Result := FValue;
 end;
