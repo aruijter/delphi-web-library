@@ -1,6 +1,10 @@
 # Release Notes
 All notable (including breaking) changes to this project will be documented in this file.
 
+## May 25, 2023
+- Corrected handling of (extreme) Unsigned values in MySQL
+- Added DWL Server Log Avoids.
+
 ## May 23, 2023
 - Changed MySQL tables to use Unsigned integers were applicable. dwl_log_requests.ProcessingTime is now max High(word). So for lengthy requests the table colum must be adapted to UNSIGNED to prevent an out of bounds.
 

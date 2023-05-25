@@ -139,15 +139,23 @@ The table dwl_urialiases  has a record for each uri redirection. The fields must
 
 ## Configuration table dwl_log_triggers
 There is also a configuration table dwl_log_triggers. In this table triggers can be defined which will push email messages to listeners using the trigger conditions.
-|Fieldname|Description
-|-|-|
-|Level_From|The minimum level of the messages to be pushed|
-|Level_To|The maximum level of the messages to be pushed|
-|Channel|The channel from which the messages are requested, this a RegEx expression, set to NULL (not empty string) to receive message from all channels|
-|Topic|The topic from which the messages are requested, this a RegEx expression, set to NULL (not empty string) to receive messages from all topics|
-|Parameters|Parameters that define the addressing of the push message. At this moment only E=Mail destinations can be configured.
-|SuppressDuplicateSeconds|If non NULL it will suppress triggers for recurring identical messages for X seconds.
-|SuppressEvaluateContent|If non NULL / nonzero the content will also be evaluated to conclude if it is a duplicate.
+|Fieldname|Default|Description
+|-|-|-|
+|Level_From|3 (lsNotice)|The minimum level of the messages to be pushed|
+|Level_To|7 (lsFatal)|The maximum level of the messages to be pushed|
+|Channel|\<all\>|The channel from which the messages are requested, this a RegEx expression, set to NULL (not empty string) to receive message from all channels|
+|Topic|\<all\>|The topic from which the messages are requested, this a RegEx expression, set to NULL (not empty string) to receive messages from all topics|
+|Parameters|-|Parameters that define the addressing of the push message. At this moment only E=Mail destinations can be configured.
+|SuppressDuplicateSeconds|0|If non NULL it will suppress triggers for recurring identical messages for X seconds.
+|SuppressEvaluateContent|false|If non NULL / nonzero the content will also be evaluated to conclude if it is a duplicate.
+
+## Configuration table dwl_log_trigger_avoids
+There is also a configuration table dwl_log_trigger_avoids. In this table messages can be defined for which triggering will be suppressed on first X occurences.
+|Fieldname|Default|Description|
+|-|-|-|
+|Msg|-|The message for which triggering will be suppressed|
+|MaxAvoidCount|255|The maximum amount of occurences of suppression. After MaxAvoidCount suppressions the message will execute the triggers|
+|ClearSeconds|65536|The amount of seconds for which, after the last suppression, the avoidcount will be reset|
 
 ### dwl log trigger parameters
 |Key|Description|

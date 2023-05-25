@@ -19,9 +19,26 @@ const
   Param_EMail_Subject = 'email_subject';
 
 type
+  TLogTriggerAvoid = class
+  strict private
+    FId: cardinal;
+    FMaxAvoidCount: byte;
+    FClearMSeconds: cardinal;
+    FLastSuppressionTick: UInt64;
+    FCurrentAvoidCount: byte;
+  private
+    procedure SetClearSeconds(const Value: word);
+    property Id: cardinal read FId;
+    property MaxAvoidCount: byte write FMaxAvoidCount;
+    property ClearSeconds: word write SetClearSeconds;
+  public
+    constructor Create(AId: cardinal);
+    function CheckAvoided: boolean;
+  end;
+
   TLogTrigger = class
   strict private
-    FId: integer;
+    FId: cardinal;
     FMinLevel: byte;
     FMaxLevel: byte;
     FChannel: TRegEx;
@@ -35,7 +52,7 @@ type
     FCleanupCounter: cardinal;
     procedure SetSuppressDuplicateMSecs(const Value: cardinal);
   private
-    property Id: integer read FId;
+    property Id: cardinal read FId;
     property MinLevel: byte read FMinLevel write FMinLevel;
     property MaxLevel: byte read FMaxLevel write FMaxLevel;
     property Channel: TRegEx read FChannel write FChannel;
@@ -45,19 +62,20 @@ type
     property SuppressEvaluateContent: boolean read FSuppressEvaluateContent write FSuppressEvaluateContent;
     function IsSuppressed(Level: Byte; const Source, Channel, Topic, Msg: string; Content: TBytes): boolean;
   public
-    constructor Create(AId: integer);
+    constructor Create(AId: cardinal);
     destructor Destroy; override;
   end;
 
   TdwlHTTPHandler_Log = class(TdwlHTTPHandler)
   strict private
     FReloadTriggerTick: cardinal;
-    FTriggers: TdwlThreadList<TLogTrigger>;
+    FTriggers: TList<TLogTrigger>;
     FLogSecret: string;
     FMySQL_Profile: IdwlParams;
-    FLogSubmitAccess: TCriticalSection;
+    FTriggerProcessing: TCriticalSection;
+    FTriggerAvoids: TDictionary<integer, TLogTriggerAvoid>;
     procedure InitializeDatabase;
-    procedure CheckTriggers(TrigList: TList<TLogTrigger>);
+    procedure CheckTriggers;
     function Post_Log(const State: PdwlHTTPHandlingState): boolean;
     function Options_Log(const State: PdwlHTTPHandlingState): boolean;
     procedure ProcessTriggers(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes);
@@ -93,24 +111,22 @@ begin
   inherited Create;
   FMySQL_Profile := New_Params;
   AParams.AssignTo(FMySQL_Profile, Params_SQLConnection);
-  FLogSubmitAccess := TCriticalSection.Create;
   FLogSecret := AParams.StrValue(param_LogSecret);
-  FTriggers := TdwlThreadList<TLogTrigger>.Create;
+  FTriggers := TList<TLogTrigger>.Create;
+  FTriggerProcessing := TCriticalSection.Create;
+  FTriggerAvoids := TDictionary<integer, TLogTriggerAvoid>.Create;
   InitializeDatabase;
 end;
 
 destructor TdwlHTTPHandler_Log.Destroy;
 begin
-  // dispose hashes from triggers
-  var TrigList := FTriggers.LockList;
-  try
-    for var Trigger in TrigList do
-      Trigger.Free;
-  finally
-    FTriggers.UnlockList;
-  end;
+  for var Trig in FTriggers do
+    Trig.Free;
   FTriggers.Free;
-  FLogSubmitAccess.Free;
+  for var Avoid in FTriggerAvoids.Values do
+    Avoid.Free;
+  FTriggerAvoids.Free;
+  FTriggerProcessing.Free;
   inherited Destroy;
 end;
 
@@ -153,6 +169,13 @@ const
     '`SuppressDuplicateSeconds` SMALLINT UNSIGNED, '+
     '`SuppressEvaluateContent` TINYINT UNSIGNED, '+
     'PRIMARY KEY (`Id`))';
+  SQL_CheckTable_LogTriggerAvoids=
+    'CREATE TABLE IF NOT EXISTS `dwl_log_trigger_avoids` ('+
+    '`Id` INT UNSIGNED NOT NULL AUTO_INCREMENT, '+
+    '`Msg` VARCHAR(250), '+
+    '`MaxAvoidCount` TINYINT UNSIGNED, '+
+    '`ClearSeconds` SMALLINT UNSIGNED, '+
+    'PRIMARY KEY (`Id`))';
 begin
   FMySQL_Profile.WriteValue(Param_CreateDatabase, true);
   FMySQL_Profile.WriteValue(Param_TestConnection, true);
@@ -162,27 +185,32 @@ begin
   Session.CreateCommand(SQL_CheckTable_LogDebug).Execute;
   Session.CreateCommand(SQL_CheckTable_LogMessages).Execute;
   Session.CreateCommand(SQL_CheckTable_LogTriggers).Execute;
+  Session.CreateCommand(SQL_CheckTable_LogTriggerAvoids).Execute;
 end;
 
-procedure TdwlHTTPHandler_Log.CheckTriggers(TrigList: TList<TLogTrigger>);
+procedure TdwlHTTPHandler_Log.CheckTriggers;
 const
   SQL_Get_Triggers=
     'SELECT Id, Level_From, Level_to, Channel, Topic, Parameters, SuppressDuplicateSeconds, SuppressEvaluateContent FROM dwl_log_triggers';
   GetTriggers_Idx_Id=0; GetTriggers_Idx_Level_From=1; GetTriggers_Idx_Level_to=2;
   GetTriggers_Idx_Channel=3; GetTriggers_Idx_Topic=4; GetTriggers_Idx_Parameters=5;
   GetTriggers_Idx_SuppressDuplicateSeconds=6; GetTriggers_Idx_SuppressEvaluateContent=7;
+  SQL_Get_TriggerAvoids=
+    'SELECT Id, Msg, MaxAvoidCount, ClearSeconds FROM dwl_log_trigger_avoids';
+  GetTriggerAvoids_Idx_Id=0; GetTriggerAvoids_Idx_Msg=1; GetTriggerAvoids_Idx_MaxAvoidCount=2; GetTriggerAvoids_Idx_ClearSeconds=3;
 begin
   try
     var Tick := GetTickCount64;
     if Tick<FReloadTriggerTick then
       Exit;
     FReloadTriggerTick := Tick+TRIGGER_RELOAD_MSECS;
+    // Reload triggers
     var PreviousTriggers := TDictionary<integer, TLogTrigger>.Create;
     try
       // Keep current triggers
-      for var Trig in TrigList do
+      for var Trig in FTriggers do
         PreviousTriggers.Add(Trig.Id, Trig);
-      TrigList.Clear;
+      FTriggers.Clear;
       var Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Get_Triggers);
       Cmd.Execute;
       while Cmd.Reader.Read do
@@ -215,13 +243,42 @@ begin
         Trigger.Parameters := Cmd.Reader.GetString(GetTriggers_Idx_Parameters, true);
         Trigger.SuppressDuplicateMSecs := Max(0, Cmd.Reader.GetInteger(GetTriggers_Idx_SuppressDuplicateSeconds, true))*1000;
         Trigger.SuppressEvaluateContent := Cmd.Reader.GetInteger(GetTriggers_Idx_SuppressEvaluateContent, true)<>0;
-        TrigList.Add(Trigger);
+        FTriggers.Add(Trigger);
       end;
       // dispose no longer used triggers
       for var Trig in PreviousTriggers.Values do
         Trig.Free;
     finally
       PreviousTriggers.Free;
+    end;
+    // Reload global avoids
+    var PreviousAvoids := TDictionary<integer, TLogTriggerAvoid>.Create;
+    try
+      // Keep current triggers
+      for var Avoid in FTriggerAvoids.Values do
+        PreviousAvoids.Add(Avoid.Id, Avoid);
+      FTriggerAvoids.Clear;
+      var Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Get_TriggerAvoids);
+      Cmd.Execute;
+      while Cmd.Reader.Read do
+      begin
+        var AvoidId := Cmd.Reader.GetInteger(GetTriggerAvoids_Idx_Id);
+        var Avoid: TLogTriggerAvoid;
+        if not PreviousAvoids.TryGetValue(AvoidId, Avoid) then
+          Avoid := TLogTriggerAvoid.Create(AvoidId)
+        else
+          PreviousTriggers.Remove(AvoidId);
+        Avoid.MaxAvoidCount := Cmd.Reader.GetInteger(GetTriggerAvoids_Idx_MaxAvoidCount, true, 1);
+        Avoid.ClearSeconds := Cmd.Reader.GetInteger(GetTriggerAvoids_Idx_ClearSeconds, true, 1);
+        var Hash := THashBobJenkins.Create;
+        Hash.Update(Cmd.Reader.GetString(GetTriggerAvoids_Idx_Msg, true));
+        FTriggerAvoids.Add(Hash.HashAsInteger, Avoid);
+      end;
+      // dispose no longer used triggers
+      for var Avoid in PreviousTriggers.Values do
+        Avoid.Free;
+    finally
+      PreviousAvoids.Free;
     end;
   except
     on E:Exception do
@@ -304,11 +361,18 @@ end;
 
 procedure TdwlHTTPHandler_Log.ProcessTriggers(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes);
 begin
+  FTriggerProcessing.Enter;
   try
-    var TrigList := FTriggers.LockListRead;
     try
-      CheckTriggers(TrigList);
-      for var Trig in TrigList do
+      CheckTriggers;
+      // see if triggers are globally avoided
+      var Hash := THashBobJenkins.Create;
+      Hash.Update(Msg);
+      var Avoid: TLogTriggerAvoid;
+      if FTriggerAvoids.TryGetValue(Hash.HashAsInteger, Avoid) and Avoid.CheckAvoided then
+        Exit;
+      // execute the triggers
+      for var Trig in FTriggers do
       begin
         if Trig.Channel.IsMatch(Channel) and Trig.Topic.IsMatch(Topic) and
           (Level>=Trig.MinLevel) and (Level<=Trig.MaxLevel) and
@@ -352,12 +416,12 @@ begin
           end;
         end;
       end;
-    finally
-      FTriggers.UnlockListRead;
+    except
+      on E: Exception do
+        SubmitLog('', integer(lsError), '', '', '', 'Error executing trigger: '+E.Message, '', nil);
     end;
-  except
-    on E: Exception do
-      SubmitLog('', integer(lsError), '', '', '', 'Error executing trigger: '+E.Message, '', nil);
+  finally
+    FTriggerProcessing.Leave;
   end;
 end;
 
@@ -370,47 +434,44 @@ const
 begin
   Result := false;
   try
-    FLogSubmitAccess.Enter;
-    try
-      // only save notice and more severe to database
-      var Cmd: IdwlMySQLCommand;
-      if TdwlLogSeverityLevel(Level)<lsNotice then
-        Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Insert_Debug)
-      else
-        Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Insert_Log);
-      Cmd.Parameters.SetTextDataBinding(0, IpAddress);
-      Cmd.Parameters.SetIntegerDataBinding(1, Level);
-      Cmd.Parameters.SetTextDataBinding(2, Source);
-      Cmd.Parameters.SetTextDataBinding(3, Channel);
-      Cmd.Parameters.SetTextDataBinding(4, Topic);
-      Cmd.Parameters.SetTextDataBinding(5, Msg.Substring(0, 250));
-      Cmd.Parameters.SetTextDataBinding(6, ContentType);
-      if Content=nil then
-        Cmd.Parameters.SetNullDataBinding(7)
-      else
-        Cmd.Parameters.SetBinaryRefDataBinding(7, @Content[0], Length(Content));
-      Cmd.Execute;
-      {$IFDEF DEBUG}
-      // Forward the logmessage to the server for debugging purposes
-      if Source<>TdwlLogger.Default_Source then
-      begin
-        var LogItem := TdwlLogger.PrepareLogitem;
-        LogItem.Msg := Msg;
-        LogItem.SeverityLevel := TdwlLogSeverityLevel(Level);
-        LogItem.Source := Source;
-        LogItem.Channel := Channel;
-        LogItem.Topic := Topic;
-        LogItem.ContentType := ContentType;
-        LogItem.Content := Content;
-        LogItem.Destination := logdestinationServerConsole;
-        TdwlLogger.Log(LogItem);
-      end;
-      {$ENDIF}
-      // Process the triggers
-      ProcessTriggers(IpAddress, Level, Source, Channel, Topic, Msg, ContentType, Content);
-    finally
-      FLogSubmitAccess.Leave;
+    // Save log to the database
+    var Cmd: IdwlMySQLCommand;
+    // to stay thread safe here, create a new MySQLSession
+    // (the connection pooling will reuse a connection is possible)
+    if TdwlLogSeverityLevel(Level)<lsNotice then
+      Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Insert_Debug)
+    else
+      Cmd := New_MySQLSession(FMySQL_Profile).CreateCommand(SQL_Insert_Log);
+    Cmd.Parameters.SetTextDataBinding(0, IpAddress);
+    Cmd.Parameters.SetIntegerDataBinding(1, Level);
+    Cmd.Parameters.SetTextDataBinding(2, Source);
+    Cmd.Parameters.SetTextDataBinding(3, Channel);
+    Cmd.Parameters.SetTextDataBinding(4, Topic);
+    Cmd.Parameters.SetTextDataBinding(5, Msg.Substring(0, 250));
+    Cmd.Parameters.SetTextDataBinding(6, ContentType);
+    if Content=nil then
+      Cmd.Parameters.SetNullDataBinding(7)
+    else
+      Cmd.Parameters.SetBinaryRefDataBinding(7, @Content[0], Length(Content));
+    Cmd.Execute;
+    {$IFDEF DEBUG}
+    // Forward the logmessage to the server for debugging purposes
+    if Source<>TdwlLogger.Default_Source then
+    begin
+      var LogItem := TdwlLogger.PrepareLogitem;
+      LogItem.Msg := Msg;
+      LogItem.SeverityLevel := TdwlLogSeverityLevel(Level);
+      LogItem.Source := Source;
+      LogItem.Channel := Channel;
+      LogItem.Topic := Topic;
+      LogItem.ContentType := ContentType;
+      LogItem.Content := Content;
+      LogItem.Destination := logdestinationServerConsole;
+      TdwlLogger.Log(LogItem);
     end;
+    {$ENDIF}
+    // Process the triggers
+    ProcessTriggers(IpAddress, Level, Source, Channel, Topic, Msg, ContentType, Content);
     Result := true;
   except
     // never let an exception escape.... Just Return Result=false
@@ -419,7 +480,7 @@ end;
 
 { TLogTrigger }
 
-constructor TLogTrigger.Create(AId: integer);
+constructor TLogTrigger.Create(AId: cardinal);
 begin
   inherited Create;
   FId := AId;
@@ -484,6 +545,36 @@ begin
     FreeAndNil(FSuppressHashes);
   if (FSuppressDuplicateMSecs>0) and (FSuppressHashes=nil) then
    FSuppressHashes := TDictionary<integer, UInt64>.Create;
+end;
+
+{ TLogTriggerAvoid }
+
+function TLogTriggerAvoid.CheckAvoided: boolean;
+begin
+  var Tick := GetTickCount64;
+  // first check if timeout has occured
+  if Tick-FLastSuppressionTick>FClearMSeconds then
+    FCurrentAvoidCount := 0;
+  // add this avoud to count
+  inc(FCurrentAvoidCount);
+  // calculated result
+  Result := FCurrentAvoidCount<=FMaxAvoidCount;
+  // if not avoided reset the count
+  if not Result then
+    FCurrentAvoidCount := 0;
+  // keep the tick for the timeout of avoidances
+  FLastSuppressionTick := Tick;
+end;
+
+constructor TLogTriggerAvoid.Create(AId: cardinal);
+begin
+  inherited Create;
+  FId := AId;
+end;
+
+procedure TLogTriggerAvoid.SetClearSeconds(const Value: word);
+begin
+  FClearMSeconds := Value*1000;
 end;
 
 end.
