@@ -521,7 +521,7 @@ begin
   Hash.Update(Source);
   Hash.Update(Channel);
   Hash.Update(Topic);
-  if SuppressEvaluateContent then
+  if SuppressEvaluateContent and (Content<>nil) then
     Hash.Update(Content);
   // is hash present in
   var SuppressUntilLogTick: UInt64;
