@@ -210,7 +210,7 @@ const
   SQL_CheckTable_Scopes = 'CREATE TABLE IF NOT EXISTS dwl_oauth2_scopes (id INT AUTO_INCREMENT, scope VARCHAR(50), umbrella_scope VARCHAR(50), PRIMARY KEY (id))';
   SQL_CheckTable_Clients = 'CREATE TABLE IF NOT EXISTS dwl_oauth2_clients (id INT AUTO_INCREMENT, displayname VARCHAR(50), client_id VARCHAR(50), client_secret VARCHAR(50), redirect_uri VARCHAR(255), user_id INT, PRIMARY KEY (id))';
   SQL_CheckTable_Users = 'CREATE TABLE IF NOT EXISTS $(usertable) (id INT AUTO_INCREMENT, oidc_provider VARCHAR(50), oidc_subject VARCHAR(150), emailaddress VARCHAR(150), name VARCHAR(150), salt VARCHAR(43), pwd VARCHAR(86), PRIMARY KEY (id))';
-  SQL_CheckTable_Grants = 'CREATE TABLE IF NOT EXISTS dwl_oauth2_grants (id INT AUTO_INCREMENT, token VARCHAR(50), user_id INT, client_id INT, scope TEXT, expirationtime BIGINT, refreshtoken_order INT, id_token TEXT, PRIMARY KEY (id))';
+  SQL_CheckTable_Grants = 'CREATE TABLE IF NOT EXISTS dwl_oauth2_grants (id INT AUTO_INCREMENT, token VARCHAR(50), user_id INT, client_id INT, expirationtime BIGINT, refreshtoken_order INT, id_token TEXT, PRIMARY KEY (id))';
 begin
   inherited Configure(Params);
   FProviders := TObjectList<TOIDC_Provider>.Create;
@@ -873,7 +873,7 @@ end;
 
 class function THandler_OAuth2.Post_token_handle_authorization_code(const State: PdwlHTTPHandlingState; var UserID: integer; RequestedScopes: TStringList; var client_id, AuthorizeNonce, GrantToken: string): boolean;
 const
-  SQL_Create_Grant = 'INSERT INTO dwl_oauth2_grants (token, user_id, client_id, expirationtime, refreshtoken_order, scope, id_token) VALUES (?, ?, ?, ?, ?, ?, ?)';
+  SQL_Create_Grant = 'INSERT INTO dwl_oauth2_grants (token, user_id, client_id, expirationtime, refreshtoken_order, id_token) VALUES (?, ?, ?, ?, ?, ?)';
   SQL_Get_User_ByProviderAndSubject = 'SELECT id FROM $(usertable) WHERE oidc_provider=? and oidc_subject=?';
   SQL_Create_User = 'INSERT INTO $(usertable) (oidc_provider, oidc_subject, emailaddress, name) VALUES (?, ?, ?, ?)';
   SQL_Create_UserScope = 'INSERT INTO dwl_oauth2_userscopes (user_id, scope) VALUES (?, ?)';
@@ -992,11 +992,10 @@ begin
     Cmd.Parameters.SetIntegerDataBinding(2, AuthSession.internal_clientid);
     Cmd.Parameters.SetBigIntegerDataBinding(3, TUnixEpoch.Now+GRANT_DURATION);
     Cmd.Parameters.SetIntegerDataBinding(4, 1); // refreshtoken order=1
-    Cmd.Parameters.SetTextDataBinding(5, AuthSession.client_scope);
     if AuthSession.provider_idtoken<>nil then
-      Cmd.Parameters.SetTextDataBinding(6, AuthSession.provider_idtoken.Payload.ToJSON)
+      Cmd.Parameters.SetTextDataBinding(5, AuthSession.provider_idtoken.Payload.ToJSON)
     else
-      Cmd.Parameters.SetNullDataBinding(6);
+      Cmd.Parameters.SetNullDataBinding(5);
     Cmd.Execute;
   finally
     AuthSession.Free;
@@ -1049,7 +1048,7 @@ end;
 class function THandler_OAuth2.Post_token_handle_refresh_token(const State: PdwlHTTPHandlingState; var UserID, Refreshtoken_Order: integer; RequestedScopes: TStringList; var GrantToken: string): boolean;
 const
   SQL_Set_Grant_RefreshTokenOrderAndExpiration = 'UPDATE dwl_oauth2_grants SET refreshtoken_order=?, expirationtime=? WHERE id=?';
-  SQL_Get_Grant = 'SELECT g.id, g.user_id, c.client_id, g.expirationtime, g.refreshtoken_order, g.scope FROM dwl_oauth2_grants g LEFT JOIN dwl_oauth2_clients c on c.id=g.client_id WHERE token=?';
+  SQL_Get_Grant = 'SELECT g.id, g.user_id, c.client_id, g.expirationtime, g.refreshtoken_order FROM dwl_oauth2_grants g LEFT JOIN dwl_oauth2_clients c on c.id=g.client_id WHERE token=?';
   SQL_Del_Grant = 'DELETE FROM dwl_oauth2_grants WHERE id=?';
 begin
   Result := false;
@@ -1115,11 +1114,6 @@ begin
     RequestedScopes.DelimitedText := JWT.Payload.Values[jwt_key_SCOPE];
     RefreshToken_Order := Cmd.Reader.GetInteger(4);
     var GrantID := Cmd.Reader.GetInteger(0);
-    if JWT.Payload.Values[jwt_key_SCOPE]<>Cmd.Reader.GetString(5) then
-    begin
-      HandlingError(State, 'invalid scope');
-      Exit;
-    end;
     if JWT.Payload.IntValues[jwt_key_ORDER]<>RefreshToken_Order then
     begin
       // if we for any reason receive a refreshtoken out of sync, the grant is
