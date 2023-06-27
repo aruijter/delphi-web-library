@@ -30,3 +30,5 @@ package/DiscoIDE/DisCoIde.res
 app/tools/cocon/CoCon.res
 app/tools/DiscoAgent/Win64/
 app/tools/DisCoAgent/DisCoAgent.res
+app/dll/DaJson/DaJson.res
+app/dll/DaJson/Win64/
