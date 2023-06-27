@@ -460,7 +460,8 @@ implementation
 
 uses
   System.SysUtils, System.Generics.Defaults,
-  System.TypInfo, System.Classes, DWL.Rtti.Utils, DWL.ConvUtils;
+  System.TypInfo, System.Classes, DWL.Rtti.Utils, DWL.ConvUtils,
+  System.NetEncoding;
 
 type
   TdwlMetaKey = class
@@ -601,7 +602,7 @@ begin
   var Enumerator := FParams.GetEnumerator;
   try
     while Enumerator.MoveNext do
-      Result := Result+Enumerator.Current.Key+'='+Enumerator.Current.Value.ToString+#13#10;
+      Result := Result+Enumerator.Current.Key+'='+TNetEncoding.URL.Encode(Enumerator.Current.Value.ToString)+#13#10;
   finally
     Enumerator.Free;
   end;
@@ -930,7 +931,7 @@ begin
   try
     Lines.Text := NameValueLines;
     for var i := 0 to Lines.Count-1 do
-      WriteValue(Lines.Names[i], Lines.Values[Lines.Names[i]])
+      WriteValue(Lines.Names[i], TNetEncoding.URL.Decode(Lines.Values[Lines.Names[i]]))
   finally
     Lines.Free;
   end;
