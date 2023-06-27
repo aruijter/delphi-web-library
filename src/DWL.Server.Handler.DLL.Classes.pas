@@ -69,9 +69,17 @@ type
     /// </summary>
     class function Response_JSON(const State: PdwlHTTPHandlingState): TJSONObject;
     /// <summary>
-    ///   The JSON Node to fill with result Data
+    ///   The JSON Object Node to fill with result Data
     /// </summary>
     class function JSON_Data(const State: PdwlHTTPHandlingState): TJSONObject;
+    /// <summary>
+    ///   The JSON Array Node to fill with result Data
+    /// </summary>
+    class function JSON_Data_Array(const State: PdwlHTTPHandlingState): TJSONArray;
+    /// <summary>
+    ///   The JSON Array Node to fill with result Data
+    /// </summary>
+    class function JSON_Meta_Object(const State: PdwlHTTPHandlingState): TJSONObject;
     /// <summary>
     ///   Sets then JSON content regarding success true/false <br />
     /// </summary>
@@ -257,7 +265,10 @@ begin
   begin
     if PBaseInternalHandlingStructure(State._InternalHandlingStructure).Response_JSON<>nil then
     begin
-      State.SetContentText(PBaseInternalHandlingStructure(State._InternalHandlingStructure).Response_JSON.ToJSON, CONTENT_TYPE_JSON);
+      State.SetContentText(PBaseInternalHandlingStructure(State._InternalHandlingStructure).Response_JSON.ToJSON, '');
+      var ContentType: string;
+      if not State.TryGetResponseHeaderValue(HTTP_FIELD_CONTENT_TYPE, ContentType) then
+        State.SetContentType(CONTENT_TYPE_JSON, CHARSET_UTF8);
       PBaseInternalHandlingStructure(State._InternalHandlingStructure).Response_JSON.Free;
     end;
     if PBaseInternalHandlingStructure(State._InternalHandlingStructure).Params<>nil then
@@ -425,14 +436,45 @@ end;
 
 class function TdwlDLLHandling.JSON_Data(const State: PdwlHTTPHandlingState): TJSONObject;
 begin
-  Result := TJSONObject(Response_JSON(State).GetValue('data'));
-  if Result=nil then
+  var JsonVal := Response_JSON(State).GetValue('data');
+  if (JsonVal<>nil) and (not (JsonVal is TJSONObject)) then
+    raise Exception.Create('Root data is not an TJSONObject');
+  if JsonVal=nil then
   begin
     Result := TJSONObject.Create;
     Response_JSON(State).AddPair('data', Result)
   end
   else
-    Assert(Result is TJSONObject);
+    Result := TJSONObject(JsonVal);
+end;
+
+class function TdwlDLLHandling.JSON_Data_Array(const State: PdwlHTTPHandlingState): TJSONArray;
+begin
+  var JsonVal := Response_JSON(State).GetValue('data');
+  if (JsonVal<>nil) and (not (JsonVal is TJSONArray)) then
+    raise Exception.Create('Root data is not an TJSONArray');
+  if JsonVal=nil then
+  begin
+    Result := TJSONArray.Create;
+    Response_JSON(State).AddPair('data', Result)
+  end
+  else
+    Result := TJSONArray(JsonVal);
+end;
+
+class function TdwlDLLHandling.JSON_Meta_Object(
+  const State: PdwlHTTPHandlingState): TJSONObject;
+begin
+  var JsonVal := Response_JSON(State).GetValue('meta');
+  if (JsonVal<>nil) and (not (JsonVal is TJSONObject)) then
+    raise Exception.Create('Root meta is not an TJSONObject');
+  if JsonVal=nil then
+  begin
+    Result := TJSONObject.Create;
+    Response_JSON(State).AddPair('meta', Result)
+  end
+  else
+    Result := TJSONObject(JsonVal);
 end;
 
 class procedure TdwlDLLHandling.JSON_Set_Success(const State: PdwlHTTPHandlingState; IsSuccess: boolean);

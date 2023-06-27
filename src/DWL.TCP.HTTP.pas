@@ -178,9 +178,10 @@ begin
     begin
       P := pos('=', Param);
       if P>1 then
-        RequestParams.Add(TNetEncoding.URL.Decode(Copy(Param, 1, P-1))+'='+TNetEncoding.URL.Decode(Copy(Param, P+1, MaxInt)))
+        // leave the value undecoded, to be able to use stringlist with all provided string values
+        RequestParams.Add(TNetEncoding.URL.Decode(Copy(Param, 1, P-1))+'='+Copy(Param, P+1, MaxInt))
       else
-        RequestParams.Add(Param);
+        RequestParams.Add(TNetEncoding.URL.Decode(Param));
     end;
   end;
 end;

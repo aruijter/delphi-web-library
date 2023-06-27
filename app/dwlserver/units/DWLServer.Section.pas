@@ -26,9 +26,9 @@ type
     procedure Start_ReadParameters_CommandLine_IniFile(ConfigParams: IdwlParams);
     procedure Start_ReadParameters_MySQL(Session: IdwlMySQLSession; ConfigParams: IdwlParams);
     procedure Start_ProcessBindings(ConfigParams: IdwlParams);
-    procedure Start_LoadDLLHandlers(ConfigParams: IdwlParams);
+    procedure Start_LoadDLLHandlers(Session: IdwlMySQLSession; ConfigParams: IdwlParams);
     procedure Start_Enable_Logging(ConfigParams: IdwlParams);
-    procedure Start_LoadURIAliases(ConfigParams: IdwlParams);
+    procedure Start_LoadURIAliases(Session: IdwlMySQLSession);
   private
     FServer: TDWLServer;
     class procedure CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams);
@@ -243,25 +243,42 @@ begin
   end;
 end;
 
-procedure TDWLServerSection.Start_LoadDLLHandlers(ConfigParams: IdwlParams);
+procedure TDWLServerSection.Start_LoadDLLHandlers(Session: IdwlMySQLSession; ConfigParams: IdwlParams);
 const
   SQL_GetHandlers =
-    'SELECT endpoint, handler_uri, params FROM dwl_handlers ORDER BY open_order';
-  GetHandlers_Idx_endpoint=0; GetHandlers_Idx_handler_uri=1; GetHandlers_Idx_params=2;
+    'SELECT id, endpoint, handler_uri, params FROM dwl_handlers ORDER BY open_order';
+  GetHandlers_Idx_id=0; GetHandlers_Idx_endpoint=1; GetHandlers_Idx_handler_uri=2; GetHandlers_Idx_params=3;
+  SQL_GetHandlerParameters =
+    'SELECT `key`, `value` FROM dwl_handler_parameters WHERE handler_id=?';
+  GetHandlerParameters_Idx_key=0; GetHandlerParameters_Idx_value=1;
+  GetHandlerParameters_Binding_Handler_ID=0;
 begin
   try
     var DLLBasePath := ConfigParams.StrValue(Param_DLLBasePath, ExtractFileDir(ParamStr(0)));
-    var Cmd := New_MySQLSession(ConfigParams).CreateCommand(SQL_GetHandlers);
+    var Cmd := Session.CreateCommand(SQL_GetHandlers);
     Cmd.Execute;
     while Cmd.Reader.Read do
     begin
       var EndPoint := '';
       try
+        var Handler_Id := Cmd.Reader.GetInteger(GetHandlers_Idx_id);
         EndPoint := Cmd.Reader.GetString(GetHandlers_Idx_endpoint);
         var URI := Cmd.Reader.GetString(GetHandlers_Idx_handler_uri);
         var HandlerParams := New_Params;
         ConfigParams.AssignTo(HandlerParams);
+        // get parameters from the simple row based NameValue memo
         HandlerParams.WriteNameValueText(Cmd.Reader.GetString(GetHandlers_Idx_params ,true));
+        // get parameters from the newer dwl_handler_parameters table
+        var CmdPrm := Session.CreateCommand(SQL_GetHandlerParameters);
+        CmdPrm.Parameters.SetIntegerDataBinding(GetHandlerParameters_Binding_Handler_ID, Handler_Id);
+        CmdPrm.Execute;
+        while CmdPrm.Reader.Read do
+        begin
+          HandlerParams.WriteValue(
+            CmdPrm.Reader.GetString(GetHandlerParameters_Idx_key),
+            CmdPrm.Reader.GetString(GetHandlerParameters_Idx_value));
+        end;
+        // if not enabled then skip loading
         if not HandlerParams.BoolValue(Param_Enabled, true) then
           Continue;
         HandlerParams.WriteValue(Param_Endpoint, Endpoint);
@@ -315,7 +332,7 @@ begin
   end;
 end;
 
-procedure TDWLServerSection.Start_LoadURIAliases(ConfigParams: IdwlParams);
+procedure TDWLServerSection.Start_LoadURIAliases(Session: IdwlMySQLSession);
 const
   SQL_Get_UriAliases =
     'SELECT alias, uri FROM dwl_urialiases';
@@ -323,7 +340,7 @@ const
 begin
   try
     FServer.ClearURIAliases;
-    var Cmd := New_MySQLSession(ConfigParams).CreateCommand(SQL_Get_UriAliases);
+    var Cmd := Session.CreateCommand(SQL_Get_UriAliases);
     Cmd.Execute;
     while Cmd.Reader.Read do
       FServer.AddURIAlias(Cmd.Reader.GetString(Get_UriAliases_Idx_alias), Cmd.Reader.GetString(Get_UriAliases_Idx_uri));
@@ -354,7 +371,7 @@ begin
       DWL.Server.AssignServerProcs;
       CheckACMEConfiguration(FServer, ConfigParams);
       Start_ProcessBindings(ConfigParams);
-      Start_LoadURIAliases(ConfigParams);
+      Start_LoadURIAliases(Session);
 
       if not FServer.IsSecure then
       begin
@@ -372,7 +389,7 @@ begin
       if FServer.IsSecure or FServer.OnlyLocalConnections then
       begin
         FServer.RegisterHandler(EndpointURI_Mail,  TdwlHTTPHandler_Mail.Create(ConfigParams));
-        Start_LoadDLLHandlers(ConfigParams)
+        Start_LoadDLLHandlers(Session, ConfigParams)
       end
       else
         TdwlLogger.Log('Skipped loading of handlers because server is not secure', lsWarning, TOPIC_DLL);
@@ -401,6 +418,8 @@ function TDWLServerSection.Start_InitDataBase(ConfigParams: IdwlParams): IdwlMyS
 const
   SQL_CheckTable_Handlers =
     'CREATE TABLE IF NOT EXISTS dwl_handlers (id INT UNSIGNED AUTO_INCREMENT, open_order SMALLINT, endpoint VARCHAR(50), handler_uri VARCHAR(255), `params` TEXT NULL, INDEX `primaryindex` (`id`))';
+  SQL_CheckTable_Handler_Parameters =
+    'CREATE TABLE IF NOT EXISTS dwl_handler_parameters (Id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT, handler_id SMALLINT UNSIGNED NOT NULL, `Key` VARCHAR(50) NOT NULL, `Value` TEXT, PRIMARY KEY(Id), UNIQUE INDEX HandlerKeyIndex (`handler_id`, `Key`))';
   SQL_CheckTable_UriAliases =
     'CREATE TABLE IF NOT EXISTS dwl_urialiases (id INT UNSIGNED AUTO_INCREMENT, alias VARCHAR(255), uri VARCHAR(255), PRIMARY KEY (id))';
   SQL_CheckTable_Parameters =
@@ -421,6 +440,7 @@ begin
   ConfigParams.ClearKey(Param_TestConnection);
   // create tables (if needed)
   Result.CreateCommand(SQL_CheckTable_Handlers).Execute;
+  Result.CreateCommand(SQL_CheckTable_Handler_Parameters).Execute;
   Result.CreateCommand(SQL_CheckTable_UriAliases).Execute;
   Result.CreateCommand(SQL_CheckTable_Parameters).Execute;
   Result.CreateCommand(SQL_CheckTable_HostNames).Execute;

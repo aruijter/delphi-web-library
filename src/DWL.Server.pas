@@ -115,7 +115,7 @@ uses
   Winapi.Windows, Winapi.ShLwApi, DWL.Server.Consts,
   DWL.HTTP.Consts, DWL.Mail.Queue, System.Math, DWL.OpenSSL,
   DWL.TCP.SSL, Winapi.WinInet, DWL.Server.Utils, IdContext,
-  DWL.Server.Globals;
+  DWL.Server.Globals, System.NetEncoding;
 
 type
   TdwlHTTPHandler_PassThrough = class(TdwlHTTPHandler)
@@ -482,25 +482,34 @@ function State_GetRequestParam(const State: PdwlHTTPHandlingState; const Key: PW
 begin
   var ValueFound: boolean := false;;
   var FoundStr: string;
-  // Keep in mind do not change Value if Result is false
+  // the values in params are URLEncoded!
   var Params := PServerStructure(State._InternalServerStructure).Request.RequestParams;
-  if Copy(Key, Length(Key)-1, 2)='[]' then // handle as array!
+  // Keep in mind do not change Value if Result is false
+  if Key='*' then
   begin
-    var Vals := '';
-    for var i := 0 to Params.Count-1 do
+    FoundStr := Params.Text;
+    ValueFound := true;
+  end;
+  if not ValueFound then
+  begin
+    if Copy(Key, Length(Key)-1, 2)='[]' then // handle as array!
     begin
-      if SameText(Params.Names[i], Key) then
-        Vals := Vals+','+Params.ValueFromIndex[i];
+      var Vals := '';
+      for var i := 0 to Params.Count-1 do
+      begin
+        if SameText(Params.Names[i], Key) then
+          Vals := Vals+','+TNetEncoding.URL.Decode(Params.ValueFromIndex[i]);
+      end;
+      ValueFound := Vals<>'';
+      if ValueFound then
+        FoundStr := Copy(Vals, 2, MaxInt);
     end;
-    ValueFound := Vals<>'';
-    if ValueFound then
-      FoundStr := Copy(Vals, 2, MaxInt);
   end;
   if not ValueFound then
   begin
     ValueFound := Params.IndexOfName(Key)>=0;
     if ValueFound then
-      FoundStr := Params.Values[Key];
+      FoundStr := TNetEncoding.URL.Decode(Params.Values[Key]);
   end;
   if not ValueFound then
   begin
@@ -559,6 +568,22 @@ begin
   ValueCharCnt := FoundStrCharCount;
 end;
 
+function State_GetResponseHeaderValue(const State: PdwlHTTPHandlingState; const Key: PWideChar; const Value: PWideChar; var  ValueCharCnt: integer): integer; stdcall;
+begin
+  var FoundStr := PServerStructure(State._InternalServerStructure).Request.ResponseHeaders.StrValue(Key);
+  if FoundStr='' then
+    Exit(0);
+  var FoundStrCharCount := Length(FoundStr);
+  if ValueCharCnt>=FoundStrCharCount then
+  begin
+    Result := 1;
+    Move(PWideChar(FoundStr)^, Value^, (FoundStrCharCount+1)*2);
+  end
+  else
+    Result := -1;
+  ValueCharCnt := FoundStrCharCount;
+end;
+
 function State_GetPostDataPtr(State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean; stdcall;
 begin
   var Stream := PServerStructure(State._InternalServerStructure).Request.RequestBodyStream;
@@ -579,6 +604,7 @@ begin
   serverProcs.ArrangeContentBufferProc := State_ArrangeContentBuffer;
   serverProcs.GetRequestParamProc := State_GetRequestParam;
   serverProcs.GetHeaderValueProc := State_GetHeaderValue;
+  serverProcs.GetResponseHeaderValueProc := State_GetResponseHeaderValue;
   serverProcs.GetPayloadPtrProc := State_GetPostDataPtr;
   serverProcs.SetHeaderValueProc := State_SetHeaderValue;
 //  serverProcs.ActivateWebSocketproc := State_ActivateWebSocket;

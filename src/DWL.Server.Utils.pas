@@ -1,5 +1,5 @@
 /// <summary>
-///   Utils to cnetralize common server functionality
+///   Utils to centralize common server functionality
 /// </summary>
 unit DWL.Server.Utils;
 
@@ -15,6 +15,7 @@ type
   TdwlHTTPHandlingStateHelper = record helper for TdwlHTTPHandlingState
     function TryGetRequestParamStr(const Key: string; var Value: string): boolean;
     function TryGetHeaderValue(const Key: string; var Value: string): boolean;
+    function TryGetResponseHeaderValue(const Key: string; var Value: string): boolean;
     /// <summary>
     ///   an easy way to set the contenttype when handling a request. This
     ///   function uses the server callback function to set the contenttype of
@@ -69,6 +70,19 @@ begin
   end;
 end;
 
+function TdwlHTTPHandlingStateHelper.TryGetResponseHeaderValue(const Key: string; var Value: string): boolean;
+begin
+  var CharCount := 0;
+  var Res := serverProcs.GetResponseHeaderValueProc(@Self, PWideChar(Key), nil, CharCount);
+  Result := Res=-1;
+  if Result then
+  begin
+    SetLength(Value, CharCount);
+    Res := serverProcs.GetResponseHeaderValueProc(@Self, PWideChar(Key), PWideChar(Value), CharCount);
+    Result := (Res=1) and (CharCount=Length(Value));
+  end;
+end;
+
 function TdwlHTTPHandlingStateHelper.TryGetRequestParamStr(const Key: string; var Value: string): boolean;
 begin
   var CharCount := 0;
@@ -84,7 +98,8 @@ end;
 
 procedure TdwlHTTPHandlingStateHelper.SetContentText(const BodyStr: string; const ContentType: string=CONTENT_TYPE_HTML);
 begin
-  Self.SetContentType(ContentType, CHARSET_UTF8);
+  if ContentType<>'' then
+    Self.SetContentType(ContentType, CHARSET_UTF8);
   var ContentLength := WideCharToMultiByte(CP_UTF8, 0, PWideChar(BodyStr), BodyStr.Length, nil, 0, nil, nil);
   var ContentBuffer := nil;
   serverProcs.ArrangeContentBufferProc(@Self, ContentBuffer, ContentLength);

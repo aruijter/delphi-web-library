@@ -90,6 +90,11 @@ type
     ///   did not succeed
     /// </summary>
     ActivateWebSocketproc: TdwlActivateWebSocketProc;
+    /// <summary>
+    ///   a callback function that can be used to get a Header Value from
+    ///   response
+    /// </summary>
+    GetResponseHeaderValueProc: TdwlGetHeaderValueProc;
   end;
 
 
