@@ -4,7 +4,7 @@ interface
 
 uses
   DWL.TCP.Server, Winapi.Winsock2, System.Generics.Collections, DWL.Params,
-  System.Classes, DWL.TCP;
+  System.Classes, DWL.TCP, Winapi.WinInet;
 
 type
   TdwlHTTPServerConnectionState = (hcsReadRequest, hcsReadHeader, hcsReadRequestBody, hcsProcessing, hcsClosing, hcsError);
@@ -47,6 +47,7 @@ type
     procedure ReadPendingLine;
     procedure ReadProcessRequest;
     procedure ReadProcessURI;
+    procedure ReadError(const ErrorText: string; NewStatusCode: integer = HTTP_STATUS_BAD_REQUEST);
   public
     property RequestMethod: byte read FRequestMethod;
     property RequestBodyStream: TMemoryStream read FRequestBodyStream;
@@ -65,8 +66,8 @@ type
 implementation
 
 uses
-  Winapi.Windows, System.SysUtils, System.NetEncoding, Winapi.WinInet,
-  System.StrUtils, DWL.HTTP.Utils, DWL.HTTP.Consts;
+  Winapi.Windows, System.SysUtils, System.NetEncoding,
+  System.StrUtils, DWL.HTTP.Utils, DWL.HTTP.Consts, DWL.Logging;
 
 { TdwlCustomHTTPServer }
 
@@ -115,6 +116,15 @@ begin
   end;
 end;
 
+procedure TdwlHTTPSocket.ReadError(const ErrorText: string; NewStatusCode: integer = HTTP_STATUS_BAD_REQUEST);
+begin
+  FState := hcsError;
+  FStatusCode := NewStatusCode;
+  if FReadError<>'' then
+    FReadError := FReadError+'<br />' ;
+  FReadError := FReadError+ ErrorText;
+end;
+
 procedure TdwlHTTPSocket.ClearCurrentRequest;
 begin
   FRequestParams.Clear;
@@ -157,11 +167,15 @@ begin
     FUri := Copy(FUri, 1, P-1);
     for var Param in Query do
     begin
-      P := pos('=', Param);
-      if P>1 then
-        RequestParams.Add(TNetEncoding.URL.Decode(Copy(Param, 1, P-1))+'='+TNetEncoding.URL.Decode(Copy(Param, P+1, MaxInt)))
-      else
-        RequestParams.Add(Param);
+      try
+        P := pos('=', Param);
+        if P>1 then
+          RequestParams.Add(TNetEncoding.URL.Decode(Copy(Param, 1, P-1))+'='+TNetEncoding.URL.Decode(Copy(Param, P+1, MaxInt)))
+        else
+          RequestParams.Add(TNetEncoding.URL.Decode(Param));
+      except
+        ReadError('Error Decoding URL Parameter: '+Param);
+      end;
     end;
   end;
   var ContTypeHeader := TdwlHTTPUtils.ParseHTTPFieldValue(RequestHeaders.StrValue(HTTP_FIELD_CONTENT_TYPE));
@@ -237,9 +251,7 @@ begin
   var TransferEncoding := FRequestHeaders.StrValue(HTTP_FIELD_TRANSFER_ENCODING);
   if SameText(TransferEncoding, TRANSFER_ENCODING_CHUNCKED) then
   begin
-    FState := hcsError;
-    FStatusCode := HTTP_STATUS_NOT_SUPPORTED;
-    FReadError := 'Transfer encoding chuncked not supported';
+    ReadError('Transfer encoding chuncked not supported', HTTP_STATUS_NOT_SUPPORTED);
     Exit;
   end;
   if not FRequestHeaders.TryGetIntValue(HTTP_FIELD_CONTENT_LENGTH, FContentLength) then
@@ -269,9 +281,7 @@ begin
       var Parts := FPendingLine.Split([' ']);
       if (High(Parts)<>2) then
       begin
-        FState := hcsError;
-        FStatusCode := HTTP_STATUS_BAD_REQUEST;
-        FReadError := 'First line not containing three elements';
+        ReadError('First line not containing three elements');
         Exit;
       end;
       if Copy(Parts[2], 1, 8)='HTTP/1.1' then
@@ -279,21 +289,17 @@ begin
       else
       begin
         if Copy(Parts[2], 1, 8)='HTTP/1.0' then
-          FProtocol := HTTP11
+          FProtocol := HTTP10
         else
         begin
-          FState := hcsError;
-          FStatusCode := HTTP_STATUS_VERSION_NOT_SUP;
-          FReadError := 'Cannot handle protocol '+Parts[2];
+          ReadError('Cannot handle protocol '+Parts[2], HTTP_STATUS_VERSION_NOT_SUP);
           Exit;
         end;
       end;
       var Method := TdwlHTTPUtils.StringTodwlhttpMethod(Parts[0]);
       if Method<0 then
       begin
-        FState := hcsError;
-        FStatusCode := HTTP_STATUS_VERSION_NOT_SUP;
-        FReadError := 'Cannot handle method '+Parts[0];
+        ReadError('Cannot handle method '+Parts[0], HTTP_STATUS_NOT_SUPPORTED);
         Exit;
       end
       else
@@ -309,11 +315,7 @@ begin
       begin
         var p := pos(':', FPendingLine);
         if p<2 then
-        begin
-          FReadError := 'Missing colon in header line';
-          FStatusCode := HTTP_STATUS_BAD_REQUEST;
-          FState := hcsError;
-        end
+          ReadError('Missing colon in header line')
         else
         begin
           // RFC2616 describes that headers with same name must be concatenated, not overwritten
@@ -332,53 +334,63 @@ end;
 
 procedure TdwlHTTPSocket.ReadProcessRequest;
 begin
-  FTickStart := GetTickCount64;
-  var KeepAlive := (FState<>hcsError) and (FProtocol<>HTTP10) and SameText(RequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE);
-  if FProtocol<>HTTP10 then
-    FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));
-  if FResponseDataStream=nil then
-    FResponseDataStream := TMemoryStream.Create;
-  if FState=hcsError then
-  begin
-    if FReadError<>'' then
-    begin
-      FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_TYPE, CONTENT_TYPE_HTML);
-      var ErrStr := ansistring('<html><body><h1>'+TNetEncoding.HTML.Encode(FReadError)+'</h1></body></html>');
-      FResponseDataStream.WriteBuffer(PAnsiChar(ErrStr)^, Length(ErrStr));
-    end;
-  end
-  else
-  begin
+  var KeepAlive: boolean;
+  try
+    FTickStart := GetTickCount64;
+    KeepAlive := (FState<>hcsError) and (FProtocol<>HTTP10) and SameText(RequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE);
+    if FProtocol<>HTTP10 then
+      FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));
+    if FResponseDataStream=nil then
+      FResponseDataStream := TMemoryStream.Create;
     // extract request parameters
-    ReadProcessURI;
-    // let the request be processed bij the server implementation
-    if not TdwlCustomHTTPServer(FService).HandleRequest(Self) then
-      StatusCode := HTTP_STATUS_NOT_FOUND;
+    if FState<>hcsError then
+      ReadProcessURI;
+    if FState=hcsError then
+    begin
+      if FReadError<>'' then
+      begin
+        FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_TYPE, CONTENT_TYPE_HTML);
+        var ErrStr := ansistring('<html><body><h1>'+TNetEncoding.HTML.Encode(FReadError)+'</h1></body></html>');
+        FResponseDataStream.WriteBuffer(PAnsiChar(ErrStr)^, Length(ErrStr));
+      end;
+    end
+    else
+    begin
+      // let the request be processed bij the server implementation
+      if not TdwlCustomHTTPServer(FService).HandleRequest(Self) then
+        StatusCode := HTTP_STATUS_NOT_FOUND;
+    end;
+    // Remember to not write Content-Length when method CONNECT is added later
+    FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_LENGTH, FResponseDataStream.Size.ToString);
+    // Write HTTP protocol line
+    WriteStr('HTTP/1.');
+    case FProtocol of
+      HTTP10: WriteStr('0');
+      HTTP11: WriteStr('1');
+    end;
+    WriteStr(' ');
+    WriteStr(FStatusCode.ToString);
+    WriteStr(' ');
+    WriteLine(TdwlHTTPUtils.StatusCodeDescription(FStatusCode));
+    // write headers
+    var HeaderENum := FResponseHeaders.GetEnumerator;
+    while HeaderEnum.MoveNext do
+      WriteLine(HeaderENum.CurrentKey+': '+HeaderENum.CurrentValue.ToString);
+    WriteLine; // end of headers
+    // write body
+    if FResponseDataStream.Size>0 then
+      WriteBuf(PByte(FResponseDataStream.Memory), FResponseDataStream.Size);
+    // finalize
+    FlushWrites(not KeepAlive);
+    if Assigned(TdwlCustomHTTPServer(FService).OnLog) then
+      TdwlCustomHTTPServer(FService).OnLog(Self);
+  except
+    on E: Exception do
+    begin
+      KeepAlive := false;
+      TdwlLogger.Log('Error in TdwlHTTPSocket.ReadProcessRequest: '+E.Message,lsError);
+    end;
   end;
-  // Remember to not write Content-Length when method CONNECT is added later
-  FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_LENGTH, FResponseDataStream.Size.ToString);
-  // Write HTTP protocol line
-  WriteStr('HTTP/1.');
-  case FProtocol of
-    HTTP10: WriteStr('0');
-    HTTP11: WriteStr('1');
-  end;
-  WriteStr(' ');
-  WriteStr(FStatusCode.ToString);
-  WriteStr(' ');
-  WriteLine(TdwlHTTPUtils.StatusCodeDescription(FStatusCode));
-  // write headers
-  var HeaderENum := FResponseHeaders.GetEnumerator;
-  while HeaderEnum.MoveNext do
-    WriteLine(HeaderENum.CurrentKey+': '+HeaderENum.CurrentValue.ToString);
-  WriteLine; // end of headers
-  // write body
-  if FResponseDataStream.Size>0 then
-    WriteBuf(PByte(FResponseDataStream.Memory), FResponseDataStream.Size);
-  // finalize
-  FlushWrites(not KeepAlive);
-  if Assigned(TdwlCustomHTTPServer(FService).OnLog) then
-    TdwlCustomHTTPServer(FService).OnLog(Self);
   if KeepAlive then
     ClearCurrentRequest
   else
