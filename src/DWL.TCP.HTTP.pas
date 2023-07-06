@@ -336,54 +336,58 @@ procedure TdwlHTTPSocket.ReadProcessRequest;
 begin
   var KeepAlive: boolean;
   try
-    FTickStart := GetTickCount64;
-    KeepAlive := (FState<>hcsError) and (FProtocol<>HTTP10) and SameText(RequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE);
-    if FProtocol<>HTTP10 then
-      FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));
-    if FResponseDataStream=nil then
-      FResponseDataStream := TMemoryStream.Create;
-    // extract request parameters
-    if FState<>hcsError then
-      ReadProcessURI;
-    if FState=hcsError then
-    begin
-      if FReadError<>'' then
+    try
+      FTickStart := GetTickCount64;
+      KeepAlive := (FState<>hcsError) and (FProtocol<>HTTP10) and SameText(RequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE);
+      if FProtocol<>HTTP10 then
+        FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));
+      if FResponseDataStream=nil then
+        FResponseDataStream := TMemoryStream.Create;
+      // extract request parameters
+      if FState<>hcsError then
+        ReadProcessURI;
+      if FState=hcsError then
       begin
-        FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_TYPE, CONTENT_TYPE_HTML);
-        var ErrStr := ansistring('<html><body><h1>'+TNetEncoding.HTML.Encode(FReadError)+'</h1></body></html>');
-        FResponseDataStream.WriteBuffer(PAnsiChar(ErrStr)^, Length(ErrStr));
+        if FReadError<>'' then
+        begin
+          FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_TYPE, CONTENT_TYPE_HTML);
+          var ErrStr := ansistring('<html><body><h1>'+TNetEncoding.HTML.Encode(FReadError)+'</h1></body></html>');
+          FResponseDataStream.WriteBuffer(PAnsiChar(ErrStr)^, Length(ErrStr));
+        end;
+      end
+      else
+      begin
+        // let the request be processed bij the server implementation
+        if not TdwlCustomHTTPServer(FService).HandleRequest(Self) then
+          StatusCode := HTTP_STATUS_NOT_FOUND;
       end;
-    end
-    else
-    begin
-      // let the request be processed bij the server implementation
-      if not TdwlCustomHTTPServer(FService).HandleRequest(Self) then
-        StatusCode := HTTP_STATUS_NOT_FOUND;
+      // Remember to not write Content-Length when method CONNECT is added later
+      FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_LENGTH, FResponseDataStream.Size.ToString);
+      // Write HTTP protocol line
+      WriteStr('HTTP/1.');
+      case FProtocol of
+        HTTP10: WriteStr('0');
+        HTTP11: WriteStr('1');
+      end;
+      WriteStr(' ');
+      WriteStr(FStatusCode.ToString);
+      WriteStr(' ');
+      WriteLine(TdwlHTTPUtils.StatusCodeDescription(FStatusCode));
+      // write headers
+      var HeaderENum := FResponseHeaders.GetEnumerator;
+      while HeaderEnum.MoveNext do
+        WriteLine(HeaderENum.CurrentKey+': '+HeaderENum.CurrentValue.ToString);
+      WriteLine; // end of headers
+      // write body
+      if FResponseDataStream.Size>0 then
+        WriteBuf(PByte(FResponseDataStream.Memory), FResponseDataStream.Size);
+      // finalize
+      FlushWrites(not KeepAlive);
+    finally
+      // always try to log the request
+      if Assigned(TdwlCustomHTTPServer(FService).OnLog) then
+        TdwlCustomHTTPServer(FService).OnLog(Self);
     end;
-    // Remember to not write Content-Length when method CONNECT is added later
-    FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_LENGTH, FResponseDataStream.Size.ToString);
-    // Write HTTP protocol line
-    WriteStr('HTTP/1.');
-    case FProtocol of
-      HTTP10: WriteStr('0');
-      HTTP11: WriteStr('1');
-    end;
-    WriteStr(' ');
-    WriteStr(FStatusCode.ToString);
-    WriteStr(' ');
-    WriteLine(TdwlHTTPUtils.StatusCodeDescription(FStatusCode));
-    // write headers
-    var HeaderENum := FResponseHeaders.GetEnumerator;
-    while HeaderEnum.MoveNext do
-      WriteLine(HeaderENum.CurrentKey+': '+HeaderENum.CurrentValue.ToString);
-    WriteLine; // end of headers
-    // write body
-    if FResponseDataStream.Size>0 then
-      WriteBuf(PByte(FResponseDataStream.Memory), FResponseDataStream.Size);
-    // finalize
-    FlushWrites(not KeepAlive);
-    if Assigned(TdwlCustomHTTPServer(FService).OnLog) then
-      TdwlCustomHTTPServer(FService).OnLog(Self);
   except
     on E: Exception do
     begin
