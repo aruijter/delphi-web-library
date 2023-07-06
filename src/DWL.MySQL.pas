@@ -1003,21 +1003,31 @@ begin
 end;
 
 function TdwlMySQLConnection.PrepareStatement(const Query: UTF8String): PMYSQL_Stmt;
-begin
-  Result := mysql_stmt_init(FMySQL);
-  if Result=nil then
-    raise Exception.Create('Out Of Memory');
-  var ExecResult := mysql_stmt_prepare(Result, PUTF8String(Query), Length(Query));
-  // if server connection timed out, restore it....
-  if (ExecResult<>0) and (mysql_stmt_errno(Result)=CR_SERVER_GONE_ERROR) then
+  procedure InitStatement;
   begin
-    mysql_stmt_close(Result);
-    DoDisconnect;
-    DoConnect;
     Result := mysql_stmt_init(FMySQL);
     if Result=nil then
-      raise Exception.Create('Out Of Memory');
-    ExecResult := mysql_stmt_prepare(Result, PUTF8String(Query), Length(Query));
+      raise Exception.Create('mysql_stmt_init: out of memory');
+  end;
+begin
+  InitStatement;
+  var ExecResult := mysql_stmt_prepare(Result, PUTF8String(Query), Length(Query));
+  // if server connection timed out, restore it....
+  if (ExecResult<>0) then
+  begin
+    var ErrNo := mysql_stmt_errno(Result);
+    if (ErrNo=CR_SERVER_GONE_ERROR) or (ErrNo=CR_SERVER_LOST) then
+    begin
+      try
+        mysql_stmt_close(Result);
+      except
+        // this cleanup may never lead to code flow interruption
+      end;
+      DoDisconnect;
+      DoConnect;
+      InitStatement;
+      ExecResult := mysql_stmt_prepare(Result, PUTF8String(Query), Length(Query));
+    end;
   end;
   if ExecResult<>0 then
     raise Exception.Create('Failed preparing query: ' +string(Query)+#13#10+string(mysql_stmt_error(Result)));

@@ -90,6 +90,7 @@ const
 
 const
   CR_SERVER_GONE_ERROR = 2006;
+  CR_SERVER_LOST = 2013;
 
 type
   PMySQL = pointer;
