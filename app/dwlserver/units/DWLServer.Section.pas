@@ -47,7 +47,8 @@ uses
   DWL.Params.Consts, DWL.HTTP.Consts, DWL.ACME, DWL.OpenSSL,
   System.Math, DWL.TCP.Consts, System.StrUtils, Winapi.Windows,
   System.Threading, DWL.Logging.Callback, Winapi.ShLwApi, DWL.Mail.Queue,
-  DWL.Server.Handler.Mail, DWL.Server.Handler.DLL, Winapi.WinInet;
+  DWL.Server.Handler.Mail, DWL.Server.Handler.DLL, Winapi.WinInet,
+  System.NetEncoding;
 
 const
   TOPIC_BOOTSTRAP = 'bootstrap';
@@ -228,14 +229,18 @@ begin
     // clear sensitive information before logging
     Request.RequestParams.Values['password'] := '';
     // log request to table
+    var RequestParamsText: string := '';
+    var Prms := Request.RequestParams;
+    for var i := 0 to Prms.Count-1 do
+      RequestParamsText := RequestParamsText+Prms.Names[i]+'='+TNetEncoding.URL.Decode(Prms.ValueFromIndex[i])+#13#10;
     var Cmd := New_MySQLSession(FRequestLoggingParams).CreateCommand(SQL_InsertRequest);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Method, RequestMethodStr);
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_StatusCode, Request.StatusCode);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_IP_Remote, Request.Ip_Remote);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, Request.Uri);
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Min(High(word), Ticks));
-    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Header, Request.RequestHeaders.GetAsNameValueText);
-    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Params, Request.RequestParams.Text);
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Header, Request.RequestHeaders.GetAsNameValueText(false));
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Params, RequestParamsText);
     Cmd.Execute;
   except
     on E: Exception do

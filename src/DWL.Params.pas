@@ -364,7 +364,7 @@ type
     ///   pair, the key and the values of the pair are separated by an equal
     ///   sign (=)
     /// </summary>
-    function GetAsNameValueText: string;
+    function GetAsNameValueText(UrlEncodeValues: boolean=true): string;
     /// <summary>
     ///   Put the pairs from the store into a JSON Object,
     ///   the params are the pairs
@@ -522,7 +522,7 @@ type
     function ContainsKey(const Key: string): boolean;
     procedure AssignTo(Params: IdwlParams; Keys: TArray<string>); overload;
     procedure AssignTo(Params: IdwlParams); overload;
-    function GetAsNameValueText: string;
+    function GetAsNameValueText(UrlEncodeValues: boolean=true): string;
     procedure PutIntoJSONObject(JSONObject: TJSONObject);
     function GetEnumerator: IdwlParamsEnumerator;
     procedure WriteNameValueText(const NameValueLines: string);
@@ -596,13 +596,21 @@ begin
       Params.WriteValue(Key, V);
 end;
 
-function TdwlParams.GetAsNameValueText: string;
+function TdwlParams.GetAsNameValueText(UrlEncodeValues: boolean=true): string;
 begin
   Result := '';
   var Enumerator := FParams.GetEnumerator;
   try
-    while Enumerator.MoveNext do
-      Result := Result+Enumerator.Current.Key+'='+TNetEncoding.URL.Encode(Enumerator.Current.Value.ToString)+#13#10;
+    if UrlEncodeValues then
+    begin
+      while Enumerator.MoveNext do
+        Result := Result+Enumerator.Current.Key+'='+TNetEncoding.URL.Encode(Enumerator.Current.Value.ToString)+#13#10;
+    end
+    else
+    begin
+      while Enumerator.MoveNext do
+        Result := Result+Enumerator.Current.Key+'='+Enumerator.Current.Value.ToString+#13#10;
+    end;
   finally
     Enumerator.Free;
   end;
