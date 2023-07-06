@@ -1,6 +1,18 @@
 # Release Notes
 All notable (including breaking) changes to this project will be documented in this file.
 
+## Jul 6, 2023
+- DWL.Server: improved error handling and request logging
+- DWL.MySQL: improved connection handling
+
+## Jun 27, 2023
+- DWL.Params: GetAsNameValueText/WriteNameValueText now URL Encodes the values when (de)serializing
+- DWL.Server: added dwl_handler_parameters (and some improvements in handling of RequestParams)
+- DWL.StrUtils: added some Char modification functions
+
+## Jun 19, 2023
+- oAuth2: Removed scope checking while granting
+
 ## May 25, 2023
 - Corrected handling of (extreme) Unsigned values in MySQL
 - Added DWL Server Log Avoids.
