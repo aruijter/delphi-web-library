@@ -6,7 +6,7 @@ All notable (including breaking) changes to this project will be documented in t
 - DWL.MySQL: improved connection handling
 
 ## Jun 27, 2023
-- DWL.Params: GetAsNameValueText/WriteNameValueText now URL Encodes the values when (de)serializing
+- DWL.Params: GetAsNameValueText/WriteNameValueText now URL Encodes the values when (de)serializing. This is a breaking change, f.e. DWLServer and the DLLs must all be recompiled to adapt to the way the configuration is transferred using NameValueText.
 - DWL.Server: added dwl_handler_parameters (and some improvements in handling of RequestParams)
 - DWL.StrUtils: added some Char modification functions
 
