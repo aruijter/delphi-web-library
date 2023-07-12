@@ -68,7 +68,7 @@ type
 
   TdwlHTTPHandler_Log = class(TdwlHTTPHandler)
   strict private
-    FReloadTriggerTick: cardinal;
+    FReloadTriggerTick: UInt64;
     FTriggers: TList<TLogTrigger>;
     FLogSecret: string;
     FMySQL_Profile: IdwlParams;
