@@ -95,7 +95,6 @@ const
     procedure SocketOnAccept(Socket: TdwlSocket);
     function SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
     function SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
-    procedure SocketOnShutdown(Socket: TdwlSocket);
   end;
 
   TdwlTCPService = class
@@ -197,7 +196,6 @@ type
     procedure SocketOnAccept(Socket: TdwlSocket);
     function SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
     function SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
-    procedure SocketOnShutdown(Socket: TdwlSocket);
   end;
 
 { TdwlSocket }
@@ -221,7 +219,6 @@ end;
 procedure TdwlSocket.Shutdown;
 begin
   Winapi.Winsock2.shutdown(FSocketHandle, SD_BOTH);
-  FService.IOHandler.SocketOnShutdown(Self);
   ShutdownDetected;
 end;
 
@@ -690,11 +687,6 @@ begin
   HandlingBuffer := nil; // to signal we took it
   TransmitBuffer.Socket.SendTransmitBuffer(TransmitBuffer);
   Result := true;
-end;
-
-procedure TPlainIoHandler.SocketOnShutdown(Socket: TdwlSocket);
-begin
-  // no usage here
 end;
 
 end.

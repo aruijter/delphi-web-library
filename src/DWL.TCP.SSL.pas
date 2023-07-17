@@ -53,7 +53,6 @@ type
     procedure SocketOnAccept(Socket: TdwlSocket);
     function SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
     function SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
-    procedure SocketOnShutdown(Socket: TdwlSocket);
     function SslOnError_ShouldRetry(SslError: integer): boolean;
   private
     function Environment: TdwlSSlEnvironment;
@@ -345,11 +344,6 @@ begin
     raise Exception.Create('Please implement delayed sending');
   if Result then
     Process(Socket);
-end;
-
-procedure TdwlSslIoHandler.SocketOnShutdown(Socket: TdwlSocket);
-begin
-  SSL_shutdown(PsslSocketVars(Socket.SocketVars).opSSL);
 end;
 
 function TdwlSslIoHandler.SslOnError_ShouldRetry(SslError: integer): boolean;
