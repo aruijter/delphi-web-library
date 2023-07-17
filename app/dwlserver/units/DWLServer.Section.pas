@@ -226,11 +226,11 @@ begin
     LogItem.Destination := logdestinationServerConsole;
     TdwlLogger.Log(LogItem);
     {$ENDIF}
-    // clear sensitive information before logging
-    Request.RequestParams.Values['password'] := '';
     // log request to table
-    var RequestParamsText: string := '';
     var Prms := Request.RequestParams;
+    var RequestParamsText: string := '';
+    // clear sensitive information before logging
+    Prms.Values['password'] := '';
     for var i := 0 to Prms.Count-1 do
       RequestParamsText := RequestParamsText+Prms.Names[i]+'='+TNetEncoding.URL.Decode(Prms.ValueFromIndex[i])+#13#10;
     var Cmd := New_MySQLSession(FRequestLoggingParams).CreateCommand(SQL_InsertRequest);
