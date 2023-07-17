@@ -98,8 +98,8 @@ begin
   try
     if (FMailSendThread<>nil) and (TMailSendThread(FMailSendThread).FLastActionTick<(GetTickCount-MAILQUEUE_SLEEP_MSECS*2)) then
     begin
-      Log('Terminating Stalled MailSendThread (and creating new one)', lsError);
       try
+        Log('Terminating Stalled MailSendThread (and creating new one)', lsError);
         TerminateThread(FMailSendThread.Handle, 0);
         FreeAndNil(FMailSendThread);
       except
