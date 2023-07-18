@@ -11,6 +11,8 @@ interface
 uses
   System.Classes, System.SysUtils, DWL.HTTP.Types;
 
+const
+  WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY = 4;
 
 type
   IdwlHTTPResponse = interface
@@ -136,19 +138,15 @@ function New_HTTPRequest(const URL: string=''): IdwlHTTPRequest;
 /// </summary>
 function Get_EmptyHTTPResponse(StatusCode: cardinal): IdwlHTTPResponse;
 
-/// <summary>
-///   the amount of MaxConcurrentConnections defined in WinINet can be limiting, use this procedure to increase it
-/// </summary>
-procedure WinInet_SetMaxConcurrentConnections(MaxConcurrentConnections: cardinal);
 procedure PutInternetExplorerBrowserEmulationInRegistry;
 
 implementation
 
 uses
-  Winapi.WinInet, Winapi.Windows, System.Win.Registry, DWL.HTTP.Consts;
+  Winapi.WinHTTP, Winapi.Windows, System.Win.Registry, DWL.HTTP.Consts;
 
 var
- hInet: HINTERNET=nil;
+ hSession: HINTERNET=nil;
 
 type
   TdwlHTTPRequest = class(TInterfacedObject, IdwlHTTPRequest)
@@ -214,19 +212,6 @@ begin
   Result := Response;
 end;
 
-procedure WinInet_SetMaxConcurrentConnections(MaxConcurrentConnections: cardinal);
-begin
-  var NumCon: cardinal;
-  var BufLen: cardinal := SizeOf(NumCon);
-  var InetRes := InternetQueryOption(nil, INTERNET_OPTION_MAX_CONNS_PER_SERVER, @NumCon, BufLen);
-  if InetRes and (NumCon<MaxConcurrentConnections) then
-  begin
-    NumCon := MaxConcurrentConnections;
-    InternetSetOption(nil, INTERNET_OPTION_MAX_CONNS_PER_SERVER, @NumCon, SizeOf(NumCon));
-    InternetSetOption(nil, INTERNET_OPTION_MAX_CONNS_PER_1_0_SERVER, @NumCon, SizeOf(NumCon));
-  end;
-end;
-
 procedure PutInternetExplorerBrowserEmulationInRegistry;
 begin
   var Reg := TRegistry.Create(KEY_WRITE);
@@ -239,13 +224,13 @@ begin
   end;
 end;
 
- function CheckhInet: boolean;
+ function CheckhSession: boolean;
 begin
-  Result := hInet<>nil;
+  Result := hSession<>nil;
   if not Result then
   begin
-    hInet := InternetOpen('Mozilla/5.0 (compatible)', INTERNET_OPEN_TYPE_PRECONFIG, nil, nil, 0);
-    Result := hInet<>nil;
+    hSession := WinHTTPOpen('Mozilla/5.0 (compatible)', WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nil, nil, 0);
+    Result := hSession<>nil;
   end;
 end;
 
@@ -276,63 +261,86 @@ begin
   var Response := TdwlHTTPResponse.Create;
   try
     // Initialize internet api
-    if not CheckhInet then
+    if not CheckhSession then
     begin
-      Response.FStatusCode := HTTP_STATUS_BAD_REQUEST;
-      Response.FErrorMsg := 'Failed to initialize WinINet';
+      Response.FStatusCode := HTTP_STATUS_SERVICE_UNAVAIL;
+      Response.FErrorMsg := 'Failed to initialize WinHTTP ('+GetLastError.ToString+')';
       Exit;
     end;
     // Crack URL into components
+    // Warning: values in URLComps are NOT Null terminated, you really need to use Length for these string values
     var URLComps: TURLComponents;
     FillChar(URLComps, SizeOf(URLComps), 0);
     URLComps.dwStructSize := SizeOf(URLComps);
     URLComps.dwSchemeLength := 1;
     URLComps.dwHostNameLength := 1;
     URLComps.dwURLPathLength := 1;
-    if not InternetCrackUrl(PWideChar(FURL), FURL.Length, 0, URLComps) then
+    if not WinHttpCrackUrl(PWideChar(FURL), 0, 0, URLComps) then
     begin
       Response.FStatusCode := HTTP_STATUS_BAD_REQUEST;
-      Response.FErrorMsg := GetLastError.ToString;
+      Response.FErrorMsg := 'WinHttpCrackUrl failed ('+GetLastError.ToString+') (url:'+FURL;
       Exit;
     end;
     // Set internet connection timeout
     if FTimeOut>0 then
-      InternetSetOption(hInet, INTERNET_OPTION_CONNECT_TIMEOUT, @FTimeout, 4);
-    // Open IP Connection
-    var ServerName := Copy(URLComps.lpszHostName, 1, URLComps.dwHostNameLength);
-    var hConn := InternetConnect(hInet, PWideChar(ServerName), URLComps.nPort, PWideChar(FUserName), PWideChar(FPassword), INTERNET_SERVICE_HTTP, 0, 0);
-    if hConn=nil then
     begin
-      Response.FStatusCode := HTTP_STATUS_BAD_REQUEST;
-      Response.FErrorMsg := GetLastError.ToString;
+      if not WinHttpSetOption(hSession, WINHTTP_OPTION_CONNECT_TIMEOUT, @FTimeout, 4) then
+      begin
+        Response.FStatusCode := HTTP_STATUS_SERVICE_UNAVAIL;
+        Response.FErrorMsg := 'WinHttpSetOption failed when setting timeout ('+GetLastError.ToString+')';
+        Exit;
+      end;
+    end;
+    // Open IP Connection
+    var HostName := Copy(URLComps.lpszHostName, 1, URLComps.dwHostNameLength);
+    var hConnect := WinHttpConnect(hSession, PWideChar(HostName), URLComps.nPort, 0);
+    if hConnect=nil then
+    begin
+      Response.FStatusCode := HTTP_STATUS_SERVICE_UNAVAIL;
+      Response.FErrorMsg := 'WinHttpConnect failed ('+GetLastError.ToString+')';
       Exit;
     end;
     // Open HTTP Request
     try
-      var URLPath := Copy(URLComps.lpszUrlPath, 1, URLComps.dwUrlPathLength);
-      var Flags := INTERNET_FLAG_RELOAD;
-      if SameText(Copy(FURL, 1, 6), 'https:') then
-        Flags := Flags or INTERNET_FLAG_SECURE;
-      var hHttp := HttpOpenRequest(hConn, PWideChar(FMethod), PWideChar(URlPath), nil, nil, nil, Flags, 0);
-      if hHttp=nil then
+      var UrlPath := Copy(URLComps.lpszUrlPath, 1, URLComps.dwUrlPathLength);
+      var Flags := 0;
+      if SameText(Copy(URLComps.lpszScheme, 1, URLComps.dwSchemeLength), 'https') then
+        Flags := Flags or WINHTTP_FLAG_SECURE;
+      var hRequest := WinHttpOpenRequest(hConnect, PWideChar(FMethod), PWideChar(UrlPath), nil, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, Flags);
+      if hRequest=nil then
       begin
         Response.FStatusCode := HTTP_STATUS_BAD_REQUEST;
-        Response.FErrorMsg := GetLastError.ToString;
+        Response.FErrorMsg := 'WinHttpOpenRequest failed ('+GetLastError.ToString+')';
         Exit;
       end;
       try
+        // if given, set credentials
+        if (FUserName<>'') or (FPassword<>'') then
+        begin
+          if not WinHttpSetCredentials(hRequest, WINHTTP_AUTH_TARGET_SERVER, WINHTTP_AUTH_SCHEME_BASIC, PWideChar(FUsername), pWideChar(FPassword), nil) then
+          begin
+            Response.FStatusCode := HTTP_STATUS_SERVICE_UNAVAIL;
+            Response.FErrorMsg := 'WinHttpSetCredentials failed ('+GetLastError.ToString+')';
+            Exit;
+          end;
+        end;
         // Add headers
         for var i := 0 to FHeaderKeys.Count-1 do
         begin
           var Header := FHeaderKeys[i]+': '+FHeaderValues[i];
-          HttpAddRequestHeaders(hHttp, PWideChar(Header), Header.Length, HTTP_ADDREQ_FLAG_ADD);
+          if not WinHttpAddRequestHeaders(hRequest, PWideChar(Header), Header.Length, WINHTTP_ADDREQ_FLAG_ADD) then
+          begin
+            Response.FStatusCode := HTTP_STATUS_SERVICE_UNAVAIL;
+            Response.FErrorMsg := 'WinHttpAddRequestHeaders failed ('+GetLastError.ToString+')';
+            Exit;
+          end;
         end;
         // Send Http Reqest
         var PostData: pointer;
         var PostDataSize: DWORD;
         if (FPostStream{!}=nil) then
         begin
-          PostData := nil;
+          PostData := WINHTTP_NO_REQUEST_DATA;
           PostDataSize := 0;
         end
         else
@@ -340,19 +348,25 @@ begin
           PostData := FPostStream.Memory;
           PostDataSize := FPostStream.Size;
         end;
-        if not HttpSendRequest(hHttp, nil, 0, PostData, PostDataSize) then
+        if not WinHttpSendRequest(hRequest, nil, 0, PostData, PostDataSize, PostDataSize, 0) then
         begin
           Response.FStatusCode := HTTP_STATUS_BAD_REQUEST;
-          Response.FErrorMsg := GetLastError.ToString;
+          Response.FErrorMsg := 'WinHttpSendRequest failed ('+GetLastError.ToString+')';
+          Exit;
+        end;
+        if not WinHttpReceiveResponse(hRequest, nil) then
+        begin
+          Response.FStatusCode := HTTP_STATUS_BAD_REQUEST;
+          Response.FErrorMsg := 'WinHttpReceiveResponse failed ('+GetLastError.ToString+')';
           Exit;
         end;
         // check status code
         var BufferLen: DWORD := SizeOf(Buffer);
-        var HeaderIdx: cardinal := 0;
-        if not HttpQueryInfo(hHttp, HTTP_QUERY_STATUS_CODE or HTTP_QUERY_FLAG_NUMBER, @Buffer, BufferLen, HeaderIdx) then
+        var HeaderIdx: DWORD := 0;
+        if not WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE or WINHTTP_QUERY_FLAG_NUMBER, nil, @Buffer, BufferLen, @HeaderIdx) then
         begin
           Response.FStatusCode := HTTP_STATUS_BAD_REQUEST;
-          Response.FErrorMsg := GetLastError.ToString;
+          Response.FErrorMsg := 'WinHttpQueryHeaders failed ('+GetLastError.ToString+')';
           Exit;
         end;
         Response.FStatusCode := PCardinal(@Buffer)^;
@@ -361,7 +375,7 @@ begin
         // get headers
         BufferLen := SizeOf(Buffer);
         HeaderIdx := 0;
-        if HttpQueryInfo(hHttp, HTTP_QUERY_RAW_HEADERS_CRLF, @Buffer, BufferLen, HeaderIdx) then
+        if WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_RAW_HEADERS_CRLF, nil, @Buffer, BufferLen, @HeaderIdx) then
         begin
           SetLength(Response.FHeaderStr, BufferLen div 2);
           Move((@Buffer)^, (@Response.FHeaderStr[1])^, BufferLen);
@@ -369,16 +383,15 @@ begin
         // total size
         BufferLen := SizeOf(Buffer);
         HeaderIdx := 0;
-        var TotalSize: cardinal;
-        if not HttpQueryInfo(hHttp, HTTP_QUERY_CONTENT_LENGTH or HTTP_QUERY_FLAG_NUMBER, @Buffer, BufferLen, HeaderIdx) then
-          TotalSize := 0
-        else
+        var TotalSize: cardinal := 0;
+        if Assigned(FOnProgress) and WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_CONTENT_LENGTH or WINHTTP_QUERY_FLAG_NUMBER, nil, @Buffer, BufferLen, @HeaderIdx) then
           TotalSize := PCardinal(@Buffer)^;
+        FUserName := TotalSize.ToString;
         // Fetch Data
         var BytesRead := 0;
         var CancelReceiving := False;
         repeat
-          if not InternetReadFile(hHttp, @Buffer, SizeOf(Buffer), BufferLen) then
+          if not WinHttpReadData(hRequest, Buffer, Sizeof(Buffer), @BufferLen) then
             Break;
            if BufferLen>0 then
            begin
@@ -399,10 +412,10 @@ begin
            end;
         until BufferLen = 0;
       finally
-        InternetCloseHandle(hHttp);
+        WinHttpCloseHandle(hRequest);
       end;
     finally
-      InternetCloseHandle(hConn);
+      WinHttpCloseHandle(hConnect);
     end;
   finally
     Result := Response;
@@ -581,8 +594,8 @@ end;
 initialization
 
 finalization
-  if hInet<>nil then
-    InternetCloseHandle(hInet);
+  if hSession<>nil then
+    WinHttpCloseHandle(hSession);
 
 end.
 

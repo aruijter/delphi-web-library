@@ -31,6 +31,8 @@ type
     FUri: string;
     FState: TdwlHTTPServerConnectionState;
     FPendingLine: string;
+    // FRequestParams is a key/value pair list holding the requestparams
+    // please beware that the values are still URL Encoded
     FRequestParams: TStringList;
     FRequestHeaders: IdwlParams;
     FResponseHeaders: IdwlParams;

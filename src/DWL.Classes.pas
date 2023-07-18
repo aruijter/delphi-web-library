@@ -65,7 +65,7 @@ implementation
 
 procedure TdwlResult.AddErrorMsg(const ErrorMsgToAdd: string);
 begin
-  if ErrorMsgToAdd<>'' then
+  if ErrorMsg<>'' then
     FErrorMsg := FErrorMsg+#13#10+ErrorMsgToAdd
   else
     FErrorMsg := ErrorMsgToAdd;
