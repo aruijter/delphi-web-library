@@ -1,6 +1,9 @@
 # Release Notes
 All notable (including breaking) changes to this project will be documented in this file.
 
+## Jul 18, 2023
+- DWL.HTTP.Client: Recoded to use WinHTTP instead of WinInet. WinInet is officially not supported serverside and incidentally reported problems, WinHTTP is the preferred API to use anyway
+
 ## Jul 6, 2023
 - DWL.Server: improved error handling and request logging
 - DWL.MySQL: improved connection handling
@@ -11,7 +14,7 @@ All notable (including breaking) changes to this project will be documented in t
 - DWL.StrUtils: added some Char modification functions
 
 ## Jun 19, 2023
-- oAuth2: Removed scope checking while granting
+- OAuth2: Removed scope checking while granting
 
 ## May 25, 2023
 - Corrected handling of (extreme) Unsigned values in MySQL
