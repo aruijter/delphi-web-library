@@ -1,6 +1,9 @@
 # Release Notes
 All notable (including breaking) changes to this project will be documented in this file.
 
+## Jul 20, 2023
+- DWL.Server DLL's: Configure is now a procedure, Error is not longer returned, this is because a dynamic string result in a DLL export is quite bad. Also made sure Exceptions within DLL are not transferred to the server. Errors must always be handled within DLL! This is a breaking change: BE AWARE TO CHANGE ALL CONFIGURE FUNCTIONS TO PROCEDURES IN THE HANDLER DPR'S. See f.e. HelloWorld.dpr for a preferred dpr layout.
+
 ## Jul 18, 2023
 - DWL.HTTP.Client: Recoded to use WinHTTP instead of WinInet. WinInet is officially not supported serverside and incidentally reported problems, WinHTTP is the preferred API to use anyway
 

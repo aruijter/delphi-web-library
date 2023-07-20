@@ -46,7 +46,7 @@ begin
   end;
 end;
 
-procedure WrapUp(const State: PdwlHTTPHandlingState);
+procedure WrapUp(const State: PdwlHTTPHandlingState); stdcall;
 begin
   try
     THandler_OAuth2.WrapUp(State);
