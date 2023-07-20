@@ -510,14 +510,13 @@ begin
   for var i := 1 to TdwlOS.NumberOfLogicalProcessors do
     TIOThread.Create(Self);
   FCleanupThread := TCleanupThread.Create(Self);
+  FCleanupThread.FreeOnTerminate := true;
 end;
 
 procedure TdwlTCPService.InternalDeActivate;
 begin
   // stop cleanup thread
-  FCleanupThread.Terminate;
-  FCleanupThread.WaitFor;
-  FCleanupThread.Free;
+  FCleanupThread.Terminate;  // It's Free on terminate
   // stop running threads and wait for them
   var RunningThreads := FIoThreads.LockList;
   try

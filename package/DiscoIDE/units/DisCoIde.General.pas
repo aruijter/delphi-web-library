@@ -33,6 +33,7 @@ end;
 
 class constructor TDisCoIde_General.Create;
 begin
+  inherited;
   FConfigParams := New_Params;
   if FileExists(ConfigFileName) then
     FConfigParams.WriteJSON(TFile.ReadAllText(ConfigFileName));

@@ -22,6 +22,7 @@ uses
 
 class constructor TdwlCompression.Create;
 begin
+  inherited;
   {$IFDEF WIN64}
   SevenzipLibraryName := '7z64.dll';
   {$ELSE}

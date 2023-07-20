@@ -242,6 +242,7 @@ type
 
 class constructor TLogEngine.Create;
 begin
+  inherited;
   FLogsQueue := TdwlThreadQueue_Evented<PdwlLogItem>.Create;
   FLogDispatchThread := TLogDispatchThread.Create;
   FLogDispatchThread.FreeOnTerminate := true;
@@ -269,6 +270,7 @@ begin
   // free objects
   FLogDispatchers.Free;
   FLogsQueue.Free; {the last one to be quite sure the thread is not using it anymore}
+  inherited;
 end;
 
 class procedure TLogEngine.FinalizeDispatching;

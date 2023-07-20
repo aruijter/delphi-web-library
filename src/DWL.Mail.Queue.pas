@@ -4,7 +4,7 @@ interface
 
 uses
   DWL.Params, IdMessage, System.Generics.Collections, DWL.Logging,
-  System.Classes, System.Rtti;
+  System.Classes, System.Rtti, DWL.SyncObjs;
 
 const
   Param_mailQueue_Domains = 'mailqueue_domains';
@@ -14,14 +14,13 @@ type
   strict private
   class var
     FParams: IdwlParams;
-    FMailSendThread: TThread;
+    FMailSendThread: TdwlThread;
     class procedure ParamChanged(Sender: IdwlParams; const Key: string; const Value: TValue); static;
     class procedure CreateMailSendThread; static;
     class procedure CheckMailSendThread; static;
     class procedure KillMailSendThread; static;
   private
   class var
-    FMailAddedEvent: THandle;
     FDomainContexts: TDictionary<string, IdwlParams>;
     FDefaultDomainContextParams: IdwlParams;
     class procedure Log(const Msg: string; SeverityLevel: TdwlLogSeverityLevel=lsNotice); static;
@@ -68,7 +67,7 @@ const
 type
   TdwlMailStatus = (msQueued=0, msRetrying=2, msSent=5, msError=9);
 
-  TMailSendThread = class(TThread)
+  TMailSendThread = class(TdwlThread)
   strict private
     FParams: IdwlParams;
     FSMTP: TIdSMTP;
@@ -81,6 +80,7 @@ type
     procedure Refreshtoken_Callback(var Token: string; Action: TdwlAPIAuthorizerCallBackAction);
   private
     FLastActionTick: UInt64;
+    procedure CheckNow;
   protected
     procedure Execute; override;
   public
@@ -187,7 +187,6 @@ class constructor TdwlMailQueue.Create;
 begin
   inherited;
   FDomainContexts := TDictionary<string, IdwlParams>.Create;
-  FMailAddedEvent := CreateEvent(nil, false, false, nil);
 end;
 
 class procedure TdwlMailQueue.CreateMailSendThread;
@@ -199,13 +198,13 @@ begin
     var ThreadParams := New_Params;
     FParams.AssignTo(ThreadParams, Params_SQLConnection);
     FMailSendThread := TMailSendThread.Create(ThreadParams);
+    FMailSendThread.FreeOnTerminate := true;
   end;
 end;
 
 class destructor TdwlMailQueue.Destroy;
 begin
   KillMailSendThread;
-  CloseHandle(FMailAddedEvent);
   FDomainContexts.Free;
   inherited;
 end;
@@ -215,9 +214,9 @@ begin
   if FMailSendThread=nil then
     Exit;
   FMailSendThread.Terminate;
-  SetEvent(FMailAddedEvent); {To wake up thread for termination}
-  FMailSendThread.WaitFor;
-  FreeAndNil(FMailSendThread);
+  // FmailSendThread is Free on Terminate, so no Free needed
+  // but set to nil to indicate it's terminated
+  FMailSendThread := nil;
 end;
 
 class procedure TdwlMailQueue.Log(const Msg: string; SeverityLevel: TdwlLogSeverityLevel=lsNotice);
@@ -276,7 +275,8 @@ begin
     Cmd.Parameters.SetTextDataBinding(0, Msg.BccList.EMailAddresses);
     Cmd.Parameters.SetTextDataBinding(1, Str.ReadString(MaxInt));
     Cmd.Execute;
-    SetEvent(FMailAddedEvent);
+    if FMailSendThread<>nil then
+      TMailSendThread(FMailSendThread).CheckNow;
   finally
     Str.Free;
   end;
@@ -298,7 +298,7 @@ begin
   begin
     Process;
     FLastActionTick := GetTickCount64;
-    WaitForSingleObject(TdwlMailQueue.FMailAddedEvent, MAILQUEUE_SLEEP_MSECS);
+    WaitForSingleObject(FWorkToDoEventHandle, MAILQUEUE_SLEEP_MSECS);
   end;
 end;
 
@@ -309,6 +309,11 @@ begin
   FreeAndNil(FSMTP);
   FreeAndNil(FIdSASL);
   FCurrentContextParams := nil;
+end;
+
+procedure TMailSendThread.CheckNow;
+begin
+  SetEvent(FWorkToDoEventHandle);
 end;
 
 procedure TMailSendThread.Process;

@@ -2036,18 +2036,20 @@ end;
 
 class constructor TdwlMySQLManager.Create;
 begin
+  inherited;
   FAccess := TCriticalSection.Create;
   FConnectionPools := TObjectDictionary<string, TConnectionPool>.Create([doOwnsValues]);
   FCleanUpThread := TManagerCleanupThread.Create;
+  FCleanUpThread.FreeOnTerminate := true;
 end;
 
 class destructor TdwlMySQLManager.Destroy;
 begin
   FCleanUpThread.Terminate;
-  FCleanUpThread.WaitFor;
-  FCleanUpThread.Free;
+  // FCleanUpThread is FreeOnTerminate, so no Free needed
   FConnectionPools.Free;
   FAccess.Free;
+  inherited;
 end;
 
 class procedure TdwlMySQLManager.Cleanup;
@@ -2238,8 +2240,6 @@ class function TMySQLNullDataBinding.BufferType: Enum_Field_Types;
 begin
   Result := MYSQL_TYPE_NULL;
 end;
-
-initialization
 
 end.
 

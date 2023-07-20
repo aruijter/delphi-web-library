@@ -320,7 +320,7 @@ begin
           else
           begin
             FreeLibrary(DLLHandle);
-            raise Exception.Create('No ProcessRequest or Authorize function found.');
+            raise Exception.Create('Missing ProcessRequest or Authorize export function found.');
           end;
         except
           on E: Exception do
@@ -399,6 +399,7 @@ begin
       else
         TdwlLogger.Log('Skipped loading of handlers because server is not secure', lsWarning, TOPIC_DLL);
       FACMECheckThread := TACMECheckThread.Create(Self, ConfigParams);
+      FACMECheckThread.FreeOnTerminate := true;
       TdwlLogger.Log('DWL Server started', lsTrace, TOPIC_BOOTSTRAP);
       FServerStarted := true;
     except
@@ -498,7 +499,8 @@ begin
     Exit;
   TdwlLogger.Log('Stopping DWL Server', lsNotice, TOPIC_WRAPUP);
   FLogHandler := nil; // do not try to log when server goes down
-  FreeAndNil(FACMECheckThread);
+  FACMECheckThread.Terminate; //It's free on terminate
+  FACMECheckThread := nil;
   FServer.Active := false;
   TdwlLogger.UnregisterDispatcher(FCallBackLogDispatcher);
   TdwlMailQueue.Configure(nil); // to stop sending

@@ -69,6 +69,7 @@ uses
 
 class constructor TdwlResolver.Create;
 begin
+  inherited;
   FResolvableReferences := TStringList.Create;
   FResolvableReferences.Duplicates := dupIgnore;
   FResolvableReferences.Sorted := true;
@@ -78,6 +79,7 @@ end;
 class destructor TdwlResolver.Destroy;
 begin
   FResolvableReferences.Free;
+  inherited;
 end;
 
 class function TdwlResolver.KeyLead: string;

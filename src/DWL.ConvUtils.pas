@@ -82,6 +82,7 @@ end;
 
 class constructor TdwlConvUtils.Create;
 begin
+  inherited;
   FDotFormatSettings.DecimalSeparator := '.';
 end;
 
