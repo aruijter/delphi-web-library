@@ -14,7 +14,6 @@ uses
 type
   TdwlHTTPHandler_DLL = class(TdwlHTTPHandler)
   strict private
-    FConfigOk: boolean;
     FEndPoint: string;
     FDLLHandle: HModule;
     FProcessProc: TDLL_ProcessRequestProc;
@@ -44,7 +43,12 @@ const
 
 function TdwlHTTPHandler_DLL.Authorize(const State: PdwlHTTPHandlingState): boolean;
 begin
-  Result := Assigned(FAuthorizeProc) and FAuthorizeProc(State);
+  try
+    Result := FAuthorizeProc(State);
+  except
+    // just protect DLL function, an exception should never be returned, but you never know
+    Result := false;
+  end;
 end;
 
 constructor TdwlHTTPHandler_DLL.Create(DLLHandle: HModule; ProcessProc: TDLL_ProcessRequestProc; AuthorizeProc: TDLL_AuthorizeProc; const EndPoint: string; Params: IdwlParams);
@@ -65,13 +69,9 @@ begin
   ConfigureProc := GetProcAddress(FDLLHandle, 'Configure');
   if Assigned(ConfigureProc) then
   try
-    var Error := ConfigureProc(@serverProcs, PWideChar(Params.GetAsNameValueText));
-    if Error<>'' then
-      raise Exception.Create(Error);
-    FConfigOk := true;
+    ConfigureProc(@serverProcs, PWideChar(Params.GetAsNameValueText));
   except
-    On E: Exception do
-      TdwlLogger.Log(FEndPoint+': error on configure: '+E.Message, lsError)
+    // just protect DLL function, an exception should never be returned, but you never know
   end;
   FWrapUpProc := GetProcAddress(FDLLHandle, 'WrapUp');
 end;
@@ -91,9 +91,14 @@ end;
 
 function TdwlHTTPHandler_DLL.ProcessRequest(const State: PdwlHTTPHandlingState): boolean;
 begin
-  if FConfigOk and Assigned(FProcessProc) then
+  if Assigned(FProcessProc) then
   begin
-    Result := FProcessProc(State);
+    try
+      Result := FProcessProc(State);
+    except
+      // just protect DLL function, an exception should never be returned, but you never know
+      Result := false;
+    end;
     if Result and FDoAllowOrigins then
     begin
       var Origin: string;

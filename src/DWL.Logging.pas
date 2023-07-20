@@ -367,7 +367,11 @@ end;
 
 class procedure TdwlLogger.Log(const LogItem: PdwlLogItem);
 begin
-  TLogEngine.PostLog(LogItem);
+  try
+    TLogEngine.PostLog(LogItem);
+  except
+    // Logging should not cause more problems
+  end;
 end;
 
 class function TdwlLogger.PrepareLogitem: PdwlLogItem;
@@ -394,32 +398,40 @@ end;
 
 class procedure TdwlLogger.Log(const Msg: string; SeverityLevel: TdwlLogSeverityLevel=lsNotice; const Topic: string=''; Channel: string=''; Source: string='');
 begin
-  var LogItem := TLogEngine.CreateLogItem;
-  LogItem.Msg := MSg;
-  LogItem.SeverityLevel := SeverityLevel;
-  LogItem.Source := Source;
-  LogItem.Channel := Channel;
-  LogItem.Topic := Topic;
-  TLogEngine.PostLog(LogItem);
+  try
+    var LogItem := TLogEngine.CreateLogItem;
+    LogItem.Msg := MSg;
+    LogItem.SeverityLevel := SeverityLevel;
+    LogItem.Source := Source;
+    LogItem.Channel := Channel;
+    LogItem.Topic := Topic;
+    TLogEngine.PostLog(LogItem);
+  except
+    // Logging should not cause more problems
+  end;
 end;
 
 class procedure TdwlLogger.Log(Exc: Exception; SeverityLevel: TdwlLogSeverityLevel=lsFatal; const Topic: string=''; Channel: string=''; Source: string='');
 begin
-  var LogItem := TLogEngine.CreateLogItem;
-  LogItem.Msg := Exc.Message;
-  LogItem.SeverityLevel := SeverityLevel;
-  LogItem.Source := Source;
-  LogItem.Channel := Channel;
-  LogItem.Topic := Topic;
-  {$IFOPT D+}
-  var S := Exc.StackTrace;
-  if S<>'' then
-  begin
-    LogItem.ContentType := 'plain/text; charset=utf-8';
-    LogItem.Content := TEncoding.UTF8.GetBytes(S);
+  try
+    var LogItem := TLogEngine.CreateLogItem;
+    LogItem.Msg := Exc.Message;
+    LogItem.SeverityLevel := SeverityLevel;
+    LogItem.Source := Source;
+    LogItem.Channel := Channel;
+    LogItem.Topic := Topic;
+    {$IFOPT D+}
+    var S := Exc.StackTrace;
+    if S<>'' then
+    begin
+      LogItem.ContentType := 'plain/text; charset=utf-8';
+      LogItem.Content := TEncoding.UTF8.GetBytes(S);
+    end;
+    {$ENDIF}
+    TLogEngine.PostLog(LogItem);
+  except
+    // Logging should not cause more problems
   end;
-  {$ENDIF}
-  TLogEngine.PostLog(LogItem);
 end;
 
 { TdwlLogHelper }

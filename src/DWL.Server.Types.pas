@@ -106,7 +106,7 @@ type
   ///   The configure proc is used to to give the DLL the possibility to configure itself
   ///   parameters are provided a key/value pairs in TStringlist.Text layout.
   /// </summary>
-  TDLL_ConfigureProc = function(const CallBackProcs: PdwlCallBackProcs; const Params: PWideChar): string; stdcall;
+  TDLL_ConfigureProc = procedure(const CallBackProcs: PdwlCallBackProcs; const Params: PWideChar); stdcall;
   /// <summary>
   ///   The wrapup proc is used to to give the DLL the possibility to clean up
   ///   resources. if state is given, the request has finished and resources like contentbuffer can be cleared

@@ -24,10 +24,13 @@
         <Projects Include="app\dll\DisCo\DisCo.dproj">
             <Dependencies/>
         </Projects>
-        <Projects Include="app\tools\discoclient\DisCoClient.dproj">
+        <Projects Include="app\dll\DaJson\DaJson.dproj">
             <Dependencies/>
         </Projects>
         <Projects Include="app\tools\cocon\CoCon.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="app\tools\DisCoAgent\DisCoAgent.dproj">
             <Dependencies/>
         </Projects>
     </ItemGroup>
@@ -101,14 +104,14 @@
     <Target Name="DisCo:Make">
         <MSBuild Projects="app\dll\DisCo\DisCo.dproj" Targets="Make"/>
     </Target>
-    <Target Name="DisCoClient">
-        <MSBuild Projects="app\tools\discoclient\DisCoClient.dproj"/>
+    <Target Name="DaJson">
+        <MSBuild Projects="app\dll\DaJson\DaJson.dproj"/>
     </Target>
-    <Target Name="DisCoClient:Clean">
-        <MSBuild Projects="app\tools\discoclient\DisCoClient.dproj" Targets="Clean"/>
+    <Target Name="DaJson:Clean">
+        <MSBuild Projects="app\dll\DaJson\DaJson.dproj" Targets="Clean"/>
     </Target>
-    <Target Name="DisCoClient:Make">
-        <MSBuild Projects="app\tools\discoclient\DisCoClient.dproj" Targets="Make"/>
+    <Target Name="DaJson:Make">
+        <MSBuild Projects="app\dll\DaJson\DaJson.dproj" Targets="Make"/>
     </Target>
     <Target Name="CoCon">
         <MSBuild Projects="app\tools\cocon\CoCon.dproj"/>
@@ -119,14 +122,23 @@
     <Target Name="CoCon:Make">
         <MSBuild Projects="app\tools\cocon\CoCon.dproj" Targets="Make"/>
     </Target>
+    <Target Name="DisCoAgent">
+        <MSBuild Projects="app\tools\DisCoAgent\DisCoAgent.dproj"/>
+    </Target>
+    <Target Name="DisCoAgent:Clean">
+        <MSBuild Projects="app\tools\DisCoAgent\DisCoAgent.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DisCoAgent:Make">
+        <MSBuild Projects="app\tools\DisCoAgent\DisCoAgent.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="DWL;DisCoIde;dwlserver_sv;dwlserver_debug;HelloWorld;OAuth2;DisCo;DisCoClient;CoCon"/>
+        <CallTarget Targets="DWL;DisCoIde;dwlserver_sv;dwlserver_debug;HelloWorld;OAuth2;DisCo;DaJson;CoCon;DisCoAgent"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="DWL:Clean;DisCoIde:Clean;dwlserver_sv:Clean;dwlserver_debug:Clean;HelloWorld:Clean;OAuth2:Clean;DisCo:Clean;DisCoClient:Clean;CoCon:Clean"/>
+        <CallTarget Targets="DWL:Clean;DisCoIde:Clean;dwlserver_sv:Clean;dwlserver_debug:Clean;HelloWorld:Clean;OAuth2:Clean;DisCo:Clean;DaJson:Clean;CoCon:Clean;DisCoAgent:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="DWL:Make;DisCoIde:Make;dwlserver_sv:Make;dwlserver_debug:Make;HelloWorld:Make;OAuth2:Make;DisCo:Make;DisCoClient:Make;CoCon:Make"/>
+        <CallTarget Targets="DWL:Make;DisCoIde:Make;dwlserver_sv:Make;dwlserver_debug:Make;HelloWorld:Make;OAuth2:Make;DisCo:Make;DaJson:Make;CoCon:Make;DisCoAgent:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

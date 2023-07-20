@@ -3,6 +3,7 @@ library HelloWorld;
 uses
   DWL.Server.Globals,
   DWL.Server.Types,
+  DWL.Logging,
   System.SysUtils,
   HelloWorld.Handler in 'units\HelloWorld.Handler.pas';
 
@@ -10,30 +11,47 @@ uses
 
 function Authorize(const State: PdwlHTTPHandlingState): boolean; stdcall;
 begin
-  Result := THandler_HelloWorld.Authorize(State);
+  try
+    Result := THandler_HelloWorld.Authorize(State);
+  except
+    on E: Exception do
+    begin
+      Result := false;
+      TdwlLogger.Log(E);
+    end;
+  end;
 end;
 
-function Configure(const CallBackProcs: PdwlCallBackProcs; const Params: PWideChar): string; stdcall;
+procedure Configure(const CallBackProcs: PdwlCallBackProcs; const Params: PWideChar); stdcall;
 begin
-  Result := '';
-  serverProcs := CallBackProcs^;
   try
+    serverProcs := CallBackProcs^;
     THandler_HelloWorld.Configure(Params);
   except
     on E: Exception do
-      Result := E.Message;
+      TdwlLogger.Log(E);
   end;
 end;
 
 function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; stdcall;
 begin
   Result := false;
-  THandler_HelloWorld.ProcessRequest(State, Result);
+  try
+    THandler_HelloWorld.ProcessRequest(State, Result);
+  except
+    on E: Exception do
+      TdwlLogger.Log(E);
+  end;
 end;
 
 procedure WrapUp(const State: PdwlHTTPHandlingState);
 begin
-  THandler_HelloWorld.WrapUp(State);
+  try
+    THandler_HelloWorld.WrapUp(State);
+  except
+    on E: Exception do
+      TdwlLogger.Log(E);
+  end;
 end;
 
 exports

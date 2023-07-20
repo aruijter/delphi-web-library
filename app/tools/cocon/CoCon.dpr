@@ -1,7 +1,5 @@
 program CoCon;
 
-{$R 'versioninfo.res' 'versioninfo.rc'}
-
 uses
   System.SysUtils,
   uCocon in 'Units\uCocon.pas';

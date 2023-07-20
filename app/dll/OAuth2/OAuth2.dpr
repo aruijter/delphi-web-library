@@ -5,6 +5,7 @@ library OAuth2;
 uses
   DWL.Server.Types,
   DWL.Server.Globals,
+  DWL.Logging,
   System.SysUtils,
   OAuth2.Handler in 'units\OAuth2.Handler.pas';
 
@@ -12,30 +13,47 @@ uses
 
 function Authorize(const State: PdwlHTTPHandlingState): boolean; stdcall;
 begin
-  Result := THandler_OAuth2.Authorize(State);
+  try
+    Result := THandler_OAuth2.Authorize(State);
+  except
+    on E: Exception do
+    begin
+      Result := false;
+      TdwlLogger.Log(E);
+    end;
+  end;
 end;
 
-function Configure(const CallBackProcs: PdwlCallBackProcs; const Params: PWideChar): string; stdcall;
+procedure Configure(const CallBackProcs: PdwlCallBackProcs; const Params: PWideChar); stdcall;
 begin
-  Result := '';
-  serverProcs := CallBackProcs^;
   try
+    serverProcs := CallBackProcs^;
     THandler_OAuth2.Configure(Params);
   except
     on E: Exception do
-      Result := E.Message;
+      TdwlLogger.Log(E);
   end;
 end;
 
 function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; stdcall;
 begin
   Result := false;
-  THandler_OAuth2.ProcessRequest(State, Result);
+  try
+    THandler_OAuth2.ProcessRequest(State, Result);
+  except
+    on E: Exception do
+      TdwlLogger.Log(E);
+  end;
 end;
 
 procedure WrapUp(const State: PdwlHTTPHandlingState);
 begin
-  THandler_OAuth2.WrapUp(State);
+  try
+    THandler_OAuth2.WrapUp(State);
+  except
+    on E: Exception do
+      TdwlLogger.Log(E);
+  end;
 end;
 
 exports
