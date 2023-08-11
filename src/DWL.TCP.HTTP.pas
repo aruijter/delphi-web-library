@@ -4,7 +4,7 @@ interface
 
 uses
   DWL.TCP.Server, Winapi.Winsock2, System.Generics.Collections, DWL.Params,
-  System.Classes, DWL.TCP, Winapi.WinInet;
+  System.Classes, DWL.TCP, Winapi.WinInet, System.Diagnostics;
 
 type
   TdwlHTTPServerConnectionState = (hcsReadRequest, hcsReadHeader, hcsReadRequestBody, hcsProcessing, hcsClosing, hcsError);
@@ -40,10 +40,11 @@ type
     FResponseDataStream: TMemoryStream;
     FContentLength: integer;
     FStatusCode: integer;
-    FTickStart: UInt64;
+    FStopWatch: TStopWatch;
     FProtocol: TdwlHTTPProtocol;
     FReadError: string;
     procedure ClearCurrentRequest;
+    function GetRequestDuration: Int64;
     procedure ReadAddToPendingLine(First, Last: PByte);
     procedure ReadFinishHeader;
     procedure ReadPendingLine;
@@ -59,7 +60,7 @@ type
     property StatusCode: integer read FStatusCode write FStatusCode;
     property Uri: string read FUri;
     property ResponseDataStream: TMemoryStream read FResponseDataStream;
-    property TickStart: UInt64 read FTickStart;
+    property RequestDuration: Int64 read GetRequestDuration;
     constructor Create(AService: TdwlTCPService); override;
     destructor Destroy; override;
     procedure ReadHandlingBuffer(HandlingBuffer: PdwlHandlingBuffer); override;
@@ -146,6 +147,7 @@ begin
   inherited Create(AService);
   Assert(AService is TdwlCustomHTTPServer);
   FState := hcsReadRequest;
+  FStopWatch := TStopwatch.Create;
   FRequestHeaders := New_Params;
   FRequestParams := TStringList.Create;
   FResponseHeaders := New_Params;
@@ -158,6 +160,11 @@ begin
   FResponseDataStream.Free;
   FRequestParams.Free;
   inherited Destroy;
+end;
+
+function TdwlHTTPSocket.GetRequestDuration: Int64;
+begin
+  Result := FStopWatch.ElapsedMilliseconds;
 end;
 
 procedure TdwlHTTPSocket.ReadProcessURI;
@@ -339,7 +346,8 @@ begin
   var KeepAlive: boolean;
   try
     try
-      FTickStart := GetTickCount64;
+      FStopWatch.Reset;
+      FStopWatch.Start;
       KeepAlive := (FState<>hcsError) and (FProtocol<>HTTP10) and SameText(RequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE);
       if FProtocol<>HTTP10 then
         FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));

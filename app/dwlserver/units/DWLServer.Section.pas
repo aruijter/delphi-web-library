@@ -213,14 +213,14 @@ begin
       ((Request.StatusCode=HTTP_STATUS_OK) or (Request.StatusCode=HTTP_STATUS_REDIRECT)) then
       Exit;
     {$ENDIF}
-    var Ticks := GetTickCount64-Request.TickStart;
+    var Duration := Request.RequestDuration;
     var RequestMethodStr := dwlhttpMethodToString[Request.RequestMethod];
     // in debugging log to Server Console
     {$IFDEF DEBUG}
     var LogItem := TdwlLogger.PrepareLogitem;
     LogItem.Msg :=  Request.IP_Remote+':'+Request.Port_Local.ToString+' '+
       RequestMethodStr+' '+Request.Uri+' '+Request.StatusCode.ToString+
-        ' ('+Ticks.ToString+'ms)';
+        ' ('+Duration.ToString+'ms)';
     Logitem.Topic := 'requests';
     LogItem.SeverityLevel := lsDebug;
     LogItem.Destination := logdestinationServerConsole;
@@ -238,7 +238,7 @@ begin
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_StatusCode, Request.StatusCode);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_IP_Remote, Request.Ip_Remote);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, Request.Uri);
-    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Min(High(word), Ticks));
+    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Min(High(word), Duration));
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Header, Request.RequestHeaders.GetAsNameValueText(false));
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Params, RequestParamsText);
     Cmd.Execute;
