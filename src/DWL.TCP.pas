@@ -3,7 +3,7 @@ unit DWL.TCP;
 interface
 
 uses
-  Winapi.Windows, Winapi.Winsock2, System.SyncObjs, System.Generics.Collections,
+  Winapi.Windows, Winapi.WinSock, Winapi.Winsock2, System.SyncObjs, System.Generics.Collections,
   DWL.SyncObjs, System.Classes;
 
 const
@@ -54,6 +54,7 @@ const
     function CheckWSAResult_ShutdownOnError(ResultCode: Integer; const LogErrorWithThisString: string=''): integer;
   private
     FSocketCS: TCriticalSection;
+    FLastIoTick: UInt64;
     FShutdownTick: UInt64;
     FTransmitBuffers: TdwlThreadList<PdwlTransmitBuffer>;
     FHandlingBuffers: TdwlThreadList<PdwlHandlingBuffer>;
@@ -61,6 +62,7 @@ const
     FIp_Remote: string;
     FPort_Local: word;
     FPort_Remote: word;
+    procedure IoCompleted(TransmitBuffer: PdwlTransmitBuffer; NumberOfBytesTransferred: cardinal);
   protected
     FService: TdwlTCPService;
     procedure CreateWriteBuffer;
@@ -77,7 +79,6 @@ const
     destructor Destroy; override;
     procedure ReadHandlingBuffer(HandlingBuffer: PdwlHandlingBuffer); virtual;
     procedure FlushWrites(CloseConnection: boolean=false);
-    procedure IoCompleted(TransmitBuffer: PdwlTransmitBuffer; NumberOfBytesTransferred: cardinal);
     procedure SendTransmitBuffer(TransmitBuffer: PdwlTransmitBuffer);
     procedure Shutdown;
     procedure ShutdownDetected;
@@ -148,6 +149,8 @@ const
   RECV_REQUEST_COUNT = 3;
   CLEANUPTHREAD_SLEEP_MSECS = 300;
   CLEANUP_DELAY_MSECS = 750;
+  TIMEOUT_CHECK_MSECS = 1000*60*2; // 2 min
+  TIMEOUT_MSECS = 1000*60*5; // 5 min
 
 function CheckWSAResult(ResultCode: Integer; const LogErrorWithThisString: string=''): Integer;
 begin
@@ -182,6 +185,7 @@ type
   TCleanupThread = class(TdwlThread)
   strict private
     FService: TdwlTCPService;
+    FNextTimeOutCheckTick: UInt64;
   protected
     procedure Execute; override;
   public
@@ -236,6 +240,7 @@ end;
 
 procedure TdwlSocket.StartReceiving;
 begin
+  AtomicExchange(FLastIoTick, GetTickCount64);
   FSocketCS.Enter;
   try
     FReadLastId := 0;
@@ -413,6 +418,7 @@ procedure TdwlSocket.IoCompleted(TransmitBuffer: PdwlTransmitBuffer; NumberOfByt
     until NoneFound;
   end;
 begin
+  AtomicExchange(FLastIoTick, GetTickCount64);
   FSocketCS.Enter;
   try
     case TransmitBuffer.CompletionIndicator of
@@ -636,7 +642,8 @@ begin
     try
       WaitForSingleObject(FWorkToDoEventHandle, CLEANUPTHREAD_SLEEP_MSECS);
       var Socket: TdwlSocket;
-      var DeleteMoment := GetTickCount64-CLEANUP_DELAY_MSECS;
+      var CurTick := GetTickCount64;
+      var DeleteMoment := CurTick-CLEANUP_DELAY_MSECS;
       while FService.FInActiveSockets.TryPop(Socket) do
       begin
         if (Socket.FShutdownTick>0) and (Socket.FShutdownTick<DeleteMoment) then
@@ -645,6 +652,27 @@ begin
         begin
           FService.FInActiveSockets.Insert(0, Socket); // maybe next time
           Break;
+        end;
+      end;
+      if FNextTimeOutCheckTick<CurTick then
+      begin
+        FNextTimeOutCheckTick := CurTick+TIMEOUT_CHECK_MSECS;
+        var ActiveList := FService.FActiveSockets.LockList;
+        try
+          for var i := 0 to ActiveList.Count-1 do
+          begin
+            Socket := ActiveList[i];
+            var LastIoTick := AtomicCmpExchange(Socket.FLastIoTick, 0, 0);
+            if (LastIoTick>0) then // socket has done IO, thus is not in listen mode anymore
+            begin
+              if ((CurTick-LastIoTick)>TIMEOUT_MSECS) then
+                Socket.FlushWrites(true)
+              else
+                Break; // later added connections connected later, so no further check needed
+            end;
+          end;
+        finally
+          FService.FActiveSockets.UnlockList;
         end;
       end;
     except
