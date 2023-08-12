@@ -102,8 +102,8 @@ const
     'UPDATE dwl_hostnames SET Cert=?, PrivateKey=? WHERE Id=?';
   Update_Cert_Idx_Cert=0; Update_Cert_Idx_PrivateKey=1; Update_Cert_Idx_Id=2;
 begin
-  var SslIoHandler: IdwlSslIoHandler;
   var HostNames := '';
+  var SslIoHandler: IdwlSslIoHandler;
   if not Supports(Server.IOHandler, IdwlSslIoHandler, SslIoHandler)  then
     SslIoHandler := nil;
   var ACMECLient := TdwlACMEClient.Create;
@@ -117,14 +117,6 @@ begin
     while Cmd.Reader.Read do
     begin
       var HostName := Cmd.Reader.GetString(GetHostNames_Idx_HostName);
-      if HostNames<>'' then
-        Hostnames := HostNames+',';
-      HostNames := Hostnames+HostName;
-      if SslIoHandler=nil then // we need one!
-      begin
-        Server.IOHandler := TdwlSslIoHandler.Create;
-        SslIoHandler := Server.IOHandler as IdwlSslIoHandler;
-      end;
       ACMECLient.Domain := HostName;
       ACMECLient.ChallengeIP := Cmd.Reader.GetString(GetHostNames_Idx_BindingIp, true);
       // First Check ACME Certificate
@@ -142,35 +134,42 @@ begin
       end;
       ACMEClient.CheckCertificate;
       ACMECLient.LogCertificateStatus;
-      if ACMECLient.CertificateStatus=certstatOk then
-      begin
-        if SslIoHandler.Environment.GetContext(ACMECLient.Domain)=nil then
-          SslIoHandler.Environment.AddContext(ACMECLient.Domain, Certificate, PrivateKey);
-        Continue;
-      end;
-      // Hostname found without or with an old certificate: do a retrieve
-      ACMEClient.ProfileCountryCode := Cmd.Reader.GetString(GetHostNames_Idx_CountyCode);
-      ACMEClient.ProfileState := Cmd.Reader.GetString(GetHostNames_Idx_State);
-      ACMEClient.ProfileCity := Cmd.Reader.GetString(GetHostNames_Idx_City);
-      ACMECLient.CheckAndRetrieveCertificate;
-      if (AccountKey='') and (ACMECLient.AccountPrivateKey<>nil) then
-      begin
-        AccountKey := ACMECLient.AccountPrivateKey.PEMString;
-        InsertOrUpdateDbParameter(Session, Param_ACME_Account_Key, AccountKey);
-        ConfigParams.WriteValue(Param_ACME_Account_Key, AccountKey);
-      end;
-      if ACMEClient.CertificateStatus=certstatOk then
-      begin // process newly retrieved certificate
-        Certificate := ACMECLient.Certificate;
-        PrivateKey := ACMECLient.PrivateKey.PEMString;
-        var CmdUpdate := Session.CreateCommand(SQL_Update_Cert);
-        CmdUpdate.Parameters.SetTextDataBinding(Update_Cert_Idx_Cert, Certificate);
-        CmdUpdate.Parameters.SetTextDataBinding(Update_Cert_Idx_PrivateKey, PrivateKey);
-        CmdUpdate.Parameters.SetIntegerDataBinding(Update_Cert_Idx_Id, Cmd.Reader.GetInteger(GetHostNames_Idx_Id));
-        CmdUpdate.Execute;
+      if ACMEClient.CertificateStatus<>certstatOk then
+      begin // Hostname found without or with an old certificate: do a retrieve
+        ACMEClient.ProfileCountryCode := Cmd.Reader.GetString(GetHostNames_Idx_CountyCode);
+        ACMEClient.ProfileState := Cmd.Reader.GetString(GetHostNames_Idx_State);
+        ACMEClient.ProfileCity := Cmd.Reader.GetString(GetHostNames_Idx_City);
+        ACMECLient.CheckAndRetrieveCertificate;
+        if (AccountKey='') and (ACMECLient.AccountPrivateKey<>nil) then
+        begin // A New accountkey was created, store it for future use
+          AccountKey := ACMECLient.AccountPrivateKey.PEMString;
+          InsertOrUpdateDbParameter(Session, Param_ACME_Account_Key, AccountKey);
+          ConfigParams.WriteValue(Param_ACME_Account_Key, AccountKey);
+        end;
+        if ACMEClient.CertificateStatus=certstatOk then
+        begin // process newly retrieved certificate
+          Certificate := ACMECLient.Certificate;
+          PrivateKey := ACMECLient.PrivateKey.PEMString;
+          var CmdUpdate := Session.CreateCommand(SQL_Update_Cert);
+          CmdUpdate.Parameters.SetTextDataBinding(Update_Cert_Idx_Cert, Certificate);
+          CmdUpdate.Parameters.SetTextDataBinding(Update_Cert_Idx_PrivateKey, PrivateKey);
+          CmdUpdate.Parameters.SetIntegerDataBinding(Update_Cert_Idx_Id, Cmd.Reader.GetInteger(GetHostNames_Idx_Id));
+          CmdUpdate.Execute;
+        end;
       end;
       if ACMEClient.CertificateStatus in [certstatAboutToExpire, certstatOk] then
-        SslIoHandler.Environment.AddContext(ACMECLient.Domain, Certificate, PrivateKey);
+      begin // Hostname can be used, so add it
+        if HostNames<>'' then
+          Hostnames := HostNames+',';
+        HostNames := Hostnames+HostName;
+        if SslIoHandler=nil then // we need one!
+        begin
+          Server.IOHandler := TdwlSslIoHandler.Create;
+          SslIoHandler := Server.IOHandler as IdwlSslIoHandler;
+        end;
+        if SslIoHandler.Environment.GetContext(ACMECLient.Domain)=nil then
+          SslIoHandler.Environment.AddContext(ACMECLient.Domain, Certificate, PrivateKey);
+      end;
     end;
   finally
     ACMEClient.Free;
