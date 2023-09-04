@@ -1,6 +1,9 @@
 # Release Notes
 All notable (including breaking) changes to this project will be documented in this file.
 
+## Sep 4, 2023
+- Fix for thread event initialisation: this highly reduces thread load in certain circumstances and will fix a lot of 'unexpected' strange behaviour
+
 ## Aug 11, 2023
 - Added socket timeout handling to DWL.Server.
 - Improved DWLServer request timing when logging

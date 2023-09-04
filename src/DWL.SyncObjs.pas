@@ -372,7 +372,7 @@ end;
 procedure TdwlThread.AfterConstruction;
 begin
   inherited AfterConstruction;
-  FWorkToDoEventHandle := CreateEvent(nil, true, false, nil);
+  FWorkToDoEventHandle := CreateEvent(nil, false, false, nil);
 end;
 
 destructor TdwlThread.Destroy;

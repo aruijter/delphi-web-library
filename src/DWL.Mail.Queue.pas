@@ -377,7 +377,7 @@ begin
         finally
           Str.Free;
         end;
-       end;
+      end;
     finally
       FreeSMTP;
       FCurrentContextParams := nil;

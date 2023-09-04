@@ -53,6 +53,7 @@ type
     procedure SocketOnAccept(Socket: TdwlSocket);
     function SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
     function SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
+    procedure SocketShutdown(Socket: TdwlSocket);
     function SslOnError_ShouldRetry(SslError: integer): boolean;
   private
     function Environment: TdwlSSlEnvironment;
@@ -320,6 +321,11 @@ procedure TdwlSslIoHandler.SocketOnAccept(Socket: TdwlSocket);
 begin
   SSL_set_accept_state(PsslSocketVars(Socket.SocketVars).opSSL);
   Process(Socket); // for possible startup of handshaking
+end;
+
+procedure TdwlSslIoHandler.SocketShutdown(Socket: TdwlSocket);
+begin
+  SSL_shutdown(PsslSocketVars(Socket.SocketVars).opSSL);
 end;
 
 function TdwlSslIoHandler.SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;

@@ -96,6 +96,7 @@ const
     procedure SocketOnAccept(Socket: TdwlSocket);
     function SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
     function SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
+    procedure SocketShutdown(Socket: TdwlSocket);
   end;
 
   TdwlTCPService = class
@@ -200,6 +201,7 @@ type
     procedure SocketOnAccept(Socket: TdwlSocket);
     function SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
     function SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
+    procedure SocketShutdown(Socket: TdwlSocket);
   end;
 
 { TdwlSocket }
@@ -222,6 +224,7 @@ end;
 
 procedure TdwlSocket.Shutdown;
 begin
+  FService.IOHandler.SocketShutdown(Self);
   Winapi.Winsock2.shutdown(FSocketHandle, SD_BOTH);
   ShutdownDetected;
 end;
@@ -513,7 +516,7 @@ begin
   // Create IoCompletionPort
 	FIoCompletionPort := CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, 0);
   // Create IoThreads
-  for var i := 1 to TdwlOS.NumberOfLogicalProcessors do
+  for var i := 1 to Min(3, TdwlOS.NumberOfLogicalProcessors) do
     TIOThread.Create(Self);
   FCleanupThread := TCleanupThread.Create(Self);
   FCleanupThread.FreeOnTerminate := true;
@@ -698,6 +701,11 @@ begin
 end;
 
 procedure TPlainIoHandler.SocketOnAccept(Socket: TdwlSocket);
+begin
+  // no usage here
+end;
+
+procedure TPlainIoHandler.SocketShutdown(Socket: TdwlSocket);
 begin
   // no usage here
 end;

@@ -1,5 +1,7 @@
 unit DWL.OS;
 
+{$I DWL.inc}
+
 interface
 
 uses
@@ -100,13 +102,15 @@ type
     /// </param>
     class function WMI_Value(const Win32Class, Win32Property: string): string; static;
     class function NumberOfLogicalProcessors: cardinal; static;
+    class function GetMemoryWorkingSetSize: UInt64; static;
+    class function GetMemoryManagerSize: UInt64; static;
   end;
 
 implementation
 
 uses
   System.SysUtils, Winapi.ShellAPI, Winapi.ShLwApi,
-  Winapi.ActiveX;
+  Winapi.ActiveX, Winapi.PsAPI;
 
 { TdwlOS }
 
@@ -239,6 +243,23 @@ begin
     SetLength(Result, StrLen - 1)
   else
     Result := '';
+end;
+
+class function TdwlOS.GetMemoryManagerSize: UInt64;
+begin
+  var St: TMemoryManagerState;
+  GetMemoryManagerState(st);
+  Result :=  st.TotalAllocatedMediumBlockSize+st.TotalAllocatedLargeBlockSize;
+  for var sb in st.SmallBlockTypeStates do
+    Result := Result + sb.UseableBlockSize * sb.AllocatedBlockCount;
+end;
+
+class function TdwlOS.GetMemoryWorkingSetSize: UInt64;
+begin
+  var MemCounters: TProcessMemoryCounters;
+  MemCounters.cb := SizeOf(MemCounters);
+  GetProcessMemoryInfo(GetCurrentProcess, @MemCounters, SizeOf(MemCounters));
+  Result := MemCounters.WorkingSetSize;
 end;
 
 class function TdwlOS.GetWindowsUserSid: string;

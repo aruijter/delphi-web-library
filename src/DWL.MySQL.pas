@@ -697,6 +697,7 @@ type
 
   TdwlMySQLCommand = class(TInterfacedObject, IdwlMySQLCommand)
   strict private
+    FSession: IdwlMySQLSession;
     FConnection: TdwlMySQLConnection;
     FStmt: PMYSQL_Stmt;
     FParameters: TdwlMySQLDataBindingCollection;
@@ -709,7 +710,7 @@ type
     function Parameters: TdwlMySQLDataBindingCollection;
     function LastInsertID: UInt64;
   public
-    constructor Create(Connection: TdwlMySQLConnection; const Query: string);
+    constructor Create(Session: IdwlMySQLSession; Connection: TdwlMySQLConnection; const Query: string);
     destructor Destroy; override;
   end;
 
@@ -1038,10 +1039,12 @@ end;
 
 { TdwlMySQLCommand }
 
-constructor TdwlMySQLCommand.Create(Connection: TdwlMySQLConnection; const Query: string);
+constructor TdwlMySQLCommand.Create(Session: IdwlMySQLSession; Connection: TdwlMySQLConnection; const Query: string);
 begin
   inherited Create;
   FConnection := Connection;
+  // Keep a session object, because it is interfaced, it needs to stay active (it holds the connection)
+  FSession := Session;
   FStmt := FConnection.PrepareStatement(UTF8Encode(Query));
   var PrmCnt := mysql_stmt_param_count(FStmt);
   if PrmCnt>0 then
@@ -2201,7 +2204,7 @@ begin
   // selected database went out of scope.
   // It's an assertion, so released functionality goes without this check
   Assert((FConnectionPool.FConnectionProperties.Database='')  or (Pos('USE ', Query.ToUpper)=0), 'USE <database> is not allowed when database is provided on session initiate');
-  Result := TdwlMySQLCommand.Create(FConnection, Query);
+  Result := TdwlMySQLCommand.Create(Self, FConnection, Query);
 end;
 
 destructor TdwlMySQLSession.Destroy;
