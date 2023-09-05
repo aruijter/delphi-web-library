@@ -984,7 +984,7 @@ begin
   try
     var Query_Utf8 := UTF8Encode(Query);
     var ExecResult := mysql_real_query(FMySQL, PUTF8String(Query_Utf8), Length(Query_Utf8));
-    if ExecResult=CR_SERVER_GONE_ERROR then
+    if (ExecResult=CR_SERVER_GONE_ERROR) or (ExecResult=CR_SERVER_LOST) then
     begin
       DoDisConnect;
       DoConnect;
