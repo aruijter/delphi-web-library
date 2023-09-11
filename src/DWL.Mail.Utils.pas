@@ -25,10 +25,13 @@ uses
 
 class function TdwlMailUtils.IdMessageToBytes(Msg: TIdMessage): TBytes;
 begin
-  var Stream := TBytesStream.Create;
+  var Stream := TMemoryStream.Create;
   try
     Msg.SaveToStream(Stream);
-    Result := Stream.Bytes;
+    var Size := Stream.Size;
+    SetLength(Result, Size);
+    Stream.Seek(0, soBeginning);
+    Stream.Read(Result, Size);
   finally
     Stream.Free;
   end;
