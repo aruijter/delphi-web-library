@@ -120,7 +120,7 @@ type
     /// <summary>
     ///   try get a request param as datetime
     /// </summary>
-    class function TryGetRequestParamDateTime(const State: PdwlHTTPHandlingState; const Key: string; var Value: TDateTime; AddJSONErrorOnFailure: boolean=false; const NewStatusCodeOnError: word=HTTP_STATUS_BAD_REQUEST): boolean;
+    class function TryGetRequestParamDateTime(const State: PdwlHTTPHandlingState; const Key: string; var Value: TDateTime; ReturnUTC: boolean=true; AddJSONErrorOnFailure: boolean=false; const NewStatusCodeOnError: word=HTTP_STATUS_BAD_REQUEST): boolean;
     /// <summary>
     ///   Gets the pointer to the payload. You can consume binary post data by
     ///   using this pointer. Please note, you're not the owner of this memory,
@@ -350,13 +350,13 @@ begin
     JSON_AddError(State, 99, 'invalid or missing parameter '+Key, NewStatusCodeOnError);
 end;
 
-class function TdwlDLLHandling.TryGetRequestParamDateTime(const State: PdwlHTTPHandlingState; const Key: string; var Value: TDateTime; AddJSONErrorOnFailure: boolean; const NewStatusCodeOnError: word): boolean;
+class function TdwlDLLHandling.TryGetRequestParamDateTime(const State: PdwlHTTPHandlingState; const Key: string; var Value: TDateTime; ReturnUTC: boolean=true; AddJSONErrorOnFailure: boolean=false; const NewStatusCodeOnError: word=HTTP_STATUS_BAD_REQUEST): boolean;
 begin
   try
     var StrVal: string;
     Result := State.TryGetRequestParamStr(Key, StrVal);
     if Result then
-      Value := ISO8601ToDate(StrVal);
+      Value := ISO8601ToDate(StrVal, ReturnUTC);
   except
     Result := false;
   end;
