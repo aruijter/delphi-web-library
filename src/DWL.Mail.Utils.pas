@@ -89,7 +89,7 @@ begin
   Request.Method  := HTTP_METHOD_POST;
   var Response := Request.Execute;
   if Response.StatusCode<>HTTP_STATUS_OK then
-    Result.AddErrorMsg('Error '+Response.StatusCode.ToString);
+    Result.AddErrorMsg('Error '+Response.StatusCode.ToString+': '+Response.ErrorMsg);
 end;
 
 end.
