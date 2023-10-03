@@ -53,6 +53,7 @@ const
     procedure HandleCurrentWriteBuffer;
     function CheckWSAResult_ShutdownOnError(ResultCode: Integer; const LogErrorWithThisString: string=''): integer;
   private
+    FUniqueID: NativeUInt;
     FSocketCS: TCriticalSection;
     FLastIoTick: UInt64;
     FShutdownTick: UInt64;
@@ -101,16 +102,20 @@ const
 
   TdwlTCPService = class
   strict private
+    FLastUniqueSocketID: UInt64;
     FCodePage_US_ASCII: integer;
     FActive: boolean;
     FIoHandler: IdwlTCPIoHandler;
     procedure SetActive(const Value: boolean);
   private
     FIoCompletionPort: THandle;
-    FActiveSockets: TdwlThreadList<TdwlSocket>;
-    FInActiveSockets: TdwlThreadList<TdwlSocket>;
+    FSocketListAccess: TCriticalSection;
+    FActiveSocketIDs: TList<NativeUInt>;
+    FActiveSockets: TList<TdwlSocket>;
+    FInActiveSockets: TList<TdwlSocket>;
     FIoThreads: TdwlThreadList<TThread>;
     FCleanupThread: TdwlThread;
+    function GetUniqueSocketID: NativeUInt;
   protected
     procedure InternalActivate; virtual;
     procedure InternalDeActivate; virtual;
@@ -216,36 +221,57 @@ end;
 
 procedure TdwlSocket.SendTransmitBuffer(TransmitBuffer: PdwlTransmitBuffer);
 begin
-  var Res := CheckWSAResult_ShutdownOnError(WSASend2(SocketHandle, @TransmitBuffer.WSABuf, 1, nil, 0, LPWSAOVERLAPPED(TransmitBuffer), nil));
-  if Res<>0 then
-  begin
-    if (Res=WSAECONNRESET) or (Res=WSAECONNABORTED) then
-      ShutdownDetected
-    else
+  FSocketCS.Enter;
+  try
+    var Res := CheckWSAResult_ShutdownOnError(WSASend2(SocketHandle, @TransmitBuffer.WSABuf, 1, nil, 0, LPWSAOVERLAPPED(TransmitBuffer), nil));
+    if Res<>0 then
     begin
-      if (Res<>WSAEWOULDBLOCK) and (Res<>integer(WSA_IO_PENDING)) and (Res<>integer(WSA_IO_INCOMPLETE)) then
-        TdwlLogger.Log('Winsock error: '+SysErrorMessage(Res)+' ('+Res.ToString+') in SendTransmitBuffer', lsError);
+      if (Res=WSAECONNRESET) or (Res=WSAECONNABORTED) then
+        ShutdownDetected
+      else
+      begin
+        if (Res<>WSAEWOULDBLOCK) and (Res<>integer(WSA_IO_PENDING)) and (Res<>integer(WSA_IO_INCOMPLETE)) then
+          TdwlLogger.Log('Winsock error: '+SysErrorMessage(Res)+' ('+Res.ToString+') in SendTransmitBuffer', lsError);
+      end;
     end;
+    AtomicIncrement(FWritesInProgress);
+  finally
+    FSocketCS.Leave;
   end;
-  AtomicIncrement(FWritesInProgress);
 end;
 
 procedure TdwlSocket.Shutdown;
 begin
-  FService.IOHandler.SocketShutdown(Self);
-  Winapi.Winsock2.shutdown(FSocketHandle, SD_BOTH);
-  ShutdownDetected;
+  FSocketCS.Enter;
+  try
+    FService.IOHandler.SocketShutdown(Self);
+    Winapi.Winsock2.shutdown(FSocketHandle, SD_BOTH);
+    ShutdownDetected;
+  finally
+    FSocketCS.Leave;
+  end;
 end;
 
 procedure TdwlSocket.ShutdownDetected;
 begin
-  if FShutdownTick<>0 then
-    Exit;
-  FShutdownTick := GetTickCount64;
-  if FService.FActiveSockets.Contains(Self) then
-  begin // no need for extra thread protection, this is only done once and already done within SocketCS Lock.
-    FService.FActiveSockets.Remove(Self);
-    FService.FInActiveSockets.Add(Self);
+  FSocketCS.Enter;
+  try
+    if FShutdownTick<>0 then
+      Exit;
+    FShutdownTick := GetTickCount64;
+    FService.FSocketListAccess.Enter;
+    try
+      if FService.FActiveSocketIDs.Contains(FUniqueID) then
+      begin
+        FService.FActiveSocketIDs.Remove(FUniqueID);
+        FService.FActiveSockets.Remove(Self);
+        FService.FInActiveSockets.Add(Self);
+      end;
+    finally
+      FService.FSocketListAccess.Leave;
+    end;
+  finally
+    FSocketCS.Leave;
   end;
 end;
 
@@ -318,10 +344,17 @@ end;
 constructor TdwlSocket.Create(AService: TdwlTCPService);
 begin
   inherited Create;
+  FUniqueID := AService.GetUniqueSocketID;
   FTransmitBuffers := TdwlThreadList<PdwlTransmitBuffer>.Create;
   FHandlingBuffers := TdwlThreadList<PdwlHandlingBuffer>.Create;
   FService := AService;
-  FService.FActiveSockets.Add(Self);
+  FService.FSocketListAccess.Enter;
+  try
+    FService.FActiveSocketIDs.Add(FUniqueID);
+    FService.FActiveSockets.Add(Self);
+  finally
+    FService.FSocketListAccess.Leave;
+  end;
   FSocketCS := TCriticalSection.Create;
   FEarlyReads := TList<PdwlTransmitBuffer>.Create;
   var SocketVarsSize := FService.IOHandler.SizeOfSocketIoVars;
@@ -330,7 +363,7 @@ begin
   FService.IOHandler.SocketAfterConstruction(Self);
   FSocketHandle := WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
   //and attach to IoCompletionPort
-	if CreateIoCompletionPort(SocketHandle, FService.FIoCompletionPort, 0, 0)=0 then
+	if CreateIoCompletionPort(SocketHandle, FService.FIoCompletionPort, FUniqueID, 0)=0 then
     CheckWSAResult_ShutdownOnError(-1, 'CreateIoCompletionPort');
   CreateWriteBuffer;
 end;
@@ -368,7 +401,12 @@ begin
   if FSocketVars<>nil then
     FreeMem(FSocketVars);
   closesocket(FSocketHandle);
-  FService.FInActiveSockets.Remove(Self);
+  FService.FSocketListAccess.Enter;
+  try
+    FService.FInActiveSockets.Remove(Self);
+  finally
+    FService.FSocketListAccess.Leave;
+  end;
   FEarlyReads.Free;
   // release buffers never sent to or returned from IoCompletion
   var LeftOverTransmitBuf: PdwlTransmitBuffer;
@@ -404,10 +442,10 @@ begin
   begin
     if CloseConnection then
     begin
-      // post a completion status for shutdown of socket (this is needed because order of iocompletion is no always as expected)
+      // post a completion status for shutdown of socket (this is needed because order of iocompletion is not always as expected)
       AtomicIncrement(FWritesInProgress);
       var TransmitBuffer := FService.AcquireTransmitBuffer(Self, COMPLETIONINDICATOR_WRITE);
-      PostQueuedCompletionStatus(FService.FIoCompletionPort, 0, 0, POverlapped(TransmitBuffer));
+      PostQueuedCompletionStatus(FService.FIoCompletionPort, 0, FUniqueID, POverlapped(TransmitBuffer));
       FWriteBuffer := nil; // do not create a new one, we're finished
     end;
   end;
@@ -500,12 +538,14 @@ end;
 constructor TdwlTCPService.Create;
 begin
   inherited Create;
+  FSocketListAccess := TCriticalSection.Create;
   FIoThreads := TdwlThreadList<TThread>.Create;
   // startup winsock
   var WSAData: TWSAData;
   CheckWSAResult(WSAStartup(WINSOCK_VERSION, WSAData), 'WSAStartup');
-  FActiveSockets := TdwlThreadList<TdwlSocket>.Create;
-  FInActiveSockets := TdwlThreadList<TdwlSocket>.Create;
+  FActiveSocketIDs := TList<NativeUInt>.Create;
+  FActiveSockets := TList<TdwlSocket>.Create;
+  FInActiveSockets := TList<TdwlSocket>.Create;
   var Dummy: TCPInfo;
   // get the available most basic codepage
   if GetCPInfo(20127, Dummy) then
@@ -518,11 +558,26 @@ destructor TdwlTCPService.Destroy;
 begin
   Active := false;
   FActiveSockets.Free;
+  FActiveSocketIDs.Free;
   FInActiveSockets.Free;
   // cleanup winsock
   CheckWSAResult(WSACleanup, 'WSACleanup');
   FIoThreads.Free;
+  FSocketListAccess.Free;
   inherited Destroy;
+end;
+
+function TdwlTCPService.GetUniqueSocketID: NativeUInt;
+begin
+  FSocketListAccess.Enter;
+  try
+    if FLastUniqueSocketID=High(NativeUInt) then
+      FLastUniqueSocketID := 0;
+    inc(FLastUniqueSocketID);
+    Result := FLastUniqueSocketID;
+  finally
+    FSocketListAccess.Leave;
+  end;
 end;
 
 procedure TdwlTCPService.InternalActivate;
@@ -558,11 +613,13 @@ begin
   while FIoThreads.Count>0 do
     Sleep(100);
   // close all sockets
-  var Socket: TdwlSocket;
-  while FActiveSockets.TryPop(Socket) do
-    Socket.Free;
-  while FInActiveSockets.TryPop(Socket) do
-    Socket.Free;
+  while FActiveSockets.Count>0 do
+  begin
+    FActiveSockets[0].Free;
+    FActiveSockets.Delete(0);
+  end;
+  while FInActiveSockets.Count>0 do
+    FInActiveSockets[0].Free;
   // Close IoCompletionPort
   CloseHandle(FIoCompletionPort);
 end;
@@ -625,19 +682,23 @@ begin
   begin
     try
       var NumberOfBytesTransferred: cardinal;
-      var CompletionKey: NativeUInt;
+      var UniqueSocketID: NativeUInt;
       var TransmitBuffer: PdwlTransmitBuffer;
-      if not GetQueuedCompletionStatus(FService.FIoCompletionPort, NumberOfBytesTransferred, CompletionKey, POverlapped(TransmitBuffer), INFINITE) then
+      if not GetQueuedCompletionStatus(FService.FIoCompletionPort, NumberOfBytesTransferred, UniqueSocketID, POverlapped(TransmitBuffer), INFINITE) then
         Continue;
       if TransmitBuffer=nil then
         Continue;
+      FService.FSocketListAccess.Enter;
+      try
+        if not FService.FActiveSocketIDs.Contains(UniqueSocketID) then
+          Continue;
+      finally
+        FService.FSocketListAccess.Leave;
+      end;
       if NumberOfBytesTransferred>0 then
         TransmitBuffer.Socket.IoCompleted(TransmitBuffer, NumberOfBytesTransferred)
       else
-      begin
         TransmitBuffer.Socket.ShutdownDetected;
-        FService.ReleaseTransmitBuffer(TransmitBuffer);
-      end;
     except
       on E: Exception do
         TdwlLogger.Log(E);
@@ -660,38 +721,40 @@ begin
   begin
     try
       WaitForSingleObject(FWorkToDoEventHandle, CLEANUPTHREAD_SLEEP_MSECS);
-      var Socket: TdwlSocket;
       var CurTick := GetTickCount64;
       var DeleteMoment := CurTick-CLEANUP_DELAY_MSECS;
-      while FService.FInActiveSockets.TryPop(Socket) do
-      begin
-        if (Socket.FShutdownTick>0) and (Socket.FShutdownTick<DeleteMoment) then
-          Socket.Free
-        else
+      FService.FSocketListAccess.Enter;
+      try
+        while FService.FInActiveSockets.Count>0 do
         begin
-          FService.FInActiveSockets.Insert(0, Socket); // maybe next time
-          Break;
+          var Socket := FService.FInActiveSockets[0];
+          if (Socket.FShutdownTick>0) and (Socket.FShutdownTick<DeleteMoment) then
+            Socket.Free
+          else
+            Break;
         end;
+      finally
+        FService.FSocketListAccess.Leave;
       end;
       if FNextTimeOutCheckTick<CurTick then
       begin
         FNextTimeOutCheckTick := CurTick+TIMEOUT_CHECK_MSECS;
-        var ActiveList := FService.FActiveSockets.LockList;
+        FService.FSocketListAccess.Enter;
         try
-          for var i := 0 to ActiveList.Count-1 do
+          for var i := 0 to FService.FActiveSockets.Count-1 do
           begin
-            Socket := ActiveList[i];
+            var Socket := FService.FActiveSockets[i];
             var LastIoTick := AtomicCmpExchange(Socket.FLastIoTick, 0, 0);
             if (LastIoTick>0) then // socket has done IO, thus is not in listen mode anymore
             begin
               if ((CurTick-LastIoTick)>TIMEOUT_MSECS) then
-                Socket.FlushWrites(true)
+                Socket.FlushWrites(true) // this is the way to shutdown the connection
               else
                 Break; // later added connections connected later, so no further check needed
             end;
           end;
         finally
-          FService.FActiveSockets.UnlockList;
+          FService.FSocketListAccess.Leave;
         end;
       end;
     except
