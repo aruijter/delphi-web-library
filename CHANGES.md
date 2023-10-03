@@ -1,6 +1,9 @@
 # Release Notes
 All notable (including breaking) changes to this project will be documented in this file.
 
+## Oct 3, 2023
+- DwlServer: To improve on response times: Offloaded request logging from the core Request handling
+- 
 ## Sep 4, 2023
 - Fix for thread event initialisation: this highly reduces thread load in certain circumstances and will fix a lot of 'unexpected' strange behaviour
 

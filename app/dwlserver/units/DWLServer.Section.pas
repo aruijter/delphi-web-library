@@ -21,7 +21,7 @@ type
     FRequestLoggingParams: IdwlParams;
     class procedure InsertOrUpdateDbParameter(Session: IdwlMySQLSession; const Key, Value: string);
     procedure DoLog(LogItem: PdwlLogItem);
-    procedure LogRequest(Request: TdwlHTTPSocket);
+    procedure LogRequest(LogRequest: TdwlRequestLogItem);
     function Start_InitDataBase(ConfigParams: IdwlParams): IdwlMySQLSession;
     procedure Start_ReadParameters_CommandLine_IniFile(ConfigParams: IdwlParams);
     procedure Start_ReadParameters_MySQL(Session: IdwlMySQLSession; ConfigParams: IdwlParams);
@@ -196,7 +196,7 @@ begin
   Cmd.Execute;
 end;
 
-procedure TDWLServerSection.LogRequest(Request: TdwlHTTPSocket);
+procedure TDWLServerSection.LogRequest(LogRequest: TdwlRequestLogItem);
 const
   SQL_InsertRequest =
     'INSERT INTO dwl_log_requests (Method, StatusCode, IP_Remote, Uri, ProcessingTime, RequestHeader, RequestParams) VALUES (?,?,?,?,?,?,?)';
@@ -212,34 +212,26 @@ begin
       ((Request.StatusCode=HTTP_STATUS_OK) or (Request.StatusCode=HTTP_STATUS_REDIRECT)) then
       Exit;
     {$ENDIF}
-    var Duration := Request.RequestDuration;
-    var RequestMethodStr := dwlhttpMethodToString[Request.RequestMethod];
+    var RequestMethodStr := dwlhttpMethodToString[LogRequest.Method];
     // in debugging log to Server Console
     {$IFDEF DEBUG}
     var LogItem := TdwlLogger.PrepareLogitem;
-    LogItem.Msg :=  Request.IP_Remote+':'+Request.Port_Local.ToString+' '+
-      RequestMethodStr+' '+Request.Uri+' '+Request.StatusCode.ToString+
-        ' ('+Duration.ToString+'ms)';
+    LogItem.Msg :=  LogRequest.IP_Remote+':'+LogRequest.Port_Local.ToString+' '+
+      RequestMethodStr+' '+LogRequest.Uri+' '+LogRequest.StatusCode.ToString+
+        ' ('+LogRequest.Duration.ToString+'ms)';
     Logitem.Topic := 'requests';
     LogItem.SeverityLevel := lsDebug;
     LogItem.Destination := logdestinationServerConsole;
     TdwlLogger.Log(LogItem);
     {$ENDIF}
-    // log request to table
-    var Prms := Request.RequestParams;
-    var RequestParamsText: string := '';
-    // clear sensitive information before logging
-    Prms.Values['password'] := '';
-    for var i := 0 to Prms.Count-1 do
-      RequestParamsText := RequestParamsText+Prms.Names[i]+'='+TNetEncoding.URL.Decode(Prms.ValueFromIndex[i])+#13#10;
     var Cmd := New_MySQLSession(FRequestLoggingParams).CreateCommand(SQL_InsertRequest);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Method, RequestMethodStr);
-    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_StatusCode, Request.StatusCode);
-    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_IP_Remote, Request.Ip_Remote);
-    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, Request.Uri);
-    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Min(High(word), Duration));
-    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Header, Request.RequestHeaders.GetAsNameValueText(false));
-    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Params, RequestParamsText);
+    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_StatusCode, LogRequest.StatusCode);
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_IP_Remote, LogRequest.Ip_Remote);
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, LogRequest.Uri);
+    Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Min(High(word), LogRequest.Duration));
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Header, LogRequest.Headers);
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Params, LogRequest.Params);
     Cmd.Execute;
   except
     on E: Exception do
