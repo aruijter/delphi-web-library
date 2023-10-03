@@ -209,7 +209,7 @@ begin
     if FLogLevel<httplogLevelFailedRequests then
       Exit;
     if (FLogLevel<httplogLevelAllRequests) and
-      ((Request.StatusCode=HTTP_STATUS_OK) or (Request.StatusCode=HTTP_STATUS_REDIRECT)) then
+      ((LogRequest.StatusCode=HTTP_STATUS_OK) or (LogRequest.StatusCode=HTTP_STATUS_REDIRECT)) then
       Exit;
     {$ENDIF}
     var RequestMethodStr := dwlhttpMethodToString[LogRequest.Method];
