@@ -3,8 +3,8 @@ unit DWL.TCP.Server;
 interface
 
 uses
-  DWL.TCP, Winapi.WinSock, Winapi.Winsock2, System.Classes, System.Generics.Collections,
-  DWL.SyncObjs;
+  DWL.TCP,  Winapi.WinSock, Winapi.Winsock2, System.Classes,
+  System.Generics.Collections;
 
 type
   TdwlTCPServer=class;
@@ -50,7 +50,7 @@ type
   private
     FSocketClass: TdwlSocketClass;
     FAcceptIoCompletionPort: THandle;
-    FAcceptIoThreads: TdwlThreadList<TThread>;
+    FAcceptIoThread: TThread;
   protected
     procedure InternalActivate; override;
     procedure InternalDeActivate; override;
@@ -64,11 +64,10 @@ type
 implementation
 
 uses
-  System.RTLConsts, DWL.Logging, System.Win.ScktComp,
-  System.Types, System.Math, Winapi.Windows, System.SysUtils;
+  DWL.Logging, Winapi.Windows, System.SysUtils;
 
 const
-  ACCEPT_SOCKET_COUNT = 2;
+  ACCEPT_SOCKET_COUNT = 3;
 
 type
   TAcceptIoThread = class(TThread)
@@ -86,15 +85,13 @@ constructor TdwlTCPServer.Create(SocketClass: TdwlSocketClass);
 begin
   inherited Create;
   FSocketClass := SocketClass;
-  FAcceptIoThreads := TdwlThreadList<TThread>.Create;
   FBindings := TdwlServerBindings.Create(Self);
 end;
 
 destructor TdwlTCPServer.Destroy;
 begin
-  Active := false; // needed for my DeActivate actions
+  Active := false; // needed for DeActivate actions
   FBindings.Free;
-  FAcceptIoThreads.Free;
   inherited Destroy; // does a deactivate etc, so irst inherited
 end;
 
@@ -103,27 +100,18 @@ begin
   inherited InternalActivate;
   // Create IoCompletionPort
 	FAcceptIoCompletionPort := CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, 0);
-  TAcceptIOThread.Create(Self); // one is really enough, don't worry, but if really wanted create as much as you want...
+  FAcceptIoThread := TAcceptIOThread.Create(Self); // one is really enough, don't worry
   FBindings.StartListening;
 end;
 
 procedure TdwlTCPServer.InternalDeActivate;
 begin
   FBindings.StopListening;
-  // stop running threads and wait for them
-  var RunningThreads := FAcceptIoThreads.LockList;
-  try
-    // stop IoThreads
-    for var Thread in RunningThreads do
-      Thread.Terminate;  //FreeOnTerminate
-    // to be sure to wake up all threads post threadcount queuedcompletionstatus
-    for var i := 1 to  RunningThreads.Count do
-      PostQueuedCompletionStatus(FAcceptIoCompletionPort, 0, 0, nil);
-  finally
-    FAcceptIoThreads.UnlockList;
-  end;
-  // wait untill all IoThreads are finshed
-  while FAcceptIoThreads.Count>0 do
+  // stop running thread
+  FAcceptIoThread.Terminate;
+  PostQueuedCompletionStatus(FAcceptIoCompletionPort, 0, 0, nil); // to activate the thread
+  // wait until IoThread is finshed
+  while FAcceptIoThread<>nil do
     Sleep(100);
   // Close IoCompletionPort
   CloseHandle(FAcceptIoCompletionPort);
@@ -132,8 +120,6 @@ end;
 
 procedure TdwlTCPServer.IoCompleted(TransmitBuffer: PdwlTransmitBuffer; NumberOfBytesTransferred: cardinal);
 begin
-  // create a new accept socket
-  FBindings.FBindings[TransmitBuffer.CompletionIndicator].CreateAcceptSocket;
   // get the address information from the TransmitBuffer
   var LocalAddress: Winapi.WinSock.PSOCKADDR;
   var RemoteAddress: Winapi.WinSock.PSOCKADDR;
@@ -141,17 +127,24 @@ begin
   var RemoteAddressSize: integer;
   GetAcceptExSockaddrs(TransmitBuffer.WSABuf.buf, 0, SizeOf(sockaddr_storage), SizeOf(sockaddr_storage),
     LocalAddress, LocalAddressSize, RemoteAddress, RemoteAddressSize);
-  SetSocketAddresses(TransmitBuffer.Socket,
-    string(Winapi.Winsock.inet_ntoa(LocalAddress.sin_addr)),
-    ntohs(LocalAddress.sin_port),
-    string(Winapi.Winsock.inet_ntoa(RemoteAddress.sin_addr)),
-    ntohs(RemoteAddress.sin_port));
-  // signal the iohandler we accepted the socket
-  IOHandler.SocketOnAccept(TransmitBuffer.Socket);
-  // start receiving on the socket
-  TransmitBuffer.Socket.StartReceiving;
-  // finally release the used buffer
-  ReleaseTransmitBuffer(TransmitBuffer);
+  var Socket := TransmitBuffer.Socket;
+  if not LockSocket(Socket.SocketHandle, Socket) then
+    Exit;
+  try
+    SetSocketAddresses(Socket,
+      string(Winapi.Winsock.inet_ntoa(LocalAddress.sin_addr)),
+      ntohs(LocalAddress.sin_port),
+      string(Winapi.Winsock.inet_ntoa(RemoteAddress.sin_addr)),
+      ntohs(RemoteAddress.sin_port));
+    // signal the iohandler we accepted the socket
+    IOHandler.SocketOnAccept(Socket);
+    // start receiving on the socket
+    Socket.StartReceiving;
+    // finally release the used buffer
+    ReleaseTransmitBuffer(TransmitBuffer);
+  finally
+    UnLockSocket(Socket);
+  end;
 end;
 
 { TdwlServerBindings }
@@ -209,6 +202,8 @@ end;
 
 procedure TdwlServerBinding.CreateAcceptSocket;
 begin
+  if FListenSocket=INVALID_SOCKET then // not listening, so no accept socket needed
+    Exit;
   // we use the writetransmitbuffer for the AcceptEx call
   // if writebuffer is not yet used when closing socket
   // it will be freed by the socket self
@@ -224,7 +219,7 @@ procedure TdwlServerBinding.StartListening(ListenIndex: byte);
 begin
   FListenIndex := ListenIndex;
   FListenSocket := WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
-	if CreateIoCompletionPort(FListenSocket, FBindings.FServer.FAcceptIoCompletionPort, 0, 0)=0 then
+	if CreateIoCompletionPort(FListenSocket, FBindings.FServer.FAcceptIoCompletionPort, ListenIndex, 0)=0 then
     CheckWSAResult(-1, 'CreateIoCompletionPort');
   if (FListenSocket = INVALID_SOCKET) then
     CheckWSAResult(1, 'WSASocket');
@@ -243,7 +238,10 @@ end;
 
 procedure TdwlServerBinding.StopListening;
 begin
-  closesocket(FListenSocket);
+  // first set listensocket to 0 before closing: otherwise a new accept socket will possibly be created
+  var SockToClose := FListenSocket;
+  FListenSocket := INVALID_SOCKET;
+  closesocket(SockToClose);
 end;
 
 { TAcceptIoThread }
@@ -251,7 +249,6 @@ end;
 constructor TAcceptIoThread.Create(AServer: TdwlTCPServer);
 begin
   FServer := AServer;
-  FServer.FAcceptIoThreads.Add(Self);
   FreeOnTerminate := true;
   inherited Create;
 end;
@@ -264,7 +261,10 @@ begin
       var NumberOfBytesTransferred: cardinal;
       var CompletionKey: NativeUInt;
       var TransmitBuffer: PdwlTransmitBuffer;
-      if not GetQueuedCompletionStatus(FServer.FAcceptIoCompletionPort, NumberOfBytesTransferred, CompletionKey, POverlapped(TransmitBuffer), INFINITE) then
+      var Res := GetQueuedCompletionStatus(FServer.FAcceptIoCompletionPort, NumberOfBytesTransferred, CompletionKey, POverlapped(TransmitBuffer), INFINITE);
+      // create a new accept socket
+      FServer.Bindings.FBindings[CompletionKey].CreateAcceptSocket;
+      if not Res then
         Continue;
       if TransmitBuffer=nil then
         Continue;
@@ -274,7 +274,7 @@ begin
         TdwlLogger.Log('TAcceptIoThread.Execute error: '+E.Message, lsError);
     end;
   end;
-  FServer.FAcceptIoThreads.Remove(Self);
+  FServer.FAcceptIoThread := nil;
 end;
 
 end.

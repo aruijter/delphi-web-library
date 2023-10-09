@@ -53,7 +53,6 @@ type
     procedure SocketOnAccept(Socket: TdwlSocket);
     function SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
     function SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
-    procedure SocketShutdown(Socket: TdwlSocket);
     function SslOnError_ShouldRetry(SslError: integer): boolean;
   private
     function Environment: TdwlSSlEnvironment;
@@ -323,19 +322,14 @@ begin
   Process(Socket); // for possible startup of handshaking
 end;
 
-procedure TdwlSslIoHandler.SocketShutdown(Socket: TdwlSocket);
-begin
-  SSL_shutdown(PsslSocketVars(Socket.SocketVars).opSSL);
-end;
-
 function TdwlSslIoHandler.SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
 begin
   var Socket := TransmitBuffer.Socket;
   var SslVars := PsslSocketVars(Socket.SocketVars);
   var BytesWritten := BIO_write(SslVars.bioRecv, TransmitBuffer.WSABuf.buf, TransmitBuffer.WSaBuf.len);
 	Result := cardinal(BytesWritten)=TransmitBuffer.WSABuf.len;
-  if (not Result) and (BIO_should_retry(SslVars.bioRecv)<>0) then
-    raise Exception.Create('Please implement delayed receiving');
+//  if (not Result) and (BIO_should_retry(SslVars.bioRecv)<>0) then
+//    raise Exception.Create('Please implement delayed receiving');
   if Result then
     Process(Socket);
 end;
