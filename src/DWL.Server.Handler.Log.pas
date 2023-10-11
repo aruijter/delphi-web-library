@@ -254,7 +254,7 @@ begin
     // Reload global avoids
     var PreviousAvoids := TDictionary<integer, TLogTriggerAvoid>.Create;
     try
-      // Keep current triggers
+      // Keep current avoids
       for var Avoid in FTriggerAvoids.Values do
         PreviousAvoids.Add(Avoid.Id, Avoid);
       FTriggerAvoids.Clear;
@@ -267,15 +267,15 @@ begin
         if not PreviousAvoids.TryGetValue(AvoidId, Avoid) then
           Avoid := TLogTriggerAvoid.Create(AvoidId)
         else
-          PreviousTriggers.Remove(AvoidId);
+          PreviousAvoids.Remove(AvoidId);
         Avoid.MaxAvoidCount := Cmd.Reader.GetInteger(GetTriggerAvoids_Idx_MaxAvoidCount, true, 1);
         Avoid.ClearSeconds := Cmd.Reader.GetInteger(GetTriggerAvoids_Idx_ClearSeconds, true, 1);
         var Hash := THashBobJenkins.Create;
         Hash.Update(Cmd.Reader.GetString(GetTriggerAvoids_Idx_Msg, true));
         FTriggerAvoids.Add(Hash.HashAsInteger, Avoid);
       end;
-      // dispose no longer used triggers
-      for var Avoid in PreviousTriggers.Values do
+      // dispose no longer used avoids
+      for var Avoid in PreviousAvoids.Values do
         Avoid.Free;
     finally
       PreviousAvoids.Free;
