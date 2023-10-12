@@ -17,6 +17,7 @@ type
     FPort: word;
     FListenSocket: TSocket;
     FListenIndex: byte;
+    FIoHandler: IdwlTCPIoHandler;
   private
     FBindings: TdwlServerBindings;
     procedure CreateAcceptSocket;
@@ -25,7 +26,7 @@ type
   public
     property Ip: string read FIp;
     property Port: word read FPort;
-    constructor Create(ABindings: TdwlServerBindings; const AIp: string; APort: word);
+    constructor Create(ABindings: TdwlServerBindings; const AIp: string; APort: word; IOHandler: IdwlTCPIoHandler);
   end;
 
   TdwlServerBindings = class
@@ -38,7 +39,7 @@ type
     property Bindings[Index: integer]: TdwlServerBinding read GetBindings; default;
     constructor Create(AServer: TdwlTCPServer);
     destructor Destroy; override;
-    function Add(const AIP: string; APort: word): TdwlServerBinding;
+    function Add(const AIP: string; APort: word; IOHandler: IdwlTCPIoHandler): TdwlServerBinding;
     procedure Clear;
     procedure StartListening;
     procedure StopListening;
@@ -137,7 +138,7 @@ begin
       string(Winapi.Winsock.inet_ntoa(RemoteAddress.sin_addr)),
       ntohs(RemoteAddress.sin_port));
     // signal the iohandler we accepted the socket
-    IOHandler.SocketOnAccept(Socket);
+    Socket.IOHandler.SocketOnAccept(Socket);
     // start receiving on the socket
     Socket.StartReceiving;
     // finally release the used buffer
@@ -149,9 +150,9 @@ end;
 
 { TdwlServerBindings }
 
-function TdwlServerBindings.Add(const AIP: string; APort: word): TdwlServerBinding;
+function TdwlServerBindings.Add(const AIP: string; APort: word; IOHandler: IdwlTCPIoHandler): TdwlServerBinding;
 begin
-  Result := TdwlServerBinding.Create(Self, AIP, APort);
+  Result := TdwlServerBinding.Create(Self, AIP, APort, IOHandler);
   FBindings.Add(Result);
 end;
 
@@ -192,12 +193,13 @@ end;
 
 { TdwlServerBinding }
 
-constructor TdwlServerBinding.Create(ABindings: TdwlServerBindings; const AIp: string; APort: word);
+constructor TdwlServerBinding.Create(ABindings: TdwlServerBindings; const AIp: string; APort: word; IOHandler: IdwlTCPIoHandler);
 begin
   inherited Create;
   FIp:= AIp;
   FPort := APort;
   FBindings := ABindings;
+  FIoHandler := IOHandler;
 end;
 
 procedure TdwlServerBinding.CreateAcceptSocket;
@@ -207,8 +209,8 @@ begin
   // we use the writetransmitbuffer for the AcceptEx call
   // if writebuffer is not yet used when closing socket
   // it will be freed by the socket self
-  var Socket := FBindings.FServer.FSocketClass.Create(FBindings.FServer);
-  var TransmitBuffer := Socket.Service.AcquireTransmitBuffer(Socket, FListenIndex);
+  var Socket := FBindings.FServer.FSocketClass.Create(FIoHandler);
+  var TransmitBuffer := FIoHandler.Service.AcquireTransmitBuffer(Socket, FListenIndex);
   var BytesReceived: cardinal;
   // we made the choice not to receive the first part of the data in the AcceptEx call
   CheckWSAResult(AcceptEx(FListenSocket, Socket.SocketHandle, TransmitBuffer.WSABuf.buf, 0,

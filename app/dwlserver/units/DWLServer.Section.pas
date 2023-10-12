@@ -31,7 +31,8 @@ type
     procedure Start_LoadURIAliases(Session: IdwlMySQLSession);
   private
     FServer: TDWLServer;
-    class procedure CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams);
+    FSSLIoHandler: IdwlSslIoHandler;
+    class procedure CheckACMEConfiguration(IOHandler: IdwlSslIoHandler; ConfigParams: IdwlParams);
   public
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
@@ -48,7 +49,7 @@ uses
   System.Math, DWL.TCP.Consts, System.StrUtils, Winapi.Windows,
   System.Threading, DWL.Logging.Callback, Winapi.ShLwApi, DWL.Mail.Queue,
   DWL.Server.Handler.Mail, DWL.Server.Handler.DLL, Winapi.WinInet,
-  System.NetEncoding;
+  System.NetEncoding, DWL.TCP;
 
 const
   TOPIC_BOOTSTRAP = 'bootstrap';
@@ -92,7 +93,7 @@ begin
   inherited BeforeDestruction;
 end;
 
-class procedure TDWLServerSection.CheckACMEConfiguration(Server: TdwlTCPServer; ConfigParams: IdwlParams);
+class procedure TDWLServerSection.CheckACMEConfiguration(IOHandler: IdwlSslIoHandler; ConfigParams: IdwlParams);
 const
   SQL_GetHostNames =
     'SELECT HostName, Cert, PrivateKey, CountryCode, State, City, BindingIp, Id FROM dwl_hostnames';
@@ -103,9 +104,6 @@ const
   Update_Cert_Idx_Cert=0; Update_Cert_Idx_PrivateKey=1; Update_Cert_Idx_Id=2;
 begin
   var HostNames := '';
-  var SslIoHandler: IdwlSslIoHandler;
-  if not Supports(Server.IOHandler, IdwlSslIoHandler, SslIoHandler)  then
-    SslIoHandler := nil;
   var ACMECLient := TdwlACMEClient.Create;
   try
     var AccountKey := ConfigParams.StrValue(Param_ACME_Account_Key);
@@ -162,13 +160,8 @@ begin
         if HostNames<>'' then
           Hostnames := HostNames+',';
         HostNames := Hostnames+HostName;
-        if SslIoHandler=nil then // we need one!
-        begin
-          Server.IOHandler := TdwlSslIoHandler.Create;
-          SslIoHandler := Server.IOHandler as IdwlSslIoHandler;
-        end;
-        if SslIoHandler.Environment.GetContext(ACMECLient.Domain)=nil then
-          SslIoHandler.Environment.AddContext(ACMECLient.Domain, Certificate, PrivateKey);
+        if IoHandler.Environment.GetContext(ACMECLient.Domain)=nil then
+          IoHandler.Environment.AddContext(ACMECLient.Domain, Certificate, PrivateKey);
       end;
     end;
   finally
@@ -365,30 +358,21 @@ begin
       Start_Enable_Logging(ConfigParams);
       TdwlLogger.Log('DWL Server starting', lsTrace, TOPIC_BOOTSTRAP);
       DWL.Server.AssignServerProcs;
-      CheckACMEConfiguration(FServer, ConfigParams);
+      FServer.OnlyLocalConnections := ConfigParams.BoolValue(Param_TestMode);
       Start_ProcessBindings(ConfigParams);
-      Start_LoadURIAliases(Session);
-
-      if not FServer.IsSecure then
-      begin
-        FServer.OnlyLocalConnections := ConfigParams.BoolValue(Param_TestMode);
-        if FServer.OnlyLocalConnections then
-          TdwlLogger.Log('SERVER IS NOT SECURE, only allowing local connections', lsWarning, TOPIC_BOOTSTRAP)
-        else
-          TdwlLogger.Log('SERVER IS NOT SECURE, please configure or review ACME parameters', lsWarning, TOPIC_BOOTSTRAP);
-      end
+      if FSSLIoHandler=nil then
+        TdwlLogger.Log('SERVER IS IN NON SECURE MODE!', lsWarning, TOPIC_BOOTSTRAP)
       else
-        FServer.OnlyLocalConnections := false;
+      begin
+        CheckACMEConfiguration(FSSLIoHandler, ConfigParams);
+        if FSSLIoHandler.Environment.ContextCount=0 then
+          TdwlLogger.Log('WARNING: NO SSL CERTIFICATES FOUND', lsWarning, TOPIC_BOOTSTRAP);
+      end;
+      Start_LoadURIAliases(Session);
       // Time to start the server
       FServer.Active := true;
-      TdwlLogger.Log('Enabled Server listening', lsTrace, TOPIC_BOOTSTRAP);
-      if FServer.IsSecure or FServer.OnlyLocalConnections then
-      begin
-        FServer.RegisterHandler(EndpointURI_Mail,  TdwlHTTPHandler_Mail.Create(ConfigParams));
-        Start_LoadDLLHandlers(Session, ConfigParams)
-      end
-      else
-        TdwlLogger.Log('Skipped loading of handlers because server is not secure', lsWarning, TOPIC_DLL);
+      FServer.RegisterHandler(EndpointURI_Mail,  TdwlHTTPHandler_Mail.Create(ConfigParams));
+      Start_LoadDLLHandlers(Session, ConfigParams);
       FACMECheckThread := TACMECheckThread.Create(Self, ConfigParams);
       FACMECheckThread.FreeOnTerminate := true;
       TdwlLogger.Log('DWL Server started', lsTrace, TOPIC_BOOTSTRAP);
@@ -479,9 +463,17 @@ procedure TDWLServerSection.Start_ProcessBindings(ConfigParams: IdwlParams);
 begin
   // Apply binding information
   var BindingIP := ConfigParams.StrValue(Param_Binding_IP);
-  var BindingPort := ConfigParams.IntValue(Param_Binding_Port, IfThen(Supports(FServer.IOHandler, IdwlSslIoHandler), PORT_HTTPS, PORT_HTTP));
-  FServer.Bindings.Add(BindingIP, BindingPort);
-  TdwlLogger.Log('Bound to '+IfThen(BindingIP='', '*', BindingIP)+':'+BindingPort.ToString, lsNotice, TOPIC_BOOTSTRAP);
+  var BindingPort := ConfigParams.IntValue(Param_Binding_Port, IfThen(FServer.OnlyLocalConnections, PORT_HTTP, PORT_HTTPS));
+  var IOHandler: IdwlTCPIoHandler;
+  if FServer.OnlyLocalConnections then
+    IOHandler := TdwlPlainIoHandler.Create(FServer)
+  else
+  begin
+    FSSLIoHandler := TdwlSslIoHandler.Create(FServer);
+    IOHandler := FSSLIoHandler as IdwlTCPIoHandler;
+  end;
+  FServer.Bindings.Add(BindingIP, BindingPort, IOHandler);
+  TdwlLogger.Log('Bound to '+IfThen(BindingIP='', '*', BindingIP)+':'+BindingPort.ToString+IfThen(FServer.OnlyLocalConnections, ' (NON-SSL!!)'), lsNotice, TOPIC_BOOTSTRAP);
 end;
 
 procedure TDWLServerSection.StopServer;
@@ -496,6 +488,7 @@ begin
   TdwlLogger.UnregisterDispatcher(FCallBackLogDispatcher);
   TdwlMailQueue.Configure(nil); // to stop sending
   FServer.Bindings.Clear;
+  FSSLIoHandler := nil;
   TdwlLogger.Log('Stopped DWL Server', lsNotice, TOPIC_WRAPUP);
   TdwlLogger.FinalizeDispatching;
   FServerStarted := false;
@@ -521,7 +514,7 @@ begin
     if Terminated then
       Break;
     try
-      TDWLServerSection.CheckACMEConfiguration(FSection.FServer, FConfigParams);
+      TDWLServerSection.CheckACMEConfiguration(FSection.FSSLIoHandler, FConfigParams);
     except
       on E:Exception do
         TdwlLogger.Log(E, lsError, TOPIC_ACME);

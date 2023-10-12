@@ -147,7 +147,8 @@ uses
   System.Classes, System.AnsiStrings, System.StrUtils,
   System.DateUtils, System.IOUtils, System.Math, System.JSON, Winapi.WinInet,
   System.Hash, Winapi.Windows,
-  System.Generics.Collections, System.NetEncoding, DWL.TCP.Consts, DWL.TCP.HTTP;
+  System.Generics.Collections, System.NetEncoding, DWL.TCP.Consts, DWL.TCP.HTTP,
+  DWL.TCP;
 
 const
   ProductionAPIEndpoint ='https://acme-v02.api.letsencrypt.org/directory';
@@ -465,7 +466,7 @@ begin
                 try
                   // Set Response combined token and JSONWebkey (Thumbprint)
                   CallbackServer.FCurrentChallengeResponse := ansistring(ChallToken+'.'+ TNetEncoding.Base64URL.EncodeBytesToString(THashSHA2.GetHashBytes(State.JSONWebKey.Replace(' ', ''), SHA256)));
-                  CallbackServer.Bindings.Add(ChallengeIP, CallBackPortNumber);
+                  CallbackServer.Bindings.Add(ChallengeIP, CallBackPortNumber, TdwlPlainIoHandler.Create(CallBackServer));
                   // start internal server
                   CallBackServer.Active := true;
                   // start the challenge

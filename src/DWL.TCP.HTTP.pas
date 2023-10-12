@@ -76,7 +76,7 @@ type
     property Uri: string read FUri;
     property ResponseDataStream: TMemoryStream read FResponseDataStream;
     property RequestDuration: Int64 read GetRequestDuration;
-    constructor Create(AService: TdwlTCPService); override;
+    constructor Create(AIOHandler: IdwlTcpIOHandler); override;
     destructor Destroy; override;
     procedure ReadHandlingBuffer(HandlingBuffer: PdwlHandlingBuffer); override;
   end;
@@ -184,7 +184,7 @@ begin
     var WideStr: string;
     var Len := Last-First+1;
     SetLength(WideStr, Len);
-    SetLength(WideStr, MultiByteToWideChar(FService.CodePage_US_ASCII, 0, PAnsiChar(First), Len, @WideStr[1], Len));
+    SetLength(WideStr, MultiByteToWideChar(FCodePage_US_ASCII, 0, PAnsiChar(First), Len, @WideStr[1], Len));
     FPendingLine := FPendingLine+WideStr;
   end;
   if Finished then
@@ -217,10 +217,10 @@ begin
   // No need to clear other variables, they're always overwritten during evaluation of next request
 end;
 
-constructor TdwlHTTPSocket.Create(AService: TdwlTCPService);
+constructor TdwlHTTPSocket.Create(AIOHandler: IdwlTcpIOHandler);
 begin
-  inherited Create(AService);
-  Assert(AService is TdwlCustomHTTPServer);
+  inherited Create(AIOHandler);
+  Assert(AIOHandler.Service is TdwlCustomHTTPServer);
   FState := hcsReadRequest;
   FStopWatch := TStopwatch.Create;
   FRequestHeaders := New_Params;
@@ -443,7 +443,7 @@ begin
       else
       begin
         // let the request be processed bij the server implementation
-        if not TdwlCustomHTTPServer(FService).HandleRequest(Self) then
+        if not TdwlCustomHTTPServer(Service).HandleRequest(Self) then
           StatusCode := HTTP_STATUS_NOT_FOUND;
       end;
       // Remember to not write Content-Length when method CONNECT is added later
@@ -470,7 +470,7 @@ begin
       FlushWrites(not KeepAlive);
     finally
       // always try to log the request
-      TdwlCustomHTTPServer(FService).LogRequest(Self);
+      TdwlCustomHTTPServer(Service).LogRequest(Self);
     end;
   except
     on E: Exception do

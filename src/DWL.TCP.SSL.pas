@@ -29,8 +29,11 @@ type
     FMREW: TLightweightMREW;
     FContexts: TDictionary<string, TdwlSslContext>;
     FDeprecatedContexts: TObjectList<TdwlSslContext>;
+    function GetMainContext: TdwlSslContext;
+  private
+    FEmptyContext: TdwlSslContext;
   public
-    property MainContext: TdwlSslContext read FMainContext;
+    property MainContext: TdwlSslContext read GetMainContext;
     constructor Create;
     destructor Destroy; override;
     procedure AddContext(const HostName, Cert, Key: string);
@@ -43,7 +46,7 @@ type
     function Environment: TdwlSSlEnvironment;
   end;
 
-  TdwlSslIoHandler = class(TInterfacedObject, IdwlTcpIoHandler, IdwlSslIoHandler)
+  TdwlSslIoHandler = class(TdwlBaseIoHandler, IdwlTcpIoHandler, IdwlSslIoHandler)
   strict private
     FEnvironment: TdwlSslEnvironment;
     function Process(Socket: TdwlSocket): boolean;
@@ -57,7 +60,7 @@ type
   private
     function Environment: TdwlSSlEnvironment;
   public
-    constructor Create;
+    constructor Create(AService: TdwlTCPService);
     destructor Destroy; override;
   end;
 
@@ -83,10 +86,20 @@ end;
 
 function client_hello(opSSL: pSSL; al: PInteger; arg: pointer): integer;
 begin
-  Result := SSL_CLIENT_HELLO_SUCCESS;
+  Result := SSL_CLIENT_HELLO_ERROR;
   var SocketVars := PsslSocketVars(SSL_get_ex_data(opSSL, SSL_EX_DATA_SELF_INDEX));
   if SocketVars=nil then
     Exit;
+  if SocketVars.Context = SocketVars.Context.Environment.FEmptyContext then
+  begin
+    if SocketVars.Context.Environment.ContextCount=0 then // still no valid context defined, nothing we can do further
+      Exit;
+    // change to the new main context
+      SocketVars.Context := SocketVars.Context.Environment.MainContext;
+      SocketVars.SendBuf.Socket.Context_HostName := SocketVars.Context.HostName;
+      SSL_set_SSL_CTX(opSSL, SocketVars.Context.opSSL_CTX);
+  end;
+  Result := SSL_CLIENT_HELLO_SUCCESS;
   if SocketVars.Context.Environment.ContextCount<2 then //switching doesn't make sense
     Exit;
   var OutData : PByte;
@@ -125,38 +138,44 @@ begin
   FEnvironment := AEnvironment;
   FHostName := AHostName;
   FopSSL_CTX := SSL_CTX_new(TLS_method);
-  var CertBegin := pos(HDR_BEGIN, Cert);
-  var MainDone := false;
-  while CertBegin>0 do
+  if Cert<>'' then
   begin
-    var CertEnd := pos(HDR_END, Cert, CertBegin);
-    if CertEnd<0 then
-      Break;
-    CertEnd := pos(#10, Cert, CertEnd);
-    if CertEnd<1 then
-      CertEnd := Length(Cert);
-    var X509Cert := TdwlOpenSSL.New_Cert_FromPEMStr(Copy(Cert, CertBegin, CertEnd-CertBegin+1));
-    if X509Cert=nil then
-      Break;
-    if MainDone then
+    var CertBegin := pos(HDR_BEGIN, Cert);
+    var MainDone := false;
+    while CertBegin>0 do
     begin
-      // as extra certs are added to original, we need to transfer ownership
-      // using and extra parameter when getting the X509 pointer from the IdwlX509Cert
-      if SSL_CTX_add_extra_chain_cert(FopSSL_CTX, X509Cert.X509(true))=0 then
-        raise Exception.Create('Error SSL_CTX_use_certificate');
-    end
-    else
-    begin
-      if SSL_CTX_use_certificate(FopSSL_CTX, X509Cert.X509)=0 then
-        raise Exception.Create('Error SSL_CTX_use_certificate');
-      MainDone := true;
+      var CertEnd := pos(HDR_END, Cert, CertBegin);
+      if CertEnd<0 then
+        Break;
+      CertEnd := pos(#10, Cert, CertEnd);
+      if CertEnd<1 then
+        CertEnd := Length(Cert);
+      var X509Cert := TdwlOpenSSL.New_Cert_FromPEMStr(Copy(Cert, CertBegin, CertEnd-CertBegin+1));
+      if X509Cert=nil then
+        Break;
+      if MainDone then
+      begin
+        // as extra certs are added to original, we need to transfer ownership
+        // using and extra parameter when getting the X509 pointer from the IdwlX509Cert
+        if SSL_CTX_add_extra_chain_cert(FopSSL_CTX, X509Cert.X509(true))=0 then
+          raise Exception.Create('Error SSL_CTX_use_certificate');
+      end
+      else
+      begin
+        if SSL_CTX_use_certificate(FopSSL_CTX, X509Cert.X509)=0 then
+          raise Exception.Create('Error SSL_CTX_use_certificate');
+        MainDone := true;
+      end;
+      CertBegin := pos(HDR_BEGIN, Cert, CertEnd+1);
     end;
-    CertBegin := pos(HDR_BEGIN, Cert, CertEnd+1);
   end;
   // Load Private Key
-  var PrivKey := TdwlOpenSSL.New_PrivateKey_FromPEMStr(Key);
-  if SSL_CTX_use_PrivateKey(FopSSL_CTX, PrivKey.key)=0 then
-      raise Exception.Create('Error SSL_CTX_use_PrivateKey');
+  if Key<>'' then
+  begin
+    var PrivKey := TdwlOpenSSL.New_PrivateKey_FromPEMStr(Key);
+    if SSL_CTX_use_PrivateKey(FopSSL_CTX, PrivKey.key)=0 then
+        raise Exception.Create('Error SSL_CTX_use_PrivateKey');
+  end;
 end;
 
 destructor TdwlSslContext.Destroy;
@@ -216,6 +235,7 @@ begin
   end;
   FContexts.Free;
   FDeprecatedContexts.Free;
+  FEmptyContext.Free;
   inherited Destroy;
 end;
 
@@ -233,11 +253,23 @@ begin
     Result := nil;
 end;
 
+function TdwlSslEnvironment.GetMainContext: TdwlSslContext;
+begin
+  if FMainContext=nil then
+  begin
+    if FEmptyContext=nil then
+      FEmptyContext := TdwlSslContext.Create(Self, '', '', '');
+    Result := FEmptyContext;
+  end
+  else
+    Result := FMainContext;
+end;
+
 { TdwlSslIoHandler }
 
-constructor TdwlSslIoHandler.Create;
+constructor TdwlSslIoHandler.Create(AService: TdwlTCPService);
 begin
-  inherited Create;
+  inherited Create(AService);
   FEnvironment := TdwlSslEnvironment.Create;
 end;
 

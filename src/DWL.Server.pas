@@ -75,11 +75,6 @@ type
     /// </summary>
     procedure ClearURIAliases;
     /// <summary>
-    ///   if an Hostname including certificates is added and thus
-    ///   the SSL protocol is activated and this function returns true
-    /// </summary>
-    function IsSecure: boolean;
-    /// <summary>
     ///   This will suspend handling, the server will stay active, but the
     ///   handling of the requests will be delayed until ResumeHandling is
     ///   called. Do not suspend handling for a long time.
@@ -236,11 +231,6 @@ procedure TDWLServer.InternalDeActivate;
 begin
   TdwlHTTPHandler_PassThrough(FRootHandler).UnRegisterAllHandlers;
   inherited InternalDeActivate;
-end;
-
-function TDWLServer.IsSecure: boolean;
-begin
-  Result := Supports(IoHandler, IdwlSslIoHandler);
 end;
 
 procedure TDWLServer.ProcessRequest(const State: PdwlHTTPHandlingState);

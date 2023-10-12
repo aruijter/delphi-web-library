@@ -34,9 +34,21 @@ const
     1: (HandlingBuffer: TdwlHandlingBuffer);
   end;
 
+  IdwlTCPIoHandler = interface
+    ['{B4B4EB8D-4905-4E1F-BD64-DC28995E85FF}']
+    function Service: TdwlTCPService;
+    function SizeOfSocketIoVars: cardinal;
+    procedure SocketAfterConstruction(Socket: TdwlSocket);
+    procedure SocketBeforeDestruction(Socket: TdwlSocket);
+    procedure SocketOnAccept(Socket: TdwlSocket);
+    function SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
+    function SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
+  end;
+
   TdwlSocketClass = class of TdwlSocket;
   TdwlSocket = class
   strict private
+    FIoHandler: IdwlTCPIoHandler;
     FSocketVars: pointer;
     FSocketHandle: TSocket;
     FWriteBuffer: PdwlHandlingBuffer;
@@ -49,6 +61,7 @@ const
     procedure HandleCurrentWriteBuffer;
     function CheckWSAResult_ShutdownOnError(ResultCode: Integer; const LogErrorWithThisString: string=''): integer;
   private
+    FService: TdwlTCPService;
     FSocketCS: TCriticalSection;
     FLastIoTick: UInt64;
     FShutdownTick: UInt64;
@@ -60,7 +73,7 @@ const
     FPort_Remote: word;
     procedure IoCompleted(TransmitBuffer: PdwlTransmitBuffer; NumberOfBytesTransferred: cardinal);
   protected
-    FService: TdwlTCPService;
+    class var FCodePage_US_ASCII: integer;
     procedure CreateWriteBuffer;
   public
     property Ip_Local: string read FIp_Local;
@@ -71,7 +84,9 @@ const
     property SocketHandle: TSocket read FSocketHandle;
     property SocketVars: pointer read FSocketVars;
     property Context_HostName: string read FContext_HostName write FContext_HostName;
-    constructor Create(AService: TdwlTCPService); virtual;
+    property IOHandler: IdwlTCPIoHandler read FIoHandler;
+    class constructor Create;
+    constructor Create(IOHandler: IdwlTcpIOHandler); virtual;
     destructor Destroy; override;
     procedure ReadHandlingBuffer(HandlingBuffer: PdwlHandlingBuffer); virtual;
     procedure FlushWrites(CloseConnection: boolean=false);
@@ -85,20 +100,9 @@ const
     procedure WriteUInt8(B: byte);
   end;
 
-  IdwlTCPIoHandler = interface
-    function SizeOfSocketIoVars: cardinal;
-    procedure SocketAfterConstruction(Socket: TdwlSocket);
-    procedure SocketBeforeDestruction(Socket: TdwlSocket);
-    procedure SocketOnAccept(Socket: TdwlSocket);
-    function SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
-    function SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
-  end;
-
   TdwlTCPService = class
   strict private
-    FCodePage_US_ASCII: integer;
     FActive: boolean;
-    FIoHandler: IdwlTCPIoHandler;
     procedure SetActive(const Value: boolean);
   private
     FSocketStorage: TObject;
@@ -111,8 +115,6 @@ const
     procedure SetSocketAddresses(Socket: TdwlSocket; const Ip_Local: string; Port_Local: word; const Ip_Remote: string; Port_Remote: word);
   public
     property Active: boolean read FActive write SetActive;
-    property CodePage_US_ASCII: integer read FCodePage_US_ASCII;
-    property IOHandler: IdwlTCPIOHandler read FIOHandler write FIOHandler;
     constructor Create;
     destructor Destroy; override;
     function AcquireHandlingBuffer(Socket: TdwlSocket): PdwlHandlingBuffer;
@@ -122,6 +124,25 @@ const
     procedure ReleaseTransmitBuffer(TransmitBuffer: PdwlTransmitBuffer);
     function LockSocket(Handle: TSocket; var Socket: TdwlSocket): boolean;
     procedure UnLockSocket(Socket: TdwlSocket);
+  end;
+
+  TdwlBaseIoHandler = class(TInterfacedObject)
+  strict private
+    FService: TdwlTCPService;
+  protected
+    function Service: TdwlTCPService;
+  public
+    constructor Create(AService: TdwlTCPService);
+  end;
+
+  TdwlPlainIoHandler = class(TdwlBaseIoHandler, IdwlTCPIoHandler)
+  strict private
+    function SizeOfSocketIoVars: cardinal;
+    procedure SocketAfterConstruction(Socket: TdwlSocket);
+    procedure SocketBeforeDestruction(Socket: TdwlSocket);
+    procedure SocketOnAccept(Socket: TdwlSocket);
+    function SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
+    function SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
   end;
 
 function CheckWSAResult(ResultCode: Integer; const LogErrorWithThisString: string=''): Integer; overload;
@@ -187,16 +208,6 @@ type
     constructor Create(AService: TdwlTCPService);
   end;
 
-  TPlainIoHandler = class(TInterfacedObject, IdwlTCPIoHandler)
-  strict private
-    function SizeOfSocketIoVars: cardinal;
-    procedure SocketAfterConstruction(Socket: TdwlSocket);
-    procedure SocketBeforeDestruction(Socket: TdwlSocket);
-    procedure SocketOnAccept(Socket: TdwlSocket);
-    function SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
-    function SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
-  end;
-
   TdwlSocketStorage = class
   strict private
     FListAccess: TCriticalSection;
@@ -217,7 +228,7 @@ type
 
 procedure TdwlSocket.HandleCurrentWriteBuffer;
 begin
-  if not fService.IoHandler.SocketHandleWrite(FWriteBuffer) then
+  if not FIoHandler.SocketHandleWrite(FWriteBuffer) then
     Shutdown;
   if FWriteBuffer<>nil then
     FService.ReleaseHandlingBuffer(FWriteBuffer);
@@ -282,7 +293,7 @@ begin
   var StrAnsi: ansistring;
   var Len := Str.Length;
   SetLength(StrAnsi, Len);
-  SetLength(StrAnsi, WideCharToMultiByte(FService.CodePage_US_ASCII, 0, PWideChar(Str), Len, PAnsiChar(StrAnsi), Len, nil, nil));
+  SetLength(StrAnsi, WideCharToMultiByte(FCodePage_US_ASCII, 0, PWideChar(Str), Len, PAnsiChar(StrAnsi), Len, nil, nil));
   WriteBuf(PByte(PAnsiChar(StrAnsi)), Len);
 end;
 
@@ -298,23 +309,34 @@ begin
     ShutdownDetected;
 end;
 
-constructor TdwlSocket.Create(AService: TdwlTCPService);
+constructor TdwlSocket.Create(IOHandler: IdwlTcpIOHandler);
 begin
   inherited Create;
   FTransmitBuffers := TList<PdwlTransmitBuffer>.Create;
   FHandlingBuffers := TList<PdwlHandlingBuffer>.Create;
-  FService := AService;
+  FIoHandler := IOHandler;
+  FService := FIoHandler.Service;
   FSocketCS := TCriticalSection.Create;
   FSocketHandle := WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
-  var SocketVarsSize := FService.IOHandler.SizeOfSocketIoVars;
+  var SocketVarsSize := FIOHandler.SizeOfSocketIoVars;
   if SocketVarsSize>0 then
     GetMem(FSocketVars, SocketVarsSize);
-  FService.IOHandler.SocketAfterConstruction(Self);
+  FIOHandler.SocketAfterConstruction(Self);
   TdwlSocketStorage(FService.FSocketStorage).RegisterNewSocket(Self);
   //and attach to IoCompletionPort
 	if CreateIoCompletionPort(SocketHandle, FService.FIoCompletionPort, SocketHandle, 0)=0 then
     CheckWSAResult_ShutdownOnError(-1, 'CreateIoCompletionPort');
   CreateWriteBuffer;
+end;
+
+class constructor TdwlSocket.Create;
+begin
+  // get the available most basic codepage
+  var Dummy: TCPInfo;
+  if GetCPInfo(20127, Dummy) then
+    FCodePage_US_ASCII := 20127
+  else
+    FCodePage_US_ASCII := 437;
 end;
 
 procedure TdwlSocket.CreateRecvRequest;
@@ -335,7 +357,7 @@ end;
 
 destructor TdwlSocket.Destroy;
 begin
-  FService.IOHandler.SocketBeforeDestruction(Self);
+  FIOHandler.SocketBeforeDestruction(Self);
   if FSocketVars<>nil then
     FreeMem(FSocketVars);
   closesocket(FSocketHandle);
@@ -389,7 +411,7 @@ begin
       // set WSAbuf.len to actual used length
       TransmitBuffer.WSABuf.len := NumberOfBytesTransferred;
       // handle the finished request;
-      if not FService.IOHandler.SocketHandleReceive(TransmitBuffer) then
+      if not FIOHandler.SocketHandleReceive(TransmitBuffer) then
         Shutdown;
       CreateRecvRequest; // create a new receive request
     end;
@@ -431,12 +453,6 @@ begin
   // startup winsock
   var WSAData: TWSAData;
   CheckWSAResult(WSAStartup(WINSOCK_VERSION, WSAData), 'WSAStartup');
-  var Dummy: TCPInfo;
-  // get the available most basic codepage
-  if GetCPInfo(20127, Dummy) then
-    FCodePage_US_ASCII := 20127
-  else
-    FCodePage_US_ASCII := 437;
 end;
 
 destructor TdwlTCPService.Destroy;
@@ -451,8 +467,6 @@ end;
 procedure TdwlTCPService.InternalActivate;
 begin
   FSocketStorage := TdwlSocketStorage.Create;
-  if IOHandler=nil then
-    IOHandler := TPlainIOHandler.Create;
   // Create IoCompletionPort
   var NumberOfThreads := Min(3, TdwlOS.NumberOfLogicalProcessors);
 	FIoCompletionPort := CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, NumberOfThreads);
@@ -610,35 +624,35 @@ begin
   end;
 end;
 
-{ TPlainIoHandler }
+{ TdwlPlainIoHandler }
 
-function TPlainIoHandler.SizeOfSocketIoVars: cardinal;
+function TdwlPlainIoHandler.SizeOfSocketIoVars: cardinal;
 begin
   Result := 0;
 end;
 
-procedure TPlainIoHandler.SocketAfterConstruction(Socket: TdwlSocket);
+procedure TdwlPlainIoHandler.SocketAfterConstruction(Socket: TdwlSocket);
 begin
   // no usage here
 end;
 
-procedure TPlainIoHandler.SocketBeforeDestruction(Socket: TdwlSocket);
+procedure TdwlPlainIoHandler.SocketBeforeDestruction(Socket: TdwlSocket);
 begin
   // no usage here
 end;
 
-procedure TPlainIoHandler.SocketOnAccept(Socket: TdwlSocket);
+procedure TdwlPlainIoHandler.SocketOnAccept(Socket: TdwlSocket);
 begin
   // no usage here
 end;
 
-function TPlainIoHandler.SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
+function TdwlPlainIoHandler.SocketHandleReceive(var TransmitBuffer: PdwlTransmitBuffer): boolean;
 begin
   TransmitBuffer.Socket.ReadHandlingBuffer(@TransmitBuffer.HandlingBuffer);
   Result := true;
 end;
 
-function TPlainIoHandler.SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
+function TdwlPlainIoHandler.SocketHandleWrite(var HandlingBuffer: PdwlHandlingBuffer): boolean;
 begin
   var TransmitBuffer := HandlingBuffer.Socket.FService.AcquireTransmitBuffer(HandlingBuffer, COMPLETIONINDICATOR_WRITE);
   HandlingBuffer := nil; // to signal we took it
@@ -754,6 +768,18 @@ begin
     end;
   end;
   Socket.FSocketCS.Leave;;
+end;
+
+{ TdwlBaseIoHandler }
+
+constructor TdwlBaseIoHandler.Create(AService: TdwlTCPService);
+begin
+  FService := AService;
+end;
+
+function TdwlBaseIoHandler.Service: TdwlTCPService;
+begin
+  Result := FService;
 end;
 
 end.
