@@ -1,9 +1,15 @@
 # Release Notes
 All notable (including breaking) changes to this project will be documented in this file.
 
+## Oct 13, 2023
+A big improvement to DWL Server. Now reached the highest convenience possible for ACME challenges. ACME now uses the already open port 443!!
+- Multiple bindings with their own IOHandler. Multiple ports can be opened, each with their own protocol (like HTTP and HTTPS)
+- Added application layer protocol handling (RFC7301)
+- Added TLS-ALPN-01 challnged type to ACME client. No longer need port 80 for ACME challenges (RFC8737). Yeah!
+
 ## Oct 3, 2023
 - DwlServer: To improve on response times: Offloaded request logging from the core Request handling
-- 
+
 ## Sep 4, 2023
 - Fix for thread event initialisation: this highly reduces thread load in certain circumstances and will fix a lot of 'unexpected' strange behaviour
 

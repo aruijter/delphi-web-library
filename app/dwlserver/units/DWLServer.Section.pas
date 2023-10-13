@@ -67,6 +67,18 @@ const
   Param_LogLevel = 'loglevel'; ParamDef_LogLevel = httplogLevelWarning;
 
 type
+  TACMEChecker = class
+  strict private
+    FACMECLient: TdwlACMEClient;
+    FEnvironment: TdwlSslEnvironment;
+    procedure AlpnChallengeCallback(ChallengeActive: boolean; const HostName, Cert, Key: string);
+  public
+    property ACMEClient: TdwlACMEClient read FACMECLient;
+    constructor Create(Environment: TdwlSslEnvironment);
+    destructor Destroy; override;
+  end;
+
+type
   TACMECheckThread = class(TdwlThread)
   strict private
     FSection: TDWLServerSection;
@@ -104,8 +116,9 @@ const
   Update_Cert_Idx_Cert=0; Update_Cert_Idx_PrivateKey=1; Update_Cert_Idx_Id=2;
 begin
   var HostNames := '';
-  var ACMECLient := TdwlACMEClient.Create;
+  var ACMEChecker := TACMEChecker.Create(IOHandler.Environment);
   try
+    var ACMEClient := ACMEChecker.ACMEClient;
     var AccountKey := ConfigParams.StrValue(Param_ACME_Account_Key);
     if AccountKey<>'' then
       ACMEClient.AccountPrivateKey := TdwlOpenSSL.New_PrivateKey_FromPEMStr(AccountKey);
@@ -132,6 +145,7 @@ begin
       end;
       ACMEClient.CheckCertificate;
       ACMECLient.LogCertificateStatus;
+      var CertIsNew := false;
       if ACMEClient.CertificateStatus<>certstatOk then
       begin // Hostname found without or with an old certificate: do a retrieve
         ACMEClient.ProfileCountryCode := Cmd.Reader.GetString(GetHostNames_Idx_CountyCode);
@@ -146,6 +160,7 @@ begin
         end;
         if ACMEClient.CertificateStatus=certstatOk then
         begin // process newly retrieved certificate
+          CertIsNew := true;
           Certificate := ACMECLient.Certificate;
           PrivateKey := ACMECLient.PrivateKey.PEMString;
           var CmdUpdate := Session.CreateCommand(SQL_Update_Cert);
@@ -160,12 +175,16 @@ begin
         if HostNames<>'' then
           Hostnames := HostNames+',';
         HostNames := Hostnames+HostName;
-        if IoHandler.Environment.GetContext(ACMECLient.Domain)=nil then
-          IoHandler.Environment.AddContext(ACMECLient.Domain, Certificate, PrivateKey);
+        var IsNotPresent := IoHandler.Environment.GetContext(ACMECLient.Domain)=nil;
+        if CertIsNew or IsNotPresent then
+        begin
+          TdwlLogger.Log(ifThen(IsNotPresent, 'Added', 'Renewed')+' SSL context for hostname '+Hostname, lsNotice);
+          IoHandler.Environment.AddContext(ACMECLient.Domain, Certificate, PrivateKey, [ALPN_HTTP_1_1]);
+        end;
       end;
     end;
   finally
-    ACMEClient.Free;
+    ACMEChecker.Free;
   end;
   ConfigParams.WriteValue(Param_Hostnames, HostNames);
 end;
@@ -361,21 +380,22 @@ begin
       FServer.OnlyLocalConnections := ConfigParams.BoolValue(Param_TestMode);
       Start_ProcessBindings(ConfigParams);
       if FSSLIoHandler=nil then
-        TdwlLogger.Log('SERVER IS IN NON SECURE MODE!', lsWarning, TOPIC_BOOTSTRAP)
-      else
+        TdwlLogger.Log('SERVER IS IN NON SECURE MODE!', lsWarning, TOPIC_BOOTSTRAP);
+      Start_LoadURIAliases(Session);
+      // Time to start the server
+      FServer.Active := true;
+      TdwlLogger.Log('DWL Server started', lsTrace, TOPIC_BOOTSTRAP);
+      // now server is active, try to add hostnames
+      if FSSLIoHandler<>nil then
       begin
         CheckACMEConfiguration(FSSLIoHandler, ConfigParams);
         if FSSLIoHandler.Environment.ContextCount=0 then
           TdwlLogger.Log('WARNING: NO SSL CERTIFICATES FOUND', lsWarning, TOPIC_BOOTSTRAP);
       end;
-      Start_LoadURIAliases(Session);
-      // Time to start the server
-      FServer.Active := true;
       FServer.RegisterHandler(EndpointURI_Mail,  TdwlHTTPHandler_Mail.Create(ConfigParams));
       Start_LoadDLLHandlers(Session, ConfigParams);
       FACMECheckThread := TACMECheckThread.Create(Self, ConfigParams);
       FACMECheckThread.FreeOnTerminate := true;
-      TdwlLogger.Log('DWL Server started', lsTrace, TOPIC_BOOTSTRAP);
       FServerStarted := true;
     except
       FServerStarted := false;
@@ -520,6 +540,30 @@ begin
         TdwlLogger.Log(E, lsError, TOPIC_ACME);
     end;
   end;
+end;
+
+{ TACMEChecker }
+
+procedure TACMEChecker.AlpnChallengeCallback(ChallengeActive: boolean; const HostName, Cert, Key: string);
+begin
+  if ChallengeActive then
+    FEnvironment.AddContext(HostName, Cert, Key, [ALPN_ACME_TLS_1])
+  else
+    FEnvironment.RemoveContext(HostName);
+end;
+
+constructor TACMEChecker.Create(Environment: TdwlSslEnvironment);
+begin
+  inherited Create;
+  FEnvironment := Environment;
+  FACMECLient := TdwlACMEClient.Create;
+  FACMECLient.OnAlpnChallenge := AlpnChallengeCallback;
+end;
+
+destructor TACMEChecker.Destroy;
+begin
+  FACMECLient.Free;
+  inherited Destroy;
 end;
 
 end.

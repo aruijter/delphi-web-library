@@ -18,9 +18,11 @@ type
   end;
 
   IdwlX509Cert = interface
-    function X509(ThisCallTakesOwnerShip: boolean=false): pX509;
-    procedure SaveToPEMFile(const FileName: string);
     function PEMString: string;
+    procedure SaveToPEMFile(const FileName: string);
+    procedure SetExtension(Nid: integer; const Value: String);
+    function Sign(PrivateKey: IdwlOpenSSLKey): boolean;
+    function X509(ThisCallTakesOwnerShip: boolean=false): pX509;
   end;
 
   TdwlOpenSSL = record
@@ -46,6 +48,7 @@ type
     class function ASN1_StringToDateTime(x: pASN1_STRING): TDateTime; static;
     class function New_Cert_FromPEMFile(const FileName: string): IdwlX509Cert; static;
     class function New_Cert_FromPEMStr(const PEM: string): IdwlX509Cert; static;
+    class function New_Cert: IdwlX509Cert; static;
   end;
 
 implementation
@@ -71,9 +74,11 @@ type
   strict private
     FX509: pX509;
     FSkipX509_free: boolean;
-    function X509(TransferOwnerShip: boolean=false): pX509;
-    procedure SaveToPEMFile(const FileName: string);
     function PEMString: string;
+    procedure SaveToPEMFile(const FileName: string);
+    procedure SetExtension(Nid: integer; const Value: String);
+    function X509(TransferOwnerShip: boolean=false): pX509;
+    function Sign(PrivateKey: IdwlOpenSSLKey): boolean;
   public
     constructor Create(AX509: pX509);
     destructor Destroy; override;
@@ -214,6 +219,11 @@ begin
   end;
 end;
 
+class function TdwlOpenSSL.New_Cert: IdwlX509Cert;
+begin
+  Result := TdwlX509Cert.Create(X509_new);
+end;
+
 class function TdwlOpenSSL.New_Cert_FromPEMFile(const FileName: string): IdwlX509Cert;
 begin
   var BIO := BIO_new_file(PAnsiChar(ansistring(FileName)), PAnsiChar('r+'));
@@ -348,7 +358,7 @@ procedure TdwlOpenSSLKey.SaveToPEMFile(const FileName: string);
 begin
   var bp := BIO_new_file(PAnsiChar(ansistring(FileName)), PAnsiChar('w+'));
   try
-    PEM_write_bio_PrivateKey(bp, FKey, nil, nil, 0, nil, nil);
+    CheckOpenSSL(PEM_write_bio_PrivateKey(bp, FKey, nil, nil, 0, nil, nil));
   finally
     BIO_free(bp);
   end;
@@ -409,10 +419,29 @@ procedure TdwlX509Cert.SaveToPEMFile(const FileName: string);
 begin
   var bp := BIO_new_file(PAnsiChar(ansistring(FileName)), PAnsiChar('w+'));
   try
-    PEM_write_bio_X509(bp, FX509);
+    CheckOpenSSL(PEM_write_bio_X509(bp, FX509));
   finally
     BIO_free(bp);
   end;
+end;
+
+procedure TdwlX509Cert.SetExtension(Nid: integer; const Value: string);
+begin
+  if Value='' then
+    Exit;
+  var Ex := X509V3_EXT_conf_nid(nil, nil, Nid, PAnsiChar(ansistring(Value)));
+  if Ex=nil then
+    raise Exception.Create('failure X509V3_EXT_conf_nid');
+  try
+    CheckOpenSSL(X509_add_ext(X509, Ex, -1));
+  finally
+    X509_EXTENSION_free(Ex);
+  end;
+end;
+
+function TdwlX509Cert.Sign(PrivateKey: IdwlOpenSSLKey): boolean;
+begin
+  Result := X509_sign(FX509, PrivateKey.key, EVP_sha256)<>0;
 end;
 
 function TdwlX509Cert.X509(TransferOwnerShip: boolean=false): pX509;

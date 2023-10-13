@@ -3,46 +3,47 @@ unit DWL.HTTP.Consts;
 interface
 
 const
-  HTTP_METHOD_UNKNOWN = 'UNKNOWN';
-  HTTP_METHOD_HEAD = 'HEAD';
-  HTTP_METHOD_GET ='GET';
-  HTTP_METHOD_POST = 'POST';
-  HTTP_METHOD_DELETE = 'DELETE';
-  HTTP_METHOD_PUT = 'PUT';
-  HTTP_METHOD_TRACE = 'TRACE';
-  HTTP_METHOD_OPTIONS = 'OPTIONS';
+  CHARSET_UTF8 = 'utf-8';
 
-  HTTP_FIELD_CONNECTION = 'Connection';
-  HTTP_FIELD_CONTENT_TYPE = 'Content-Type';
-  HTTP_FIELD_CONTENT_LENGTH = 'Content-Length';
-  HTTP_FIELD_CONTENT_DISPOSITION = 'Content-Disposition';
-  HTTP_FIELD_REPLAY_NONCE = 'Replay-Nonce';
-  HTTP_FIELD_LOCATION = 'Location';
-  HTTP_FIELD_TRANSFER_ENCODING = 'Transfer-Encoding';
-  HTTP_FIELD_CACHE_CONTROL = 'Cache-Control';
-  HTTP_FIELD_EXPECT = 'Expect';
-  HTTP_FIELD_HOST = 'Host';
-
-  HTTP_SUBFIELD_CHARSET = 'charset';
-
-  CONNECTION_KEEP_ALIVE = 'Keep-Alive';
   CONNECTION_CLOSE = 'Close';
+  CONNECTION_KEEP_ALIVE = 'Keep-Alive';
 
-  EXPECT_100_CONTINUE = '100-continue';
-
-  CONTENT_TYPE_X_WWW_FORM_URLENCODED = 'application/x-www-form-urlencoded';
-  CONTENT_TYPE_PLAIN = 'text/plain';
+  CONTENT_TYPE_7Z = 'application/x-7z-compressed';
   CONTENT_TYPE_HTML = 'text/html';
+  CONTENT_TYPE_IMAGE_PNG = 'image/png';
+  CONTENT_TYPE_JOSE_JSON = 'application/jose+json';
   CONTENT_TYPE_JSON = 'application/json';
   CONTENT_TYPE_JSONAPI = 'application/vnd.api+json';
   CONTENT_TYPE_OCTET_STREAM = 'application/octet-stream';
-  CONTENT_TYPE_IMAGE_PNG = 'image/png';
-  CONTENT_TYPE_7Z = 'application/x-7z-compressed';
+  CONTENT_TYPE_PLAIN = 'text/plain';
+  CONTENT_TYPE_X_WWW_FORM_URLENCODED = 'application/x-www-form-urlencoded';
 
-  CHARSET_UTF8 = 'utf-8';
+  EXPECT_100_CONTINUE = '100-continue';
+
+  HTTP_FIELD_CACHE_CONTROL = 'Cache-Control';
+  HTTP_FIELD_CONNECTION = 'Connection';
+  HTTP_FIELD_CONTENT_DISPOSITION = 'Content-Disposition';
+  HTTP_FIELD_CONTENT_LENGTH = 'Content-Length';
+  HTTP_FIELD_CONTENT_TYPE = 'Content-Type';
+  HTTP_FIELD_EXPECT = 'Expect';
+  HTTP_FIELD_HOST = 'Host';
+  HTTP_FIELD_LOCATION = 'Location';
+  HTTP_FIELD_REPLAY_NONCE = 'Replay-Nonce';
+  HTTP_FIELD_RETRY_AFTER = 'Retry-After';
+  HTTP_FIELD_TRANSFER_ENCODING = 'Transfer-Encoding';
+
+  HTTP_METHOD_DELETE = 'DELETE';
+  HTTP_METHOD_GET ='GET';
+  HTTP_METHOD_HEAD = 'HEAD';
+  HTTP_METHOD_OPTIONS = 'OPTIONS';
+  HTTP_METHOD_POST = 'POST';
+  HTTP_METHOD_PUT = 'PUT';
+  HTTP_METHOD_TRACE = 'TRACE';
+  HTTP_METHOD_UNKNOWN = 'UNKNOWN';
+
+  HTTP_SUBFIELD_CHARSET = 'charset';
 
   TRANSFER_ENCODING_CHUNCKED = 'chuncked';
-
   // HTTP Method consts
   dwlhttpUNKNOWN = 0;
   dwlhttpHEAD = 1;
@@ -52,6 +53,9 @@ const
   dwlhttpPUT = 5;
   dwlhttpTRACE = 6;
   dwlhttpOPTIONS = 7;
+
+  ALPN_HTTP_1_1 = 'http/1.1';
+  ALPN_ACME_tls_1 = 'acme-tls/1';
 
   dwlhttpMethodToString: array[dwlhttpUNKNOWN..dwlhttpOPTIONS] of string = (HTTP_METHOD_UNKNOWN,
     HTTP_METHOD_HEAD,HTTP_METHOD_GET, HTTP_METHOD_POST, HTTP_METHOD_DELETE, HTTP_METHOD_PUT, HTTP_METHOD_TRACE, HTTP_METHOD_OPTIONS);

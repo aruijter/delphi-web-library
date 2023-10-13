@@ -1,6 +1,6 @@
 /// <summary>
 ///   This is an ACME client with all functionality to request a certificate
-///   from LetsEncrypt. It complies to RFC8555
+///   from LetsEncrypt. It complies to RFC8555 and RFC8737
 /// </summary>
 unit DWL.ACME;
 
@@ -9,6 +9,9 @@ interface
 uses
   DWL.OpenSSL.Api, DWL.OpenSSL, System.SysUtils, DWL.HTTP.Consts,
   DWL.HTTP.Client, DWL.Logging, DWL.JOSE;
+
+type
+  TAlpnChallengeCallback = procedure(ChallengeActive: boolean; const HostName, Cert, Key: string) of object;
 
 type
   TCertificateStatus = (certstatUnknown, certstatNotFound, certstatExpired, certstatAboutToExpire, certstatOk);
@@ -23,6 +26,7 @@ type
     URLAccount: string;
     URLFinalize: string;
     URLCertificate: string;
+    URLOrder: string;
     ReplayNonce: string;
     JSONWebKey: string;
   end;
@@ -42,20 +46,23 @@ type
   /// </summary>
   TdwlACMEClient = class
   strict private
-    FAccountPrivateKey: IdwlOpenSSLKey;
-    FCertificate: string;
-    FCertificateStatus: TCertificateStatus;
-    FDomain: string;
-    FCallBackPortNumber: integer;
-    FPrivateKey: IdwlOpenSSLKey;
-    FProfileCountryCode: string;
-    FProfileCity: string;
-    FProfileState: string;
-    FRenewalDays: byte;
-    FAPIEndpoint: string;
-    FHTTPRequestSeen: boolean;
-    FDaysLeft: integer;
-    FChallengeIP: string;
+    class var
+      NID_acmeIdentifier: integer;
+    var
+      FAccountPrivateKey: IdwlOpenSSLKey;
+      FCertificate: string;
+      FCertificateStatus: TCertificateStatus;
+      FDomain: string;
+      FCallBackPortNumber: integer;
+      FPrivateKey: IdwlOpenSSLKey;
+      FProfileCountryCode: string;
+      FProfileCity: string;
+      FProfileState: string;
+      FRenewalDays: byte;
+      FAPIEndpoint: string;
+      FDaysLeft: integer;
+      FChallengeIP: string;
+      FOnAlpnChallenge: TAlpnChallengeCallback;
     function DoRequest(var State: TACMECheckState; const URL: string; Method: string=HTTP_METHOD_GET; const Payload: string=''): IdwlHTTPResponse;
     function GetReplayNonce(var State:TACMECheckState): string;
     procedure Log(const Msg: string; SeverityLevel: TdwlLogSeverityLevel);
@@ -65,7 +72,17 @@ type
     function SubmitOrderAndDoChallenges(var State: TACMECheckState): boolean;
     function CreateCSRandFinalizeOrder(var State: TACMECheckState): boolean;
     function RetrieveCertificate(var State: TACMECheckState): boolean;
+    function DoHttp01Challenge(var State: TACMECheckState; const ChallToken, ChallUrl: string): boolean;
+    function DoTlsAlpn01Challenge(var State: TACMECheckState; const ChallToken, ChallUrl: string): boolean;
   public
+    /// <summary>
+    ///   The most convenient way of doing a challenge if over HTTPS.by attaching to this Callback
+    ///   You have to create/release a binding at your own server that handles the challenge request from the ACME Server
+    ///   At challenge start the callback is called with ChallengeActive=true and Hostname/Certificate to use during the challenge
+    ///   When challenge is done, the callback is called with ChallengeActive=false, that's the time to release the binding
+    ///
+    /// </summary>
+    property OnAlpnChallenge: TAlpnChallengeCallback read FOnAlpnChallenge write FOnAlpnChallenge;
     /// <summary>
     ///   The Private Key of the ACME account, must be stored and set for renewals, will be created is not set
     /// </summary>
@@ -160,7 +177,19 @@ const
   {$ELSE}
   DefaultAPIEndpoint = ProductionAPIEndpoint;
   {$ENDIF}
-  PrivateAccountKeyFileName='account.key';
+  KEY_AUTHORIZATIONS = 'authorizations';
+  KEY_CHALLENGES = 'challenges';
+  KEY_FINALIZE = 'finalize';
+  KEY_STATUS = 'status';
+  KEY_TOKEN = 'token';
+  KEY_TYPE = 'type';
+  KEY_URL = 'url';
+
+  POLLING_TIMEOUT=20000; //msecs
+
+  STATUS_READY = 'ready';
+  STATUS_VALID = 'valid';
+
   TOPIC_ACME = 'acme';
 
 type
@@ -217,6 +246,63 @@ begin
   FCallBackPortNumber := PORT_HTTP;
 end;
 
+function TdwlACMEClient.DoHttp01Challenge(var State: TACMECheckState; const ChallToken, ChallUrl: string): boolean;
+begin
+  Result := false;
+  Log('Starting HTTP-01 challenge (listening on port '+CallBackPortNumber.ToString+')', lsTrace);
+  var Status := '';
+  var CallBackServer := TCallBackServer.Create;
+  try
+    // Set Response combined token and JSONWebkey (Thumbprint)
+    CallbackServer.FCurrentChallengeResponse := ansistring(ChallToken+'.'+ TNetEncoding.Base64URL.EncodeBytesToString(THashSHA2.GetHashBytes(State.JSONWebKey.Replace(' ', ''), SHA256)));
+    CallbackServer.Bindings.Add(ChallengeIP, CallBackPortNumber, TdwlPlainIoHandler.Create(CallBackServer));
+    // start internal server
+    CallBackServer.Active := true;
+    // start the challenge
+    var TimeoutTickCount := GetTickCount64+POLLING_TIMEOUT;
+    // To start challenge send payload {}
+    var Response := DoRequest(State, ChallURL, HTTP_METHOD_POST, '{}');
+    repeat
+      if Response.StatusCode<>HTTP_STATUS_OK then
+      begin
+        Log('Error in challenge request: '+Response.AsString, lsError);
+        Break;
+      end;
+      if GetTickCount64>TimeoutTickCount then
+      begin
+        Log('Timed out in challenge request: '+Response.AsString, lsError);
+        Break;
+      end;
+      var JSON := TJSONObject.ParseJSONValue(Response.AsString);
+      try
+        Status := JSON.GetValue<string>('status');
+        if Status='pending' then
+        begin
+          var TimeOut := Min(POLLING_TIMEOUT div 1000, StrToIntDef(Response.Header['Retry-After'], 1));
+          Log('still pending, waiting for '+TimeOut.ToString+' seconds', lsNotice);
+          Sleep(TimeOut*1000);
+          Response := DoRequest(State, State.URLOrder, HTTP_METHOD_POST);
+          Continue;
+        end;
+        if (Status=STATUS_READY) or (Status=STATUS_VALID) then
+        begin
+          Log('Challenge succeeded', lsTrace);
+          Result := true;
+          Break;
+        end;
+        Log('Wrong status in challenge request: '+Response.AsString, lsError);
+        Break;
+      finally
+        JSON.Free;
+      end;
+    until false;
+  finally
+    CallBackServer.Free;
+  end;
+  if not Result then
+    Log('Challenge failed, most probably we''re not publicly reachable on HTTP port 80', lsError);
+end;
+
 function TdwlACMEClient.DoRequest(var State: TACMECheckState; const URL: string; Method: string=HTTP_METHOD_GET; const Payload: string=''): IdwlHTTPResponse;
 var
   Request: IdwlHTTPRequest;
@@ -226,7 +312,7 @@ begin
   Request.Method := Method;
   if (Method=HTTP_METHOD_POST) then
   begin
-    Request.Header[HTTP_FIELD_CONTENT_TYPE] := 'application/jose+json';
+    Request.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_JOSE_JSON;
     var JWS := New_JWS;
     JWS.SetPayloadString(PayLoad);
     // Payload is always provided as a JWS object if Account URL is not yet available
@@ -244,6 +330,102 @@ begin
   Nonce := Result.Header[HTTP_FIELD_REPLAY_NONCE];
   if Nonce<>'' then
     State.ReplayNonce := Nonce;
+end;
+
+function TdwlACMEClient.DoTlsAlpn01Challenge(var State: TACMECheckState; const ChallToken, ChallUrl: string): boolean;
+begin
+  Result := false;
+  Log('Starting TLS-ALPN-01 challenge', lsTrace);
+  var Status := '';
+  // calculate and communicate the certificate
+  var keyAuthorization := ChallToken+'.'+ TNetEncoding.Base64URL.EncodeBytesToString(THashSHA2.GetHashBytes(State.JSONWebKey.Replace(' ', ''), SHA256));
+  var Digest := THashSHA2.GetHashBytes(keyAuthorization, SHA256);
+  var acmeIdentifier := 'critical,DER:04:20';
+  for var B in Digest do
+    acmeIdentifier := acmeIdentifier+':'+B.ToHexString(2);
+
+  // create key and certificate
+  var CertPrivKey := TdwlOpenSSL.New_PrivateKey;
+  var Cert := TdwlOpenSSL.New_Cert;
+  // not set contents of the certificate
+  CheckOpenSSL(X509_set_version(Cert.X509, 2));
+
+  CheckOpenSSL(ASN1_INTEGER_set_int64(X509_get_serialNumber(Cert.X509), 1));
+
+  X509_gmtime_adj(X509_get0_notBefore(Cert.X509), 0);
+  X509_gmtime_adj(X509_get0_notAfter(Cert.X509), 3600 {one hour});
+
+  var X509_name := X509_get_subject_name(Cert.X509);
+  CheckOpenSSL(X509_NAME_add_entry_by_txt(X509_Name, 'CN', MBSTRING_ASC, PAnsiChar(AnsiString(Domain)), -1, -1, 0));
+  CheckOpenSSL(X509_set_issuer_name(Cert.X509, X509_name)); // self signed
+
+  Cert.SetExtension(NID_key_usage, 'critical,digitalSignature,keyEncipherment');
+  Cert.SetExtension(NID_ext_key_usage, 'serverAuth');
+  Cert.SetExtension(NID_basic_constraints, 'critical,CA:FALSE');
+  Cert.SetExtension(NID_subject_alt_name, 'DNS:'+Domain);
+
+  if NID_acmeIdentifier=0 then
+  begin
+    NID_acmeIdentifier := OBJ_create(PAnsiChar('1.3.6.1.5.5.7.1.31'), PAnsiChar('acmeIdentifier'), PAnsiChar('ACME Identifier'));
+    if NID_acmeIdentifier=0 then
+    begin
+      Log('failure creating NID_acmeAIdentifier', lsError);
+      Exit;
+    end;
+  end;
+  Cert.SetExtension(NID_acmeIdentifier, acmeIdentifier);
+  // set Public Key and Sign
+  CheckOpenSSL(X509_set_pubkey(Cert.X509, CertPrivKey.key));
+  if not Cert.Sign(CertPrivKey) then
+  begin
+    Log('failure signing Certificate', lsError);
+    Exit;
+  end;
+  // start the challenge
+  OnAlpnChallenge(true, Domain,  Cert.PEMString, CertPrivKey.PEMString);
+  try
+    var TimeoutTickCount := GetTickCount64+POLLING_TIMEOUT;
+    // To start challenge send payload {}
+    var Response := DoRequest(State, ChallURL, HTTP_METHOD_POST, '{}');
+    repeat
+      if Response.StatusCode<>HTTP_STATUS_OK then
+      begin
+        Log('Error in challenge request: '+Response.AsString, lsError);
+        Break;
+      end;
+      if GetTickCount64>TimeoutTickCount then
+      begin
+        Log('Timed out in challenge request: '+Response.AsString, lsError);
+        Break;
+      end;
+      var JSON := TJSONObject.ParseJSONValue(Response.AsString);
+      try
+        Status := JSON.GetValue<string>('status');
+        if Status='pending' then
+        begin
+          var TimeOut := Min(POLLING_TIMEOUT, StrToIntDef(Response.Header['Retry-After'], 1));
+          Log('still pending, waiting for '+TimeOut.ToString+' seconds', lsNotice);
+          Sleep(TimeOut*1000);
+          Response := DoRequest(State, State.URLOrder, HTTP_METHOD_POST);
+          Continue;
+        end;
+        if (Status=STATUS_READY) or (Status=STATUS_VALID) then
+        begin
+          Log('Challenge succeeded', lsTrace);
+          Result := true;
+          Break;
+        end;
+        Log('Wrong status in challenge request: '+Response.AsString, lsError);
+        Break;
+      finally
+        JSON.Free;
+      end;
+    until false;
+  finally
+    OnAlpnChallenge(false, Domain, '', '');
+  end;
+  if not Result then
+    Log('Challenge failed', lsError);
 end;
 
 function TdwlACMEClient.CreateCSRandFinalizeOrder(var State: TACMECheckState): boolean;
@@ -288,25 +470,43 @@ begin
   for i := 0 to csr_LEN - 1 do
     csr_BUF[i] := ord(csr_TXT[i+1]);
 
+  var TimeoutTickCount := GetTickCount64+POLLING_TIMEOUT;
   Response := DoRequest(State, State.URLFinalize, HTTP_METHOD_POST, '{"csr":"'+TNetEncoding.Base64URL.EncodeBytesToString(csr_BUF)+'"}');
-  if Response.StatusCode<>HTTP_STATUS_OK then
-  begin
-    Log('Error in finalize request: '+Response.AsString, lsError);
-    Exit;
-  end;
-  var JSON := TJSONObject.ParseJSONValue(Response.AsString);
-  try
-    Status := JSON.GetValue<string>('status');
-    if Status<>'valid' then
+  repeat
+    if Response.StatusCode<>HTTP_STATUS_OK then
     begin
-      Log('Wrong status in finalize request: '+Response.AsString, lsError);
-      Exit;
+      Log('Error in finalize request: '+Response.AsString, lsError);
+      Break;
     end;
-    State.URLCertificate := JSON.GetValue<string>('certificate');
-  finally
-    JSON.Free;
-  end;
-  Result := true;
+    if GetTickCount64>TimeoutTickCount then
+    begin
+      Log('Timed out in finalize request: '+Response.AsString, lsError);
+      Break;
+    end;
+    var JSON := TJSONObject.ParseJSONValue(Response.AsString);
+    try
+      Status := JSON.GetValue<string>(KEY_STATUS);
+      if Status='processing' then
+      begin
+        var TimeOut := Min(POLLING_TIMEOUT, StrToIntDef(Response.Header[HTTP_FIELD_RETRY_AFTER], 1));
+        Log('still processing, waiting for '+TimeOut.ToString+' seconds', lsNotice);
+        Sleep(TimeOut*1000);
+        Response := DoRequest(State, State.URLOrder, HTTP_METHOD_POST);
+        Continue;
+      end;
+      if Status=STATUS_VALID then
+      begin
+        State.URLCertificate := JSON.GetValue<string>('certificate');
+        Log('certificate ready for retrieval', lsNotice);
+        Result := true;
+        Break;
+      end;
+      Log('Wrong status in finalize request: '+Response.AsString, lsError);
+      Break;
+    finally
+      JSON.Free;
+    end;
+  until false;
 end;
 
 function TdwlACMEClient.RetrieveCertificate(var State: TACMECheckState): boolean;
@@ -359,7 +559,7 @@ begin
   if State.ReplayNonce='' then
   begin // Get one
     try
-      DoRequest(State, State.URLNewNonce, 'HEAD');
+      DoRequest(State, State.URLNewNonce, HTTP_METHOD_HEAD);
     except
       on E: Exception do
       begin
@@ -417,13 +617,6 @@ var
   AuthNo: integer;
   ChallNo: integer;
   ChallType: string;
-  ChallUrl: string;
-  ChallToken: string;
-  TickCount: UInt64;
-  TimeOutTickCount: UInt64;
-  CheckStatusTick: UInt64;
-  Status: string;
-  ChallPayLoad: string;
 begin
   Result := false;
   try
@@ -434,105 +627,68 @@ begin
       //fetch order details
       var OrderJSON := TJSONObject.ParseJSONValue(Response.AsString);
       try
-        State.URLFinalize := OrderJSON.GetValue<string>('finalize');
-        URLAuthorizations := OrderJSON.GetValue<TJsonArray>('authorizations');
-        // start authorizations
-        for AuthNo := 0 to URLAuthorizations.Count-1 do
+        State.URLOrder := Response.Header[HTTP_FIELD_LOCATION];
+        if State.URLOrder='' then
+          Log('Order URL not found in header', lsWarning);
+        State.URLFinalize := OrderJSON.GetValue<string>(KEY_FINALIZE);
+        var Status := OrderJSON.GetValue<string>(KEY_STATUS);
+        if Status='pending' then
         begin
-          Response := DoRequest(State, URLAuthorizations.Items[AuthNo].Value, HTTP_METHOD_POST);
-          if Response.StatusCode<>HTTP_STATUS_OK then
+          URLAuthorizations := OrderJSON.GetValue<TJsonArray>(KEY_AUTHORIZATIONS);
+          // start authorizations
+          for AuthNo := 0 to URLAuthorizations.Count-1 do
           begin
-            Log('Error getting authorization: '+Response.AsString, lsError);
-            Exit;
-          end;
-          // fetch authorization details
-          var AuthJSON := TJSONObject.ParseJSONValue(Response.AsString);
-          try
-            Challenges := AuthJSON.GetValue<TJsonArray>('challenges');
-            // do challenges
-            for ChallNo := 0 to Challenges.Count-1 do
+            Response := DoRequest(State, URLAuthorizations.Items[AuthNo].Value, HTTP_METHOD_POST);
+            if Response.StatusCode<>HTTP_STATUS_OK then
             begin
-              // fetch challenge details
-              ChallType := Challenges.Items[ChallNo].GetValue<string>('type');
-              // perform challenge if it s a http challenge
-              if ChallType.StartsWith('http') then
+              Log('Error getting authorization: '+Response.AsString, lsError);
+              Exit;
+            end;
+            // fetch authorization details
+            var AuthJSON := TJSONObject.ParseJSONValue(Response.AsString);
+            try
+              Challenges := AuthJSON.GetValue<TJsonArray>(KEY_CHALLENGES);
+              // do challenges
+              for ChallNo := 0 to Challenges.Count-1 do
               begin
-                ChallToken := Challenges.Items[ChallNo].GetValue<string>('token');
-                ChallUrl := Challenges.Items[ChallNo].GetValue<string>('url');
-                Log('Starting HTTP challenge '+(ChallNo+1).Tostring+ ' (listening on port '+CallBackPortNumber.ToString+')', lsTrace);
-                Status := '';
-                FHTTPRequestSeen := false;
-                var CallBackServer := TCallBackServer.Create;
-                try
-                  // Set Response combined token and JSONWebkey (Thumbprint)
-                  CallbackServer.FCurrentChallengeResponse := ansistring(ChallToken+'.'+ TNetEncoding.Base64URL.EncodeBytesToString(THashSHA2.GetHashBytes(State.JSONWebKey.Replace(' ', ''), SHA256)));
-                  CallbackServer.Bindings.Add(ChallengeIP, CallBackPortNumber, TdwlPlainIoHandler.Create(CallBackServer));
-                  // start internal server
-                  CallBackServer.Active := true;
-                  // start the challenge
-                  TickCount := GetTickCount64;
-                  TimeoutTickCount := TickCount+10000;
-                  CheckStatusTick := 0;
-                  // To start challenge send payload {}
-                  ChallPayLoad := '{}';
-                  while TickCount<TimeoutTickCount do
-                  begin
-                    if CheckStatusTick<TickCount then
-                    begin
-                      // Get the status, the first time this will start the challenge
-                      var JWS := New_JWS;
-                      Response := DoRequest(State, ChallURL, HTTP_METHOD_POST, ChallPayLoad);
-                      // the next time we don't start the challende, just polling, so change payload to Post-As-Get
-                      ChallPayLoad := '';
-                      if Response.StatusCode=HTTP_STATUS_OK then
-                      begin
-                        var ChallJSON := TJSONObject.ParseJsonValue(Response.AsString);
-                        try
-                          Status := ChallJSON.GetValue<String>('status');
-                        finally
-                          ChallJSON.Free;
-                        end;
-                        if Status='valid' then // yes, we completed the challenge
-                        begin
-                          Log('Challenge succeeded', lsTrace);
-                          Break;
-                        end
-                        else
-                          Log('challenge status: '+Status, lsTrace);
-                        if Status<>'pending' then
-                          Break; // something went wrong
-                      end
-                      else
-                      begin
-                        Log('Error getting challenge status: '+Response.AsString, lsError);
-                        Exit;
-                      end;
-                      CheckStatusTick := TickCount+1000;
-                    end;
-                    Sleep(100);
-                    TickCount := GetTickCount64;
-                  end;
-                finally
-                  CallBackServer.Free;
-                end;
-                if Status<>'valid' then
+                // fetch challenge details
+                ChallType := Challenges.Items[ChallNo].GetValue<string>(KEY_TYPE);
+                // perform challenge if it s a http challenge
+                if (ChallType='http-01') and (not Assigned(OnAlpnChallenge))then
                 begin
-                  if FHTTPRequestSeen then
-                    Log('Challenge failed (But I saw an incoming HTTP request)', lsError)
-                  else
-                    Log('Challenge failed, most probably we''re not publicly reachable on HTTP port 80', lsError);
-                  Exit;
+                  Result := DoHttp01Challenge(State,
+                    Challenges.Items[ChallNo].GetValue<string>(KEY_TOKEN),
+                    Challenges.Items[ChallNo].GetValue<string>(KEY_URL));
+                  Break;
+                end;
+                if (ChallType='tls-alpn-01') and (Assigned(OnAlpnChallenge)) then
+                begin
+                  Result := DoTlsAlpn01Challenge(State,
+                    Challenges.Items[ChallNo].GetValue<string>(KEY_TOKEN),
+                    Challenges.Items[ChallNo].GetValue<string>(KEY_URL));
+                  Break;
                 end;
               end;
+            finally
+              AuthJSON.Free;
             end;
-          finally
-            AuthJSON.Free;
-          end;
-      end;
+          end;  
+          if not Result then
+            Log('Order failed at challenge state', lsError);
+        end
+        else
+        begin
+          if (Status=STATUS_READY) or (Status=STATUS_VALID)then
+          begin
+            Log('No challenges needed for this order', lsNotice);
+            Result := true;
+          end
+          else
+            Log('Order creation status error: '+Response.AsString, lsError);
+        end;
       finally
         OrderJSON.Free;
       end;
-      Result := true;
     end
     else
       Log('Creation of order failed: '+Response.AsString, lsError);
