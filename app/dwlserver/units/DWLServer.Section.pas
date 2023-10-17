@@ -216,8 +216,11 @@ const
   InsertRequest_Idx_ProcessingTime=4; InsertRequest_Idx_Header=5; InsertRequest_Idx_Params=6;
 begin
   try
-    // in debugging always log everything
-    {$IFNDEF DEBUG}
+    // in debugging always log everything, except logging requests
+    {$IFDEF DEBUG}
+    if LogRequest.Uri=EndpointURI_Log then
+      Exit;
+    {$ELSE}
     if FLogLevel<httplogLevelFailedRequests then
       Exit;
     if (FLogLevel<httplogLevelAllRequests) and
