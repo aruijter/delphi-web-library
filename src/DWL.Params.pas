@@ -32,6 +32,10 @@ type
   /// </summary>
   IdwlParams = interface
     /// <summary>
+    ///   Clones the Params object, f.e. as thread protection to be used in another thread
+    /// </summary>
+    function Clone: IdwlParams;
+    /// <summary>
     ///   Sometimes triggers must be executed manually by a caller f.e. when
     ///   the stored filename does not change, but the contents of the file do
     ///   only use when you know what you are doing ;-)
@@ -513,6 +517,7 @@ type
     function TryGetStrValue(const Key: string; out Value: string): boolean;
     function TryGetDoubleValue(const Key: string; out Value: double): boolean;
     procedure AddTrigger(const TriggerKey, DependentKey: string);
+    function Clone: IdwlParams;
     procedure ExecuteTriggers(const TriggerKey: string);
     procedure Resolve(var Str: string);
     procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc); overload;
@@ -643,6 +648,17 @@ begin
   if Assigned(FChangeRegularCallbackProc) then
     FChangeRegularCallbackProc(Self, Key, TValue.Empty);
   ExecuteTriggers(LowerKey);
+end;
+
+function TdwlParams.Clone: IdwlParams;
+begin
+  Result := New_Params(FDomain);
+  AssignTo(Result);
+  if FTriggers<>nil then
+  begin
+    for var Trigger in FTriggers do
+      Result.AddTrigger(Trigger.Key, Trigger.Value);
+  end;
 end;
 
 function TdwlParams.ContainsKey(const Key: string): boolean;

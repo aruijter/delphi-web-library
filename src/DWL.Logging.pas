@@ -247,7 +247,7 @@ begin
   FLogDispatchThread := TLogDispatchThread.Create;
   FLogDispatchThread.FreeOnTerminate := true;
   FLogDispatchers := TdwlThreadList<IdwlLogDispatcher>.Create;
-  FDefaultSource := TdwlFile.ExtractBareName(GetModuleName(hInstance));
+  FDefaultSource := TdwlFile.ExtractBareName(GetModuleName(hInstance)).ToLower;
   FDefaultChannel := FDefaultSource;
   FDefaultTopic := 'generic';
 end;

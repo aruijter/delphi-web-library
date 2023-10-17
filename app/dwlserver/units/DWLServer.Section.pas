@@ -262,6 +262,14 @@ const
   GetHandlerParameters_Binding_Handler_ID=0;
 begin
   try
+    // write ServerBaseURL in params for handlers to use f.e. for logging and mail sending
+    if FSSLIoHandler<>nil then
+      ConfigParams.WriteValue(Param_ServerBaseURL, 'https://'+FSSLIoHandler.Environment.MainContext.HostName)
+    else
+    begin
+      var Port := ConfigParams.StrValue(Param_Binding_Port);
+      ConfigParams.WriteValue(Param_ServerBaseURL, 'http://127.0.0.1'+IfThen(Port<>'', ':'+Port));
+    end;
     var DLLBasePath := ConfigParams.StrValue(Param_DLLBasePath, ExtractFileDir(ParamStr(0)));
     var Cmd := Session.CreateCommand(SQL_GetHandlers);
     Cmd.Execute;

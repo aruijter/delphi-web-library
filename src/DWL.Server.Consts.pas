@@ -19,6 +19,7 @@ const
   Param_Issuer = 'issuer';
   Param_Endpoint= 'endpoint';
   Param_LogSecret = 'logsecret';
+  Param_ServerBaseURL = 'serverbaseurl';
 
   EndpointURI_Log = '/log';
   EndpointURI_Mail = '/mail';
