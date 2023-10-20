@@ -192,12 +192,13 @@ type
   public
     destructor Destroy; override;
     procedure AfterConstruction; override;
+    class procedure ShutdownAndFree(var Instance);
   end;
 
 implementation
 
 uses
-  Winapi.Windows;
+  Winapi.Windows, System.SysUtils;
 
 { TdwlCustomThreadList<T> }
 
@@ -379,6 +380,16 @@ destructor TdwlThread.Destroy;
 begin
   inherited Destroy;
   CloseHandle(FWorkToDoEventHandle);
+end;
+
+class procedure TdwlThread.ShutdownAndFree(var Instance);
+begin
+  if TdwlThread(Instance)=nil then
+    Exit;
+  TdwlThread(Instance).Terminate;
+  TdwlThread(Instance).WaitFor;
+  TdwlThread(Instance).Free;
+  TdwlThread(Instance) := nil;
 end;
 
 procedure TdwlThread.TerminatedSet;
