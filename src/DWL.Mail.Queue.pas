@@ -96,7 +96,7 @@ begin
   // this is a very harsh method as a last resort
   // and can lead to memory leaks, unreleased resources, etc
   try
-    if (FMailSendThread<>nil) and (TMailSendThread(FMailSendThread).FLastActionTick<(GetTickCount-MAILQUEUE_SLEEP_MSECS*2)) then
+    if (FMailSendThread<>nil) and ((TMailSendThread(FMailSendThread).FLastActionTick+MAILQUEUE_SLEEP_MSECS*2)<GetTickCount64) then
     begin
       try
         Log('Terminating Stalled MailSendThread (and creating new one)', lsError);

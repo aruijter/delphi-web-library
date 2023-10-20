@@ -686,14 +686,14 @@ end;
 procedure TdwlSocketStorage.DoDeleteCheck;
 begin
   var Socket2Free: TdwlSocket;
-  var DeleteTick := GetTickCount64-DELETE_DELAY_MSECS;
+  var NowTick := GetTickCount64;
   repeat
     FListAccess.Enter;
     try
       if FSockets2Delete.Count=0 then
         Break;
       Socket2Free := FSockets2Delete[0];
-      if Socket2Free.FShutdownTick<DeleteTick then
+      if Socket2Free.FShutdownTick+DELETE_DELAY_MSECS<NowTick then
         FSockets2Delete.Delete(0)
       else
         Break; // not yet (also the later added ones are skipped)
@@ -713,13 +713,13 @@ begin
   finally
     FListAccess.Leave;
   end;
-  var TimeOutTick := GetTickCount64-TIMEOUT_MSECS;
+  var NowTick := GetTickCount64;
   for var Handle2Check in Handles2Check do
   begin
     var Socket: TdwlSocket;
     if LockSocket(Handle2Check, Socket) then
     try
-      if (Socket.FLastIoTick>0 {not a listen socket}) and (Socket.FLastIoTick<TimeOutTick) then
+      if (Socket.FLastIoTick>0 {not a listen socket}) and (Socket.FLastIoTick+TIMEOUT_MSECS<NowTick) then
         Socket.FShutdownTick := 1; // to signal it must be deleted in the unlock
     finally
       UnLockSocket(Socket);
@@ -760,7 +760,7 @@ begin
       if FSockets.ContainsKey(Socket.SocketHandle) then
       begin
         FSockets.Remove(Socket.SocketHandle);
-        Socket.FShutdownTick := GetTickCount;
+        Socket.FShutdownTick := GetTickCount64;
         FSockets2Delete.Add(Socket);
       end;
     finally

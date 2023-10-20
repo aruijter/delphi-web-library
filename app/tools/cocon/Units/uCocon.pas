@@ -20,17 +20,15 @@ var
   Res: Cardinal;
 
   function DoDeleteFile(const Fn: string): boolean;
-  var
-    T: cardinal;
   begin
     Result := not FileExists(Fn);
     if Result then
       Exit;
-    T := GetTickCount+RETRY_MSECS;
+    var T := GetTickCount64+RETRY_MSECS;
     Result := Winapi.Windows.DeleteFile(PChar(Fn));
     if not Result then
       ErrorLog.Add('Failed to delete ' + Fn + ' at first attempt');
-    while (not Result) and (GetTickCount<T) do
+    while (not Result) and (GetTickCount64<T) do
     begin
       sleep(250);
       Result := Winapi.Windows.DeleteFile(PChar(Fn));
