@@ -545,7 +545,8 @@ begin
     if Terminated then
       Break;
     try
-      TDWLServerSection.CheckACMEConfiguration(FSection.FSSLIoHandler, FConfigParams);
+      if FSection.FSSLIoHandler<>nil then
+        TDWLServerSection.CheckACMEConfiguration(FSection.FSSLIoHandler, FConfigParams);
     except
       on E:Exception do
         TdwlLogger.Log(E, lsError, TOPIC_ACME);
