@@ -25,6 +25,16 @@ type
     function MoveNext: boolean;
   end;
 
+  TProvideKeyCallBack = procedure(const LowerKey: string; const Value: TValue) of object;
+
+  IdwlParamsPersistHook = interface
+    procedure AddOrSetValue(const LowerKey: string; const Value: TValue);
+    procedure Clear;
+    procedure ClearKey(const LowerKey: string);
+    function TryGetValue(const LowerKey: string; var Value: TValue): boolean;
+    procedure ProvideUnknownKeys(const KnownKeys: TArray<string>; ProvideProc: TProvideKeyCallBack);
+  end;
+
   /// <summary>
   ///   The Params interface is a reference to an object representing an
   ///   inmemory store of key/value pairs. An interface to an empty object can
@@ -388,6 +398,7 @@ type
     /// </param>
     procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc); overload;
     procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc); overload;
+    procedure RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
   end;
 
   /// <summary>
@@ -490,6 +501,10 @@ type
 
   TdwlParams = class(TInterfacedObject, IdwlParams)
   strict private
+    FPersistHook: IdwlParamsPersistHook;
+    FRequestedAllFromPersistHook: boolean;
+    procedure ProvideKeyCallBack(const LowerKey: string; const Value: TValue);
+    function TryGetFromPersistHook(const LowerKey: string; var Value: TValue): boolean;
   class var
     FMetaKeys: TObjectDictionary<string, TdwlMetaKey>;
   var
@@ -534,6 +549,7 @@ type
     procedure WriteJSON(const JSON: string); overload;
     procedure WriteJSON(const JSON: TJSONObject); overload;
     procedure Clear;
+    procedure RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
   public
     class constructor Create;
     class destructor Destroy;
@@ -584,13 +600,9 @@ end;
 
 procedure TdwlParams.AssignTo(Params: IdwlParams);
 begin
-  var Enumerator := FParams.GetEnumerator;
-  try
-    while Enumerator.MoveNext do
-      Params.WriteValue(Enumerator.Current.Key, Enumerator.Current.Value);
-  finally
-    Enumerator.Free;
-  end;
+  var Enumerator := GetEnumerator;
+  while Enumerator.MoveNext do
+    Params.WriteValue(Enumerator.CurrentKey, Enumerator.CurrentValue);
 end;
 
 procedure TdwlParams.AssignTo(Params: IdwlParams; Keys: TArray<string>);
@@ -604,20 +616,16 @@ end;
 function TdwlParams.GetAsNameValueText(UrlEncodeValues: boolean=true): string;
 begin
   Result := '';
-  var Enumerator := FParams.GetEnumerator;
-  try
-    if UrlEncodeValues then
-    begin
-      while Enumerator.MoveNext do
-        Result := Result+Enumerator.Current.Key+'='+TNetEncoding.URL.Encode(Enumerator.Current.Value.ToString)+#13#10;
-    end
-    else
-    begin
-      while Enumerator.MoveNext do
-        Result := Result+Enumerator.Current.Key+'='+Enumerator.Current.Value.ToString+#13#10;
-    end;
-  finally
-    Enumerator.Free;
+  var Enumerator := GetEnumerator;
+  if UrlEncodeValues then
+  begin
+    while Enumerator.MoveNext do
+      Result := Result+Enumerator.CurrentKey+'='+TNetEncoding.URL.Encode(Enumerator.CurrentValue.ToString)+#13#10;
+  end
+  else
+  begin
+    while Enumerator.MoveNext do
+      Result := Result+Enumerator.CurrentKey+'='+Enumerator.CurrentValue.ToString+#13#10;
   end;
 end;
 
@@ -637,12 +645,16 @@ end;
 procedure TdwlParams.Clear;
 begin
   FParams.Clear;
+  if Assigned(FPersistHook) then
+    FPersistHook.Clear;
 end;
 
 procedure TdwlParams.ClearKey(const Key: string);
 begin
   var LowerKey := Key.ToLower;
   FParams.Remove(LowerKey);
+  if Assigned(FPersistHook) then
+    FPersistHook.ClearKey(Key);
   if Assigned(FChangeMethodCallbackProc) then
     FChangeMethodCallbackProc(Self, Key, TValue.Empty);
   if Assigned(FChangeRegularCallbackProc) then
@@ -663,7 +675,13 @@ end;
 
 function TdwlParams.ContainsKey(const Key: string): boolean;
 begin
-  Result := FParams.ContainsKey(Key.ToLower);
+  var LowerKey := Key.ToLower;
+  Result := FParams.ContainsKey(LowerKey);
+  if not Result then
+  begin
+    var Dummy: TValue;
+    Result := TryGetFromPersistHook(LowerKey, Dummy);
+  end;
 end;
 
 class constructor TdwlParams.Create;
@@ -738,6 +756,12 @@ end;
 
 function TdwlParams.GetEnumerator: IdwlParamsEnumerator;
 begin
+  if (FPersistHook<>nil) and (not FRequestedAllFromPersistHook) then
+  begin
+    var KnownKeys := FParams.Keys.ToArray;
+    FPersistHook.ProvideUnknownKeys(KnownKeys, ProvideKeyCallBack);
+    FRequestedAllFromPersistHook := true;
+  end;
   Result := TdwlParamsEnumerator.Create(FParams.GetEnumerator);
 end;
 
@@ -753,29 +777,36 @@ begin
     Result := Default
 end;
 
+procedure TdwlParams.ProvideKeyCallBack(const LowerKey: string; const Value: TValue);
+begin
+  FParams.Add(LowerKey, Value);
+end;
+
 procedure TdwlParams.PutIntoJSONObject(JSONObject: TJSONObject);
 begin
-  var Enumerator := FParams.GetEnumerator;
-  try
-    while Enumerator.MoveNext do
-    begin
-      var Value := Enumerator.Current.Value;
-      case Value.Kind of
-      tkChar,
-      tkWChar,
-      tkUString,
-      tkWString,
-      tkString: JSONObject.AddPair(Enumerator.Current.Key, Value.ToString);
-      tkInteger: JSONObject.AddPair(Enumerator.Current.Key, Value.AsInteger);
-      tkInt64: JSONObject.AddPair(Enumerator.Current.Key, Value.AsInt64);
-      tkFloat: JSONObject.AddPair(Enumerator.Current.Key, Value.AsExtended);
-      else
-        raise Exception.Create('TValue: Unknown kind in PutIntoJSONObject');
-      end;
+  var Enumerator := GetEnumerator;
+  while Enumerator.MoveNext do
+  begin
+    var Value := Enumerator.CurrentValue;
+    case Value.Kind of
+    tkChar,
+    tkWChar,
+    tkUString,
+    tkWString,
+    tkString: JSONObject.AddPair(Enumerator.CurrentKey, Value.ToString);
+    tkInteger: JSONObject.AddPair(Enumerator.CurrentKey, Value.AsInteger);
+    tkInt64: JSONObject.AddPair(Enumerator.CurrentKey, Value.AsInt64);
+    tkFloat: JSONObject.AddPair(Enumerator.CurrentKey, Value.AsExtended);
+    else
+      raise Exception.Create('TValue: Unknown kind in PutIntoJSONObject');
     end;
-  finally
-    Enumerator.Free;
   end;
+end;
+
+procedure TdwlParams.RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
+begin
+  FPersistHook := PersistHook;
+  FRequestedAllFromPersistHook := false;
 end;
 
 procedure TdwlParams.Resolve(var Str: string);
@@ -819,7 +850,10 @@ end;
 
 function TdwlParams.TryGetBareValue(const Key: string; out Value: TValue): boolean;
 begin
-  Result := FParams.TryGetValue(Key.ToLower, Value);
+  var LowerKey := Key.ToLower;
+  Result := FParams.TryGetValue(LowerKey, Value);
+  if not Result then
+    Result := TryGetFromPersistHook(LowerKey, Value);
 end;
 
 function TdwlParams.TryGetByteValue(const Key: string; out Value: byte): boolean;
@@ -848,6 +882,13 @@ begin
     if not Result then
       Result := TdwlConvUtils.TryDotStrToFloat(V.ToString, Value);
   end;
+end;
+
+function TdwlParams.TryGetFromPersistHook(const LowerKey: string; var Value: TValue): boolean;
+begin
+  Result := Assigned(FPersistHook) and FPersistHook.TryGetValue(LowerKey, Value);
+  if Result then
+    FParams.Add(Lowerkey, Value);
 end;
 
 function TdwlParams.TryGetInt64Value(const Key: string; out Value: Int64): boolean;
@@ -884,7 +925,7 @@ end;
 function TdwlParams.TryGetValue(const Key: string; out Value: TValue): boolean;
 begin
   var LowerKey := Key.ToLower;
-  Result := FParams.TryGetValue(LowerKey, Value);
+  Result := TryGetBareValue(LowerKey, Value);
   if not Result then
   begin // try to find a metakey and apply the default
     var MetaKey: TdwlMetaKey;
@@ -969,10 +1010,15 @@ begin
   // If a changecallback procedure or triggers are registered, we're introducing an optimization
   // So that the callbacck will only be called on a real change
   var OldValue: TValue;
-  if (Assigned(FChangeMethodCallbackProc) or Assigned(FChangeRegularCallbackProc) or (FTriggers<>nil)) and
-    TryGetBareValue(LowerKey, OldValue) and Value.Equals(OldValue) then
+  var OldValueCheck := Assigned(FChangeMethodCallbackProc) or Assigned(FChangeRegularCallbackProc) or (FTriggers<>nil);
+  if OldValueCheck and TryGetBareValue(LowerKey, OldValue) and Value.Equals(OldValue) then
     Exit;
   FParams.AddOrSetValue(Lowerkey, Value);
+  if Assigned(FPersistHook) then
+  begin
+    if OldValueCheck or (not (FParams.ContainsKey(LowerKey) and TryGetBareValue(LowerKey, OldValue) and Value.Equals(OldValue))) then
+      FPersistHook.AddOrSetValue(LowerKey, Value);
+  end;
   if Assigned(FChangeMethodCallbackProc) then
     FChangeMethodCallbackProc(Self, LowerKey, Value);
   if Assigned(FChangeRegularCallbackProc) then

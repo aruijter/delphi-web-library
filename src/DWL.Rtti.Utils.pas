@@ -29,7 +29,7 @@ begin
   if not Result then
     Exit;
   // and having the same raw data
-  Result := CompareMem(Self.GetReferenceToRawData, CompareValue.GetReferenceToRawData, DataSize);
+  Result := CompareMem(Self.GetReferenceToRawData, CompareValue.GetReferenceToRawData, Size);
 end;
 
 end.
