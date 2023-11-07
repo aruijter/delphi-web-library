@@ -32,7 +32,8 @@ type
     procedure Clear;
     procedure ClearKey(const LowerKey: string);
     function TryGetValue(const LowerKey: string; var Value: TValue): boolean;
-    procedure ProvideUnknownKeys(const KnownKeys: TArray<string>; ProvideProc: TProvideKeyCallBack);
+    procedure ProvideUnknownKeys(const KnownKeys: TArray<string>);
+    procedure Initialize(ProvideProc: TProvideKeyCallBack);
   end;
 
   /// <summary>
@@ -654,7 +655,7 @@ begin
   var LowerKey := Key.ToLower;
   FParams.Remove(LowerKey);
   if Assigned(FPersistHook) then
-    FPersistHook.ClearKey(Key);
+    FPersistHook.ClearKey(LowerKey);
   if Assigned(FChangeMethodCallbackProc) then
     FChangeMethodCallbackProc(Self, Key, TValue.Empty);
   if Assigned(FChangeRegularCallbackProc) then
@@ -759,7 +760,7 @@ begin
   if (FPersistHook<>nil) and (not FRequestedAllFromPersistHook) then
   begin
     var KnownKeys := FParams.Keys.ToArray;
-    FPersistHook.ProvideUnknownKeys(KnownKeys, ProvideKeyCallBack);
+    FPersistHook.ProvideUnknownKeys(KnownKeys);
     FRequestedAllFromPersistHook := true;
   end;
   Result := TdwlParamsEnumerator.Create(FParams.GetEnumerator);
@@ -807,6 +808,7 @@ procedure TdwlParams.RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
 begin
   FPersistHook := PersistHook;
   FRequestedAllFromPersistHook := false;
+  FPersistHook.Initialize(ProvideKeyCallBack);
 end;
 
 procedure TdwlParams.Resolve(var Str: string);
@@ -1007,23 +1009,26 @@ end;
 procedure TdwlParams.WriteValue(const Key: string; const Value: TValue);
 begin
   var Lowerkey := Key.ToLower;
+  var OldValue: TValue;
+  var TriggersOrChangeProcsUsed := Assigned(FChangeMethodCallbackProc) or Assigned(FChangeRegularCallbackProc) or (FTriggers<>nil);
   // If a changecallback procedure or triggers are registered, we're introducing an optimization
   // So that the callbacck will only be called on a real change
-  var OldValue: TValue;
-  var OldValueCheck := Assigned(FChangeMethodCallbackProc) or Assigned(FChangeRegularCallbackProc) or (FTriggers<>nil);
-  if OldValueCheck and TryGetBareValue(LowerKey, OldValue) and Value.Equals(OldValue) then
+  if TriggersOrChangeProcsUsed and TryGetBareValue(LowerKey, OldValue) and Value.Equals(OldValue) then
     Exit;
-  FParams.AddOrSetValue(Lowerkey, Value);
   if Assigned(FPersistHook) then
   begin
-    if OldValueCheck or (not (FParams.ContainsKey(LowerKey) and TryGetBareValue(LowerKey, OldValue) and Value.Equals(OldValue))) then
+    if TriggersOrChangeProcsUsed or (not (FParams.ContainsKey(LowerKey) and FParams.TryGetValue(LowerKey, OldValue) and Value.Equals(OldValue))) then
       FPersistHook.AddOrSetValue(LowerKey, Value);
   end;
-  if Assigned(FChangeMethodCallbackProc) then
-    FChangeMethodCallbackProc(Self, LowerKey, Value);
-  if Assigned(FChangeRegularCallbackProc) then
-    FChangeRegularCallbackProc(Self, LowerKey, Value);
-  ExecuteTriggers(LowerKey);
+  FParams.AddOrSetValue(Lowerkey, Value);
+  if TriggersOrChangeProcsUsed then
+  begin
+    if Assigned(FChangeMethodCallbackProc) then
+      FChangeMethodCallbackProc(Self, LowerKey, Value);
+    if Assigned(FChangeRegularCallbackProc) then
+      FChangeRegularCallbackProc(Self, LowerKey, Value);
+    ExecuteTriggers(LowerKey);
+  end;
 end;
 
 { TdwlParamsEnumerator }
