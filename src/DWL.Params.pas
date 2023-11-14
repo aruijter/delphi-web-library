@@ -330,12 +330,16 @@ type
     /// <param name="Value">
     ///   the value of the pair
     /// </param>
+    /// <param name="SkipPersisting">
+    ///   default false, if persisting is skipped, the value is not forwarded
+    ///   to the persisting handler
+    /// </param>
     /// <remarks>
     ///   A very important paradigm is that keys are always enforced to be
     ///   lowercase (No matter how you feed them into the function) This is to
     ///   guarantee a uniform case-insensitive resolving and reading of keys <br />
     /// </remarks>
-    procedure WriteValue(const Key: string; const Value: TValue);
+    procedure WriteValue(const Key: string; const Value: TValue; SkipPersisting: boolean=false);
     /// <summary>
     ///   put the presented keys in the form of Name Value pairs (as f.e. used
     ///   in TStringList) into the store'
@@ -400,6 +404,7 @@ type
     procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc); overload;
     procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc); overload;
     procedure RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
+    procedure UnRegisterPersistHook;
   end;
 
   /// <summary>
@@ -538,7 +543,7 @@ type
     procedure Resolve(var Str: string);
     procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc); overload;
     procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc); overload;
-    procedure WriteValue(const Key: string; const Value: TValue);
+    procedure WriteValue(const Key: string; const Value: TValue; SkipPersisting: boolean=false);
     procedure ClearKey(const Key: string);
     function ContainsKey(const Key: string): boolean;
     procedure AssignTo(Params: IdwlParams; Keys: TArray<string>); overload;
@@ -551,6 +556,7 @@ type
     procedure WriteJSON(const JSON: TJSONObject); overload;
     procedure Clear;
     procedure RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
+    procedure UnRegisterPersistHook;
   public
     class constructor Create;
     class destructor Destroy;
@@ -956,6 +962,11 @@ begin
   Result := TryGetValue(Key, V) and V.TryAsType(Value, false);
 end;
 
+procedure TdwlParams.UnRegisterPersistHook;
+begin
+  FPersistHook := nil;
+end;
+
 function TdwlParams.GetValue(const Key: string; Default: TValue): TValue;
 begin
   if not TryGetValue(Key, Result) then
@@ -1006,7 +1017,7 @@ begin
   end;
 end;
 
-procedure TdwlParams.WriteValue(const Key: string; const Value: TValue);
+procedure TdwlParams.WriteValue(const Key: string; const Value: TValue; SkipPersisting: boolean=false);
 begin
   var Lowerkey := Key.ToLower;
   var OldValue: TValue;
@@ -1015,7 +1026,7 @@ begin
   // So that the callbacck will only be called on a real change
   if TriggersOrChangeProcsUsed and TryGetBareValue(LowerKey, OldValue) and Value.Equals(OldValue) then
     Exit;
-  if Assigned(FPersistHook) then
+  if Assigned(FPersistHook) and (not SkipPersisting) then
   begin
     if TriggersOrChangeProcsUsed or (not (FParams.ContainsKey(LowerKey) and FParams.TryGetValue(LowerKey, OldValue) and Value.Equals(OldValue))) then
       FPersistHook.AddOrSetValue(LowerKey, Value);

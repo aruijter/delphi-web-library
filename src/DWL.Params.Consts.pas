@@ -18,6 +18,7 @@ const
   Param_Scopes = 'scopes';
   Param_Refreshtoken = 'refreshtoken';
   Param_Profile = 'profile';
+  Param_ErrorMsg = 'errormsg';
 
 implementation
 
