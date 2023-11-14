@@ -3,11 +3,18 @@ unit DWL.IOUtils;
 interface
 
 uses
-  System.IOUtils;
+  System.IOUtils, System.Classes;
 
 type
   TdwlFile = record
     class function ExtractBareName(const Path: string=''): string; static;
+  end;
+
+  TdwlPath = record
+    class procedure Listing(const ListedItems: TStrings; const Directory: string;
+      const Mask: string = '*.*'; Recursive: boolean=false; ListDirectories:
+      boolean=false; ListFiles: boolean=true; BareDirOrFileNames: boolean=false;
+      const ExcludeMask: string=''; MaxRecurseDepth:integer=MaxInt); static;
   end;
 
   TdwlFileVersionInfo = record
@@ -38,7 +45,7 @@ type
 implementation
 
 uses
-  System.SysUtils, Winapi.Windows;
+  System.SysUtils, Winapi.Windows, DWL.Resolver, System.Masks;
 
 { TdwlFile }
 
@@ -232,4 +239,70 @@ begin
   Build := StrToIntDef(Copy(VersionStr, P+1, MaxInt), 0);
 end;
 
+{ TdwlPath }
+
+class procedure TdwlPath.Listing(const ListedItems: TStrings; const Directory, Mask: string;
+  Recursive, ListDirectories, ListFiles, BareDirOrFileNames: boolean;
+  const ExcludeMask: string; MaxRecurseDepth: integer);
+//var
+//  TheDir: string;
+//  SResult: integer;
+begin
+  if MaxRecurseDepth<0 then
+    Exit;
+  var ThePath := IncludeTrailingPathDelimiter(Directory);
+  TdwlResolver.Resolve(ThePath);
+  var SearchRec: TSearchRec;
+  var SearchResult := FindFirst(ThePath+Mask, faAnyFile, SearchRec);
+  try
+    while SearchResult = 0 do
+    begin
+      if (ExcludeMask='') or not MatchesMask(SearchRec.Name, ExcludeMask) then
+      begin
+        if (SearchRec.Attr and faDirectory)=0 then
+        begin
+          if ListFiles then
+          begin
+            if BareDirOrFileNames then
+              ListedItems.Add(TdwlFile.ExtractBareName(SearchRec.Name))
+            else
+              ListedItems.Add(ThePath+SearchRec.Name);
+          end;
+        end
+        else
+          if ListDirectories and (SearchRec.Name<>'.') and (SearchRec.Name<>'..') then
+          begin
+            if BareDirOrFileNames then
+              ListedItems.Add(TdwlFile.ExtractBareName(SearchRec.Name))
+            else
+              ListedItems.Add(ThePath+SearchRec.Name);
+          end;
+      end;
+      SearchResult := FindNext(SearchRec);
+    end;
+  finally
+    System.SysUtils.FindClose(SearchRec);
+  end;
+  if Recursive then // recurse into subdirs
+  begin
+    SearchResult := FindFirst(ThePath+'*.*', faAnyFile, SearchRec);
+    try
+      while SearchResult = 0 do
+      begin
+        if ((SearchRec.Attr and faDirectory)<>0) and (SearchRec.Name<>'.') and
+          (SearchRec.Name<>'..') and ((ExcludeMask='') or
+            not MatchesMask(SearchRec.Name, ExcludeMask)) then
+          Listing(ListedItems, ThePath+SearchRec.Name, Mask, true,
+            ListDirectories, ListFiles, BareDirOrFileNames, ExcludeMask, MaxRecurseDepth-1);
+        SearchResult := FindNext(SearchRec);
+      end;
+    finally
+      System.SysUtils.FindClose(SearchRec);
+    end;
+  end;
+end;
+
 end.
+
+
+
