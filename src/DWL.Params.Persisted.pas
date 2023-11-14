@@ -3,7 +3,7 @@ unit DWL.Params.Persisted;
 interface
 
 uses
-  DWL.Params;
+  DWL.Params, System.TypInfo;
 
 /// <summary>
 ///   Will generate an interface to a persisted store of key/value pairs
@@ -16,19 +16,24 @@ uses
 ///   this particular domain
 /// </param>
 function New_PersistedParams(const FileName: string; const Domain: string=''): IdwlParams;
+procedure Register_PersistedParamsClass(AClass: TClass; AIntfInfo: PTypeInfo);
+procedure Register_PersistedParamsRecord(RecordName: string; ATypeInfo: PTypeInfo);
 
 implementation
 
 uses
-  Winapi.Windows, System.Rtti, System.TypInfo, System.Generics.Collections, DWL.IO,
-  System.Classes, System.SysUtils;
+  Winapi.Windows, System.Rtti, System.Generics.Collections, DWL.IO,
+  System.Classes, System.SysUtils, System.IOUtils, Vcl.Dialogs;
 
 const
   MAGIC_WORD = 61374;
   MAGIC_CARDINAL = 3992898270;
-  METHOD_CREATE = 'Create';
+  CURRENT_FILE_VERSION_BYTE_AND_3_RESERVED_BYTES = 1;
+  OFFSET_FILESIZE = 8;
   METHOD_SERIALIZETOCURSOR = 'SerializeToCursor';
+  METHOD_SERIALIZETOCURSOR_FULL = 'procedure SerializeToCursor(Cursor: IdwlCursor_Write)';
   METHOD_DESERIALIZEFROMCURSOR = 'DeSerializeFromCursor';
+  METHOD_DESERIALIZEFROMCURSOR_FULL = 'procedure DeSerializeFromCursor(Cursor: IdwlCursor_Write)';
   // Param kinds in file
   pkString = 0;
   pkUInt8 = 1;
@@ -42,35 +47,50 @@ const
   pkSingle = 9;
   pkDouble = 10;
   pkExtended = 11;
-  pkInterface = 12;
+  pkDynArraySimpleType = 12;
+  pkRecord = 13;
+  pkInterface = 14;
   pkDeleted = 255;
 
 type
   TdwlPersistedParamType = record
     ParamKind: byte;
     SimpleDataSize: byte;
-    TypeInfo: PTypeInfo;
+    Info: PTypeInfo;
   end;
 
-  TdwlDeSerializeClass = record
+
+  PdwlPersistedParam = ^TdwlPersistedParam;
+  TdwlPersistedParam = record
+    ParamKind: UInt8;
+    ParamKindOffset: UInt64;
+    DataOffSet: UInt64;
+  end;
+
+  TdwlSerializeClass = record
     RttiType: TRttiType;
     MetaClassType: TClass;
-    CreateMethod: TRttiMethod;
     DeSerializeMethod: TRttiMethod;
+    SerializeMethod: TRttiMethod;
+    IntfInfo: PTypeInfo;
+  end;
+
+  TdwlSerializeRecord = record
+    Info: PTypeInfo;
   end;
 
   TdwlPersistedParams_Hook = class(TInterfacedObject, IdwlParamsPersistHook)
   strict private
     class var
-      FDeSerializeClasses: TDictionary<string, TdwlDeSerializeClass>;
-      FTypeInfo2ParamKind: TDictionary<PTypeInfo, TdwlPersistedParamType>;
-      FParamKinds: TList<TdwlPersistedParamType>;
-      RttiContext: TRttiContext;
+      FSerializeClasses: TDictionary<string, TdwlSerializeClass>;
+      FSerializeRecords: TDictionary<string, PTypeInfo>;
+      FTypeInfo2ParamType: TDictionary<PTypeInfo, TdwlPersistedParamType>;
+      FParamTypes: TList<TdwlPersistedParamType>;
     var
       FProvideProc: TProvideKeyCallBack;
     procedure CheckInitReady;
     procedure Flush;
-    function TryGetValueFromOffset(Offset: UInt64; var Value: TValue): boolean;
+    function TryGetValueFromFile(Param: PdwlPersistedParam; var Value: TValue): boolean;
   private
     class var
       FClassInitNeeded: boolean;
@@ -79,11 +99,13 @@ type
       FInitNotReady: boolean;
       FInitEvent: THandle;
       FFileName: string;
-      FPersistedParams: TDictionary<string, UInt64>; // Dictionary that holds absolute offset from beginning of file
+      FPersistedParams: TDictionary<string, TdwlPersistedParam>; // Dictionary that holds absolute offset from beginning of file
       FFileOptions: TdwlFileOptions;
       FCursor: IdwlFileCursor_Write;
     class procedure InitParamKinds;
-    class procedure InitDeserializeClasses;
+//    class procedure InitSerializeClasses;
+    class procedure AddSerializeClass(RttiType: TRttiType; AClass: TClass; AIntfInfo: PTypeInfo);
+    class procedure AddSerializeRecord(const RecordName: string; Info: PTypeInfo);
     procedure AddOrSetValue(const LowerKey: string; const Value: TValue);
     procedure Clear;
     procedure ClearKey(const LowerKey: string);
@@ -113,6 +135,16 @@ begin
   Result.RegisterPersistHook(TdwlPersistedParams_Hook.Create(Filename));
 end;
 
+procedure Register_PersistedParamsClass(AClass: TClass; AIntfInfo:PTypeInfo);
+begin
+  TdwlPersistedParams_Hook.AddSerializeClass(nil, AClass, AIntfInfo);
+end;
+
+procedure Register_PersistedParamsRecord(RecordName: string; ATypeInfo: PTypeInfo);
+begin
+  TdwlPersistedParams_Hook.AddSerializeRecord(RecordName, ATypeInfo);
+end;
+
 { TInitThread }
 
 constructor TInitThread.Create(Hook: IdwlParamsPersistHook);
@@ -130,31 +162,42 @@ begin
     begin
       Hook.FClassInitNeeded := false;
       Hook.InitParamKinds;
-      Hook.InitDeserializeClasses;
+//      Hook.InitSerializeClasses;
     end;
     var Cursor := New_File(Hook.FFilename, Hook.FFileOptions).GetWriteCursor;
     Hook.FCursor := Cursor;
     if Cursor.FileSize=0 then
     begin
       Cursor.WriteUInt32(MAGIC_CARDINAL);
-      Cursor.WriteUInt64(12); // empty file size
+      Cursor.WriteUInt32(CURRENT_FILE_VERSION_BYTE_AND_3_RESERVED_BYTES);
+      Cursor.WriteUInt64(16); // empty file size
     end
     else
     begin
       if Cursor.ReadUInt32<>MAGIC_CARDINAL then
         raise Exception.Create('PersistedParams: Invalid Magic Word: wrong filetype?');
+      if Cursor.ReadUInt32<>CURRENT_FILE_VERSION_BYTE_AND_3_RESERVED_BYTES then
+        raise Exception.Create('PersistedParams: Unknown File Verion!!');
       var StoredFileSize := Cursor.ReadUInt64;
       // check the filesize and correct if needed
       if StoredFileSize<>Cursor.FileSize then
         Cursor.SetFileSize(StoredFileSize);
+      var NextOffSet := Cursor.CursorOffset;
       while not Cursor.Eof do
       begin
         if Cursor.ReadUInt16<>MAGIC_WORD then
           raise Exception.Create('PersistedParams: Invalid Entry: wrong filetype?');
-        var Name := Cursor.ReadString_LenByte;
-        if Cursor.ReadUInt8<>pkDeleted then
-          Hook.FPersistedParams.Add(Name, Cursor.CursorOffset-SizeOf(UInt8){correction for read ParamKind});
-        Cursor.Seek(Cursor.ReadUInt32, soCurrent); // skip the data
+        inc(NextOffset, Cursor.ReadUInt32);
+        var Param: TdwlPersistedParam;
+        Param.ParamKindOffset := Cursor.CursorOffset;
+        Param.ParamKind := Cursor.ReadUInt8;
+        if Param.ParamKind<>pkDeleted then
+        begin
+          var Name := Cursor.ReadString_LenByte;
+          Param.DataOffSet := Cursor.CursorOffset;
+          Hook.FPersistedParams.Add(Name, Param);
+        end;
+        Cursor.Seek(NextOffSet, soBeginning); // next one
       end;
     end;
   finally
@@ -166,104 +209,126 @@ end;
 { TdwlPersistedParams_Hook }
 
 procedure TdwlPersistedParams_Hook.AddOrSetValue(const LowerKey: string; const Value: TValue);
-  procedure WriteHeader(ParamKind: byte);
-  begin
-    FCursor.Seek(0, soEnd);
-    FCursor.WriteUInt16(MAGIC_WORD);
-    FCursor.WriteString_LenByte(LowerKey);
-    FPersistedParams.Add(LowerKey, FCursor.CursorOffset);
-    FCursor.WriteUInt8(ParamKind);
-  end;
 begin
   CheckInitReady;
   var ParamType: TdwlPersistedParamType;
-  if not FTypeInfo2ParamKind.TryGetValue(Value.TypeInfo, ParamType) then
+  if not FTypeInfo2ParamType.TryGetValue(Value.TypeInfo, ParamType) then
   begin
     ParamType.SimpleDataSize := 0;
-    if Value.TypeInfo.Kind=tkInterface then
-      ParamType.ParamKind := pkInterface
+    case Value.TypeInfo.Kind of
+    tkDynArray:
+      begin
+        var ElementParamType: TdwlPersistedParamType;
+        if (not FTypeInfo2ParamType.TryGetValue(Value.TypeInfo.TypeData.DynArrElType^, ElementParamType)) or
+          (ElementParamType.SimpleDataSize=0) then
+          raise Exception.Create('currently only simple dynarray elements allowed: '+string(Value.TypeInfo.Name));
+        ParamType.ParamKind := pkDynArraySimpleType;
+      end;
+    tkRecord: ParamType.ParamKind := pkRecord;
+    tkInterface: ParamType.ParamKind := pkInterface;
     else
       raise Exception.Create('PersistedParams: Missing type '+string(Value.TypeInfo.Name));
+    end;
   end;
+  // check is value already exists
+  var OldParam: TdwlPersistedParam;
+  if FPersistedParams.TryGetValue(LowerKey, OldParam) then
+  begin
+    if (OldParam.ParamKind=ParamType.ParamKind) and (ParamType.SimpleDataSize>0) then
+    begin
+      FCursor.Seek(OldParam.DataOffset, soBeginning);
+      var ValueRawData := Value.GetReferenceToRawData;
+      FCursor.Write(ValueRawData^, ParamType.SimpleDataSize);
+      Exit; // that's it for a simpletype overwrite: finished
+    end;
+    // otherwise no reuse, delete current value
+    FCursor.Seek(OldParam.ParamKindOffset, soBeginning);
+    FCursor.WriteUInt8(pkDeleted); // assign oldvalue as deleted
+    FPersistedParams.Remove(LowerKey);
+  end;
+  var Param: TdwlPersistedParam;
+  var DataSizeOffset: UInt64 := 0;;
   var FallBackFileSize := FCursor.FileSize;
   try
-    // check is value already exists
-    var Offset: uInt64;
-    if FPersistedParams.TryGetValue(LowerKey, Offset) then
-    begin
-      // check if current value is overwritable
-      FCursor.Seek(Offset, soBeginning);
-      if ParamType.SimpleDataSize>0 then
-      begin
-        var ReadParamType := FCursor.ReadUInt8;
-        if ReadParamType=ParamType.ParamKind then
-        begin
-          FCursor.ReadUInt32; // datasize, should be same as SimpleDataSize
-          var ValueRawData := Value.GetReferenceToRawData;
-          FCursor.Write(ValueRawData^, ParamType.SimpleDataSize);
-          Exit; // that's it for a simpletype overwrite: finished
-        end;
-        FCursor.Seek(-SizeOf(UInt8), soCurrent); // to step back onto paramkind
-      end;
-      // otherwise no reuse, delete current value
-      FCursor.WriteUInt8(pkDeleted); // assign oldvalue as deleted
-      FPersistedParams.Remove(LowerKey);
-    end;
+    FCursor.Seek(0, soEnd);
+    FCursor.WriteUInt16(MAGIC_WORD);
+    DataSizeOffset := FCursor.CursorOffset;
+    FCursor.WriteUInt32(0); // datasize to be written when flushing
+    Param.ParamKindOffset := FCursor.CursorOffset;
+    Param.ParamKind := ParamType.ParamKind;
+    FCursor.WriteUInt8(Param.ParamKind);
+    FCursor.WriteString_LenByte(LowerKey);
+    Param.DataOffSet := FCursor.CursorOffset;
+    // Header is ready, now write data
     // write value to file
     if ParamType.SimpleDataSize>0 then
     begin
-      WriteHeader(ParamType.ParamKind);
-      FCursor.WriteUInt32(ParamType.SimpleDataSize);
       var ValueData := Value.GetReferenceToRawData;
       FCursor.Write(ValueData^, ParamType.SimpleDataSize);
     end
     else
     begin
       case ParamType.ParamKind of
-      pkString:
+      pkString: FCursor.WriteString_LenCardinal(Value.AsString);
+      pkDynArraySimpleType:
         begin
-          WriteHeader(ParamType.ParamKind);
-          FCursor.WriteString_LenCardinal(Value.AsString);
+          FCursor.WriteString_LenByte(string(Value.TypeInfo.TypeData.DynArrElType^.Name));
+          var ByteCount: UInt32 := Value.GetArrayLength*Value.TypeInfo.TypeData.elSize;
+          FCursor.WriteUInt32(ByteCount);
+          var ValueData := Value.GetReferenceToRawArrayElement(0);
+          FCursor.Write(ValueData^, ByteCount);
+        end;
+      pkRecord:
+        begin
+          var RecordName := string(Value.TypeInfo.Name);
+          var RecordNameByteCount := WideCharToMultiByte(CP_UTF8, 0, PWideChar(RecordName), Length(RecordName), nil, 0, nil, nil);
+          var RecordSize := Value.TypeInfo.TypeData.RecSize;
+          FCursor.WriteString_LenByte(RecordName, RecordNameByteCount);
+          var ValueData := Value.GetReferenceToRawData;
+          FCursor.Write(ValueData^, RecordSize);
         end;
       pkInterface:
         begin
           var Intf := Value.AsInterface;
           var Obj := Intf as TObject;
-          var RttiType :=   RttiContext.GetType(Obj.ClassType);
-          var Method := RttiType.GetMethod(METHOD_SERIALIZETOCURSOR);
-          if Method=nil then
-            raise Exception.Create('PersistedParams: unimplemented '+RttiType.Name+'.'+METHOD_SERIALIZETOCURSOR);
+          var ClassDef: TdwlSerializeClass;
+          if not FSerializeClasses.TryGetValue(Obj.ClassName, ClassDef) then
+            raise Exception.Create('PersistedParams: No Serialize Class found for '+Obj.ClassName);
           var IntfName := '';
-          for var IntfType in RttiType.AsInstance.GetImplementedInterfaces do
+          // for now interface name is always known, maybe later we need to guess again
+//          if ClassDef.IntfInfo<>nil then
+            IntfName := string(ClassDef.IntfInfo.Name)
+         { else
           begin
-            var tmpIntf: IInterface;
-            if Obj.GetInterface(IntfType.GUID, tmpIntf) then
+            for var IntfType in ClassDef.RttiType.AsInstance.GetImplementedInterfaces do
             begin
-              if Intf = tmpIntf then
+              var tmpIntf: IInterface;
+              if Obj.GetInterface(IntfType.GUID, tmpIntf) then
               begin
-                IntfName := IntfType.Name;
-                Break;
+                if Intf = tmpIntf then
+                begin
+                  IntfName := IntfType.Name;
+                  Break;
+                end;
               end;
             end;
-          end;
-          if IntfName='' then
-            raise Exception.Create('PersistedParams: problems finding interfacename for '+RttiType.Name);
-          WriteHeader(ParamType.ParamKind);
-          var DataSizeOffset := FCursor.CursorOffset;
-          FCursor.WriteUInt32(0); // Temporary DataSize
+            if IntfName='' then
+              raise Exception.Create('PersistedParams: problems finding interface for '+Obj.ClassName);
+          end};
           FCursor.WriteString_LenByte(Obj.ClassName);
           FCursor.WriteString_LenByte(IntfName);
-          Method.Invoke(Obj, [TValue.From(FCursor)]);
-          var DataSize := FCursor.CursorOffset-DataSizeOffSet-SizeOf(UInt32);
-          FCursor.Seek(DataSizeOffset, soBeginning);
-          FCursor.WriteUInt32(DataSize); // Final DataSize
+          ClassDef.SerializeMethod.Invoke(Obj, [TValue.From(FCursor)]);
         end;
       end;
     end;
   except
     FCursor.SetFileSize(FallBackFileSize);
   end;
+  var DataSize := FCursor.CursorOffset-DataSizeOffSet+SizeOf(UInt16); {magic word}
+  FCursor.Seek(DataSizeOffset, soBeginning);
+  FCursor.WriteUInt32(DataSize); // Final DataSize
   Flush;
+  FPersistedParams.Add(LowerKey, Param);
 end;
 
 procedure TdwlPersistedParams_Hook.Initialize(ProvideProc: TProvideKeyCallBack);
@@ -272,38 +337,26 @@ begin
   TInitThread.Create(Self);
 end;
 
-class procedure TdwlPersistedParams_Hook.InitDeserializeClasses;
-begin
-  var TheClasses := FCtx.GetTypes;
-  for var RttiType in TheClasses do
-  begin
-    if RttiType.IsInstance then
-    begin
-      var CreateMethod := RttiType.GetMethod(METHOD_CREATE);
-      var DeSerializeMethod := RttiType.GetMethod(METHOD_DESERIALIZEFROMCURSOR);
-      if (DeSerializeMethod<>nil) and (CreateMethod<>nil)  then
-      begin
-        var DeSerializeClass: TdwlDeSerializeClass;
-        DeSerializeClass.RttiType := RttiType;
-        DeSerializeClass.CreateMethod := CreateMethod;
-        DeSerializeClass.DeSerializeMethod := DeSerializeMethod;
-        DeSerializeClass.MetaClassType := RttiType.AsInstance.MetaclassType;
-        FDeSerializeClasses.Add(RttiType.Name, DeSerializeClass);
-      end;
-    end;
-  end;
-end;
+// for now don't initialize interfaces by RTTI, maybe later
+//class procedure TdwlPersistedParams_Hook.InitSerializeClasses;
+//begin
+//  var TheClasses := FCtx.GetTypes;
+//  for var RttiType in TheClasses do
+//    if RttiType.IsInstance then
+//      AddSerializeClass(RttiType, RttiType.AsInstance.MetaclassType);
+//end;
 
 class procedure TdwlPersistedParams_Hook.InitParamKinds;
   procedure AddType(ParamKind: byte; SimpleDataSize: byte; TypeInfo: PTypeInfo);
   begin
     var ParameterType: TdwlPersistedParamType;
-    Assert(byte(ParamKind)=FParamKinds.Count);
+    Assert(byte(ParamKind)=FParamTypes.Count);
     ParameterType.ParamKind := ParamKind;
     ParameterType.SimpleDataSize := SimpleDataSize;
-    ParameterType.TypeInfo := TypeInfo;
-    FParamKinds.Add(ParameterType);
-    FTypeInfo2ParamKind.Add(ParameterType.TypeInfo, ParameterType);
+    ParameterType.Info := TypeInfo;
+    FParamTypes.Add(ParameterType);
+    if TypeInfo<>nil then
+      FTypeInfo2ParamType.Add(TypeInfo, ParameterType);
   end;
 begin
   AddType(pkString, 0, TypeInfo(string));
@@ -318,7 +371,39 @@ begin
   AddType(pkSingle, Sizeof(single), TypeInfo(single));
   AddType(pkDouble, SizeOf(double), TypeInfo(double));
   AddType(pkExtended, SizeOf(extended), TypeInfo(extended));
+  AddType(pkDynArraySimpleType, 0, nil);
+  AddType(pkRecord, 0, nil);
   AddType(pkInterface, 0, nil);
+end;
+
+class procedure TdwlPersistedParams_Hook.AddSerializeClass(RttiType: TRttiType; AClass: TClass; AIntfInfo: PTypeInfo);
+begin
+  if RttiType=nil then
+    RttiType := TdwlPersistedParams_Hook.FCtx.GetType(AClass);
+  if RttiType=nil then
+    Exit;
+  var SerializeMethod := RttiType.GetMethod(METHOD_SERIALIZETOCURSOR);
+  if SerializeMethod=nil then
+    Exit;
+  if not SameText(SerializeMethod.ToString, METHOD_SERIALIZETOCURSOR_FULL) then
+    Exit;
+  var DeSerializeMethod := RttiType.GetMethod(METHOD_DESERIALIZEFROMCURSOR);
+  if DeSerializeMethod=nil then
+    Exit;
+  if not SameText(DeSerializeMethod.ToString, METHOD_DESERIALIZEFROMCURSOR_FULL) then
+    Exit;
+  var SerializeClass: TdwlSerializeClass;
+  SerializeClass.RttiType := RttiType;
+  SerializeClass.DeSerializeMethod := DeSerializeMethod;
+  SerializeClass.SerializeMethod := SerializeMethod;
+  SerializeClass.MetaClassType := RttiType.AsInstance.MetaclassType;
+  SerializeClass.IntfInfo := AIntfInfo;
+  FSerializeClasses.Add(RttiType.Name, SerializeClass);
+end;
+
+class procedure TdwlPersistedParams_Hook.AddSerializeRecord(const RecordName: string; Info: PTypeInfo);
+begin
+   FSerializeRecords.Add(RecordName, Info);
 end;
 
 procedure TdwlPersistedParams_Hook.CheckInitReady;
@@ -341,10 +426,10 @@ end;
 procedure TdwlPersistedParams_Hook.ClearKey(const LowerKey: string);
 begin
   CheckInitReady;
-  var Offset: UInt64;
-  if FPersistedParams.TryGetValue(LowerKey, Offset) then
+  var Param: TdwlPersistedParam;
+  if FPersistedParams.TryGetValue(LowerKey, Param) then
   begin
-    FCursor.Seek(Offset, soBeginning);
+    FCursor.Seek(Param.ParamKindOffset, soBeginning);
     FCursor.WriteUInt8(pkDeleted);
     FPersistedParams.Remove(LowerKey);
   end;
@@ -353,16 +438,17 @@ end;
 class constructor TdwlPersistedParams_Hook.Create;
 begin
   inherited;
-  FTypeInfo2ParamKind := TDictionary<PTypeInfo, TdwlPersistedParamType>.Create;
-  FParamKinds := TList<TdwlPersistedParamType>.Create;
-  FDeSerializeClasses := TDictionary<string, TdwlDeSerializeClass>.Create;
+  FTypeInfo2ParamType := TDictionary<PTypeInfo, TdwlPersistedParamType>.Create;
+  FParamTypes := TList<TdwlPersistedParamType>.Create;
+  FSerializeClasses := TDictionary<string, TdwlSerializeClass>.Create;
+  FSerializeRecords := TDictionary<string, PTypeInfo>.Create;
   FClassInitNeeded := true;
 end;
 
 constructor TdwlPersistedParams_Hook.Create(const FileName: string);
 begin
   inherited Create;
-  FPersistedParams := TDictionary<string, UInt64>.Create;
+  FPersistedParams := TDictionary<string, TdwlPersistedParam>.Create;
   FFileName := FileName;
   FInitEvent := CreateEvent(nil, false, false, nil);
   FInitNotReady := true;
@@ -371,9 +457,10 @@ end;
 
 class destructor TdwlPersistedParams_Hook.Destroy;
 begin
-  FTypeInfo2ParamKind.Free;
-  FParamKinds.Free;
-  FDeSerializeClasses.Free;
+  FTypeInfo2ParamType.Free;
+  FParamTypes.Free;
+  FSerializeClasses.Free;
+  FSerializeRecords.Free;
   inherited;
 end;
 
@@ -387,7 +474,7 @@ end;
 procedure TdwlPersistedParams_Hook.Flush;
 begin
   // write current filesize for quality purposes
-  FCursor.Seek(4, soBeginning);
+  FCursor.Seek(OFFSET_FILESIZE, soBeginning);
   FCursor.WriteUInt64(FCursor.FileSize);
   // flush the memory mapped file
   FCursor.Flush;
@@ -397,44 +484,75 @@ type
   THackObj = class(TInterfacedObject)
   end;
 
-function TdwlPersistedParams_Hook.TryGetValueFromOffset(Offset: UInt64; var Value: TValue): boolean;
+function TdwlPersistedParams_Hook.TryGetValueFromFile(Param: PdwlPersistedParam; var Value: TValue): boolean;
 begin
   try
-    FCursor.Seek(Offset, soBeginning);
-    var ParamType := FParamKinds[FCursor.ReadUInt8];
+    var ParamType := FParamTypes[Param.ParamKind];
+    FCursor.Seek(Param.DataOffSet, soBeginning);
     if ParamType.SimpleDataSize>0 then
-    begin
-      FCursor.ReadUInt32; // skip datasize
-      TValue.Make(FCursor.CursorPtr, ParamType.TypeInfo, Value)
-    end
+      TValue.Make(FCursor.CursorPtr, ParamType.Info, Value)
     else
     begin
       case ParamType.ParamKind of
-      pkString: FCursor.ReadString_LenCardinal;
+      pkString: Value := FCursor.ReadString_LenCardinal;
+      pkDynArraySimpleType:
+        begin
+          var TypeName := FCursor.ReadString_LenByte;
+          var RttiInfo := FCtx.FindType('System.TArray<System.'+TypeName+'>');
+          if RttiInfo=nil then
+          begin
+            RttiInfo := FCtx.FindType('System.TArray<'+TypeName+'>');
+            if RttiInfo=nil then
+              raise Exception.Create('PersistedParams: No TypeInfo found for '+TypeName);
+          end;
+          var arr: pointer;
+          var ByteCount: NativeInt := FCursor.ReadUInt32;
+          var Len: NativeInt := ByteCount div PTypeInfo(RttiInfo.Handle).TypeData.elSize;
+          DynArraySetLength(arr, RttiInfo.Handle, 1, @Len);
+          try
+            Move(FCursor.CursorPtr^, arr^, ByteCount);
+            TValue.Make(@arr, RttiInfo.Handle, Value); // makes copy of array
+          finally
+            DynArrayClear(arr, RttiInfo.Handle);
+          end;
+         end;
+      pkRecord:
+        begin
+          var RecordName := FCursor.ReadString_LenByte;
+          var Info: PTypeInfo;
+          if not FSerializeRecords.TryGetValue(RecordName, Info) then
+            raise Exception.Create('PersistedParams: No DeSerialize Info found for '+RecordName);
+          TValue.Make(FCursor.CursorPtr, Info, Value);
+        end;
       pkInterface:
         begin
-          FCursor.ReadUInt32; //seek over datasize
           var ClassName := FCursor.ReadString_LenByte;
           var IntfName := FCursor.ReadString_LenByte;
-          var ClassDef: TdwlDeSerializeClass;
-          if not FDeSerializeClasses.TryGetValue(ClassName, ClassDef) then
-            raise Exception.Create('PersistedParams: No DeSerialize Class found for '+ClassName);
-          var IntfDef: TRttiInterfaceType := nil;
-          for var IntfType in  ClassDef.RttiType.AsInstance.GetImplementedInterfaces do
-          begin
-            if IntfType.Name=IntfName then
-            begin
-              IntfDef := IntfType;
-              Break;
-            end;
+          var ClassDef: TdwlSerializeClass;
+          if not FSerializeClasses.TryGetValue(ClassName, ClassDef) then
+            raise Exception.Create('PersistedParams: No DeSeria lize Class found for '+ClassName);
+//          var IntfDef: TRttiInterfaceType := nil;
+//          for var IntfType in  ClassDef.RttiType.AsInstance.GetImplementedInterfaces do
+//          begin
+//            if IntfType.Name=IntfName then
+//            begin
+//              IntfDef := IntfType;
+//              Break;
+//            end;
+//          end;
+//          if IntfDef=nil then
+//            raise Exception.Create('PersistedParams: No DeSerialize Interface found for '+IntfName);
+          var Obj :=  ClassDef.MetaClassType.Create;
+          try
+            ClassDef.DeSerializeMethod.Invoke(Obj, [TValue.From(FCursor)]);
+          except
+            Exit(false);
           end;
-          if IntfDef=nil then
-            raise Exception.Create('PersistedParams: No DeSerialize Interface found for '+IntfName);
-          var Obj := ClassDef.CreateMethod.Invoke(ClassDef.MetaclassType, []).AsObject;
           var IntfInst: IUnknown;
-          Obj.GetInterface(IntfDef.GUID, IntfInst);
-          ClassDef.DeSerializeMethod.Invoke(Obj, [TValue.From(FCursor)]);
-          TValue.Make(@IntfInst, IntfDef.Handle, Value);
+//          Obj.GetInterface(IntfDef.GUID, IntfInst);
+//          TValue.Make(@IntfInst, IntfDef.Handle, Value);
+          Obj.GetInterface(ClassDef.IntfInfo.TypeData.GUID, IntfInst);
+          TValue.Make(@IntfInst, ClassDef.IntfInfo, Value);
         end;
       end;
     end;
@@ -459,7 +577,8 @@ begin
         if SkipKeys.IndexOf(Enumerator.Current.Key)>=0 then
           Continue;
         var Value: TValue;
-        if TryGetValueFromOffset(Enumerator.Current.Value, Value) then
+        var Param := Enumerator.Current.Value;
+        if TryGetValueFromFile(@Param, Value) then
           FProvideProc(Enumerator.Current.Key, Value);
       end;
     finally
@@ -473,8 +592,8 @@ end;
 function TdwlPersistedParams_Hook.TryGetValue(const LowerKey: string; var Value: TValue): boolean;
 begin
   CheckInitReady;
-  var Offset: UInt64;
-  Result := FPersistedParams.TryGetValue(LowerKey, Offset) and TryGetValueFromOffset(Offset, Value);
+  var Param: TdwlPersistedParam;
+  Result := FPersistedParams.TryGetValue(LowerKey, Param) and TryGetValueFromFile(@Param, Value);
 end;
 
 end.
