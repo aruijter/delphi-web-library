@@ -109,6 +109,7 @@ type
     procedure AddOrSetValue(const LowerKey: string; const Value: TValue);
     procedure Clear;
     procedure ClearKey(const LowerKey: string);
+    function ContainsKey(const LowerKey: string): boolean;
     procedure Initialize(ProvideProc: TProvideKeyCallBack);
     procedure ProvideUnknownKeys(const KnownKeys: TArray<string>);
     function TryGetValue(const LowerKey: string; var Value: TValue): boolean;
@@ -435,6 +436,11 @@ begin
   end;
 end;
 
+function TdwlPersistedParams_Hook.ContainsKey(const LowerKey: string): boolean;
+begin
+  Result := FPersistedParams.ContainsKey(LowerKey);
+end;
+
 class constructor TdwlPersistedParams_Hook.Create;
 begin
   inherited;
@@ -505,7 +511,7 @@ begin
             if RttiInfo=nil then
               raise Exception.Create('PersistedParams: No TypeInfo found for '+TypeName);
           end;
-          var arr: pointer;
+          var arr := nil;
           var ByteCount: NativeInt := FCursor.ReadUInt32;
           var Len: NativeInt := ByteCount div PTypeInfo(RttiInfo.Handle).TypeData.elSize;
           DynArraySetLength(arr, RttiInfo.Handle, 1, @Len);

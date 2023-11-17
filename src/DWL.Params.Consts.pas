@@ -19,6 +19,8 @@ const
   Param_Refreshtoken = 'refreshtoken';
   Param_Profile = 'profile';
   Param_ErrorMsg = 'errormsg';
+  Param_FileName = 'filename';
+  Param_Directory='directory';
 
 implementation
 
