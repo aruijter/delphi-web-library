@@ -268,7 +268,7 @@ var
 begin
   Result := '';
   var L: ULONG := 250;
-  if GetUserNameEx(NameSamCompatible, UserNameSam, L)<>0 then
+  if GetUserNameEx(NameSamCompatible, UserNameSam, L){$IF CompilerVersion < 36}<>0{$ENDIF} then
   begin
     var SidSize: ULONG := 100; // according to specs 68 bytes, so take some room for future
     var Sid: pointer;
