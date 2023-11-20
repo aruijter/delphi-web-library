@@ -414,13 +414,13 @@ end;
 
 function TdwlThreadQueue_Evented<T>.Push(Item: T): T;
 begin
-  inherited Push(Item);
+  Result := inherited Push(Item);
   SetEvent(FEvent);
 end;
 
 function TdwlThreadQueue_Evented<T>.PushWithPriority(Item: T): T;
 begin
-  inherited PushWithPriority(Item);
+  Result := inherited PushWithPriority(Item);
   SetEvent(FEvent)
 end;
 
