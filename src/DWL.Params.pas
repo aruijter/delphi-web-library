@@ -9,6 +9,8 @@ uses
 type
   IdwlParams=interface;
 
+  TParamTryCalculateProc = function(Params: IdwlParams; const LowerKey: string; var Value: TValue): boolean;
+
   /// <summary>
   ///   Definition of callback procedure that will be used to signal changes
   ///   ofthe content of the IdwlParams store
@@ -435,6 +437,7 @@ type
   end;
 
   IdwlMetaKeyBuilder = interface
+    function CalculateProc(CalculateProc: TParamTryCalculateProc): IdwlMetaKeyBuilder;
     function DefaultValue(DefaultValue: TValue): IdwlMetaKeyBuilder;
     function MaximumValue(MaximumValue: TValue): IdwlMetaKeyBuilder;
     function MinimumValue(MinimumValue: TValue): IdwlMetaKeyBuilder;
@@ -510,13 +513,19 @@ uses
 
 type
   TdwlMetaKey = class
+  private
+    FCalculators: TList<TParamTryCalculateProc>;
     FTypeInfo: PTypeInfo;
     FDefaultValue: TValue;
-    FMinimumValue: TValue;
     FMaximumValue: TValue;
+    FMinimumValue: TValue;
     FWriteDefaultValue: boolean;
-    constructor Create(TypeInfo: PTypeInfo);
     procedure Check(Value: TValue);
+    procedure RegisterCalculateProc(CalcProc: TParamTryCalculateProc);
+    function TryCalculateValue(Params: IdwlParams; const LowerKey: string; var Value: TValue): boolean;
+  public
+    constructor Create(TypeInfo: PTypeInfo);
+    destructor Destroy; override;
   end;
 
   TdwlParamsEnumerator = class(TInterfacedObject, IdwlParamsEnumerator)
@@ -597,6 +606,7 @@ type
   TdwlMetakeyBuilder = class(TInterfacedObject, IdwlMetaKeyBuilder)
     FMetaKey: TdwlMetaKey;
   private
+    function CalculateProc(CalculateProc: TParamTryCalculateProc): IdwlMetaKeyBuilder;
     function DefaultValue(DefaultValue: TValue): IdwlMetaKeyBuilder;
     function MaximumValue(MaximumValue: TValue): IdwlMetaKeyBuilder;
     function MinimumValue(MinimumValue: TValue): IdwlMetaKeyBuilder;
@@ -632,8 +642,11 @@ end;
 
 class function TdwlParams.AddMetaKey(const Domain, Key: string; TypeInfo: PTypeInfo): TdwlMetaKey;
 begin
-  Result := TdwlMetaKey.Create(TypeInfo);
-  FMetaKeys.Add(DictKey(Domain.ToLower, Key.ToLower), Result);
+  if not FMetaKeys.TryGetValue(DictKey(Domain.ToLower, Key.ToLower), Result) then
+  begin
+    Result := TdwlMetaKey.Create(TypeInfo);
+    FMetaKeys.Add(DictKey(Domain.ToLower, Key.ToLower), Result);
+  end;
 end;
 
 procedure TdwlParams.AddTrigger(const TriggerKey, DependentKey: string);
@@ -643,7 +656,9 @@ begin
   // elsewhere in the object to check if triggering is active
   if FTriggers=nil then
     FTriggers := TList<TPair<string, string>>.Create;
-  FTriggers.Add(TPair<string, string>.Create(TriggerKey.ToLower, DependentKey.ToLower));
+  var Pair := TPair<string, string>.Create(TriggerKey.ToLower, DependentKey.ToLower);
+  if not FTriggers.Contains(Pair) then
+    FTriggers.Add(Pair);
 end;
 
 procedure TdwlParams.AssignTo(Params: IdwlParams);
@@ -1052,12 +1067,16 @@ begin
   var LowerKey := Key.ToLower;
   Result := TryGetBareValue(LowerKey, Value);
   if not Result then
-  begin // try to find a metakey and apply the default
+  begin // try to find a metakey and let the metakey provide a value
     var MetaKey: TdwlMetaKey;
-    if TryGetMetaKey(LowerKey, MetaKey) and (not MetaKey.FDefaultValue.IsEmpty) then
+    if TryGetMetaKey(LowerKey, MetaKey) then
     begin
-      Result := true;
-      Value := MetaKey.FDefaultValue;
+      Result := MetaKey.TryCalculateValue(Self, LowerKey, Value);
+      if (not Result) and (not MetaKey.FDefaultValue.IsEmpty) then
+      begin
+        Result := true;
+        Value := MetaKey.FDefaultValue;
+      end;
     end;
   end;
   if Result then
@@ -1222,7 +1241,41 @@ begin
   FMaximumValue := TValue.Empty;
 end;
 
+destructor TdwlMetaKey.Destroy;
+begin
+  FCalculators.Free;
+  inherited Destroy;
+end;
+
+procedure TdwlMetaKey.RegisterCalculateProc(CalcProc: TParamTryCalculateProc);
+begin
+  if FCalculators=nil then
+    FCalculators := TList<TParamTryCalculateProc>.Create;
+  FCalculators.Add(CalcProc);
+end;
+
+function TdwlMetaKey.TryCalculateValue(Params: IdwlParams; const LowerKey: string; var Value: TValue): boolean;
+begin
+  Result := false;
+  if FCalculators=nil then
+    Exit;
+  var Idx := 0;
+  while (not Result) and (Idx<FCalculators.Count) do
+  begin
+    Result := FCalculators[Idx](Params, LowerKey, Value);
+    inc(Idx);
+  end;
+  if Result then // caching: write into the params
+    Params.WriteValue(LowerKey, Value, true);
+end;
+
 { TdwlMetaKeyBuilder }
+
+function TdwlMetakeyBuilder.CalculateProc(CalculateProc: TParamTryCalculateProc): IdwlMetaKeyBuilder;
+begin
+  FMetaKey.RegisterCalculateProc(CalculateProc);
+  Result := Self;
+end;
 
 constructor TdwlMetakeyBuilder.Create(MetaKey: TdwlMetaKey);
 begin
