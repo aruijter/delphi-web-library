@@ -47,9 +47,11 @@ const
   pkSingle = 9;
   pkDouble = 10;
   pkExtended = 11;
-  pkDynArraySimpleType = 12;
-  pkRecord = 13;
-  pkInterface = 14;
+  pkBoolean = 12;
+  pkEnumeration = 13;
+  pkDynArraySimpleType = 14;
+  pkRecord = 15;
+  pkInterface = 16;
   pkDeleted = 255;
 
 type
@@ -217,6 +219,13 @@ begin
   begin
     ParamType.SimpleDataSize := 0;
     case Value.TypeInfo.Kind of
+    tkEnumeration:
+      begin
+        if Value.TypeInfo=TypeInfo(Boolean) then
+          ParamType.ParamKind := pkBoolean
+        else
+          ParamType.ParamKind := pkEnumeration;
+      end;
     tkDynArray:
       begin
         var ElementParamType: TdwlPersistedParamType;
@@ -271,6 +280,18 @@ begin
     begin
       case ParamType.ParamKind of
       pkString: FCursor.WriteString_LenCardinal(Value.AsString);
+      pkBoolean:
+        begin
+          var ValueData := Value.GetReferenceToRawData;
+          FCursor.Write(ValueData^, 1);
+        end;
+      pkEnumeration:
+        begin
+          FCursor.WriteString_LenByte(string(Value.TypeInfo.Name));
+          var UnderlyingType := Value.TypeInfo.TypeData.BaseType^;
+          var ValueData := Value.GetReferenceToRawData;
+          FCursor.Write(ValueData^, UnderlyingType.TypeData.elSize);
+        end;
       pkDynArraySimpleType:
         begin
           FCursor.WriteString_LenByte(string(Value.TypeInfo.TypeData.DynArrElType^.Name));
@@ -372,6 +393,8 @@ begin
   AddType(pkSingle, Sizeof(single), TypeInfo(single));
   AddType(pkDouble, SizeOf(double), TypeInfo(double));
   AddType(pkExtended, SizeOf(extended), TypeInfo(extended));
+  AddType(pkBoolean, 0, nil);
+  AddType(pkEnumeration, 0, nil);
   AddType(pkDynArraySimpleType, 0, nil);
   AddType(pkRecord, 0, nil);
   AddType(pkInterface, 0, nil);
@@ -501,6 +524,20 @@ begin
     begin
       case ParamType.ParamKind of
       pkString: Value := FCursor.ReadString_LenCardinal;
+      pkBoolean:
+        begin
+          TValue.Make(FCursor.CursorPtr, TypeInfo(Boolean), Value);
+        end;
+      pkEnumeration:
+        begin
+          var TypeName := FCursor.ReadString_LenByte;
+          var RttiInfo := FCtx.FindType(TypeName);
+          if RttiInfo=nil then
+            RttiInfo := FCtx.FindType('System.'+TypeName);
+          if RttiInfo=nil then
+            raise Exception.Create('PersistedParams: No TypeInfo found for '+TypeName);
+          TValue.Make(FCursor.CursorPtr, RttiInfo.Handle, Value);
+        end;
       pkDynArraySimpleType:
         begin
           var TypeName := FCursor.ReadString_LenByte;
