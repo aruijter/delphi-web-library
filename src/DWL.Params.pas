@@ -4,7 +4,7 @@ interface
 
 uses
   System.Rtti, System.Generics.Collections, DWL.Resolver, System.JSON,
-  System.TypInfo;
+  System.TypInfo, DWL.Types;
 
 type
   IdwlParams=interface;
@@ -197,6 +197,23 @@ type
     /// </remarks>
     function StrValue(const Key: string; const Default: string=''): string;
     /// <summary>
+    ///   Get the value of the pair, if needed converted to the UnixEpoch type
+    /// </summary>
+    /// <param name="Key">
+    ///   The key of the pair
+    /// </param>
+    /// <param name="Default">
+    ///   default to be returned when the pair does not exist
+    /// </param>
+    /// <remarks>
+    ///   Please note that: <br />- metakeys will be applied with higher
+    ///   priority <br />- values will be resolved using TdwlResolver
+    ///   functionality <br />
+    ///   Please note that: The property Default is an Int64 to make it possible to give it a default value
+    ///   EmptyEpoch is not allowed as default value by teh compiler
+    /// </remarks>
+    function UnixEpochValue(const Key: string; const Default: Int64=0): TUnixEpoch;
+    /// <summary>
     ///   function to check of a pair with the give key existst in the store
     /// </summary>
     /// <param name="Key">
@@ -314,6 +331,25 @@ type
     ///   resolved using TdwlResolver functionality
     /// </remarks>
     function TryGetStrValue(const Key: string; out Value: string): boolean;
+    /// <summary>
+    ///   Try to get the value of the pair, if needed converted to the TUnixEpoch
+    ///   type
+    /// </summary>
+    /// <param name="Key">
+    ///   the key of the pair to be returned
+    /// </param>
+    /// <param name="Value">
+    ///   will receive the retrieved value
+    /// </param>
+    /// <returns>
+    ///   indicating if the retrieval was successful
+    /// </returns>
+    /// <remarks>
+    ///   Please note that: <br />- if applicable metakeys will be applied and
+    ///   the retrieval will be successful <br />- textual values will be
+    ///   resolved using TdwlResolver functionality
+    /// </remarks>
+    function TryGetUnixEpochValue(const Key: string; out Value: TUnixEpoch): boolean;
     /// <summary>
     ///   GetBareValue is the faster, but simple retrieval function of values
     ///   by key, NO meta data lookup, resolving etc is done in this function
@@ -561,6 +597,7 @@ type
     function IntValue(const Key: string; Default: integer=0): integer;
     function Int64Value(const Key: string; Default: Int64=0): Int64;
     function StrValue(const Key: string; const Default: string=''): string;
+    function UnixEpochValue(const Key: string; const Default: Int64=0): TUnixEpoch;
     function DoubleValue(const Key: string; Default: double=0): double;
     function GetBareValue(const Key: string; Default: TValue): TValue;
     function GetValue(const Key: string; Default: TValue): TValue;
@@ -572,6 +609,7 @@ type
     function TryGetInt64Value(const Key: string; out Value: Int64): boolean;
     function TryGetCardinalValue(const Key: string; out Value: cardinal): boolean;
     function TryGetStrValue(const Key: string; out Value: string): boolean;
+    function TryGetUnixEpochValue(const Key: string; out Value: TUnixEpoch): boolean;
     function TryGetDoubleValue(const Key: string; out Value: double): boolean;
     procedure AddTrigger(const TriggerKey, DependentKey: string);
     function Clone: IdwlParams;
@@ -1054,12 +1092,23 @@ begin
 end;
 
 function TdwlParams.TryGetStrValue(const Key: string; out Value: string): boolean;
-var
- V: TValue;
 begin
+  var V: TValue;
   Result := TryGetValue(Key, V);
   if Result then
     Value := V.ToString;
+end;
+
+function TdwlParams.TryGetUnixEpochValue(const Key: string; out Value: TUnixEpoch): boolean;
+begin
+  var V: TValue;
+  Result := TryGetValue(Key, V);
+  if not Result then
+    Exit;
+  var IntVal: Int64;
+  Result := V.TryAsType(IntVal, false);
+  if Result then
+    Value := IntVal;
 end;
 
 function TdwlParams.TryGetValue(const Key: string; out Value: TValue): boolean;
@@ -1095,6 +1144,12 @@ function TdwlParams.TryGetValue<T>(const Key: string; out Value: T): boolean;
 begin
   var V: TValue;
   Result := TryGetValue(Key, V) and V.TryAsType(Value, false);
+end;
+
+function TdwlParams.UnixEpochValue(const Key: string; const Default: Int64=0): TUnixEpoch;
+begin
+  if not TryGetUnixEpochValue(Key, Result) then
+    Result := Default;
 end;
 
 procedure TdwlParams.UnRegisterPersistHook;

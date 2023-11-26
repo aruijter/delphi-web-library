@@ -14,7 +14,7 @@ type
     var
       FEpoch: Int64;
   public
-    class function Now: TUnixEpoch;  static;
+    class function Now(ReturnStartOfTheDay: boolean=false): TUnixEpoch;  static;
     class operator Add(Epoch: TUnixEpoch; Amount: Int64): TUnixEpoch;
     class operator Equal(EpochA, EpochB: TUnixEpoch): boolean;
     class operator GreaterThan(EpochA, EpochB: TUnixEpoch): boolean;
@@ -73,7 +73,15 @@ type
     /// </param>
     function ToString(Fmt: string='yyyy-mm-dd hh:nn:ss'): string;
     /// <summary>
-    ///   the Julian year component of the Unix Time
+    ///   Convert the Unix time to a datetime. Resulting string is always UTC,
+    ///   unless explicitcalled with AReturnUTC=false, than local time will be returned
+    /// </summary>
+    /// <param name="Fmt">
+    ///   The format to be used to create the resulting string
+    /// </param>
+    function ToDateTime(AReturnUTC: boolean=true): TDateTime;
+    /// <summary>
+    ///   the Julian year component of the Unix Time, This is UTC!
     /// </summary>
     function Year: word;
   end;
@@ -231,11 +239,14 @@ begin
   Result := EpochA.FEpoch<>EpochB.FEpoch;
 end;
 
-class function TUnixEpoch.Now: TUnixEpoch;
+class function TUnixEpoch.Now(ReturnStartOfTheDay: boolean=false): TUnixEpoch;
 begin
   var SystemTime: TSystemTime;
   GetSystemTime(SystemTime);  // SystemTime is in UTC
-  Result := DateTimeToUnix(EncodeDateTime(SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay, SystemTime.wHour, SystemTime.wMinute, SystemTime.wSecond, 0));
+  if ReturnStartOfTheDay then
+    Result := DateTimeToUnix(EncodeDateTime(SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay, 0, 0, 0, 0))
+  else
+    Result := DateTimeToUnix(EncodeDateTime(SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay, SystemTime.wHour, SystemTime.wMinute, SystemTime.wSecond, 0));
 end;
 
 class operator TUnixEpoch.Subtract(EpochA, EpochB: TUnixEpoch): integer;
@@ -252,6 +263,11 @@ end;
 class operator TUnixEpoch.Subtract(Epoch: TUnixEpoch; Amount: Int64): TUnixEpoch;
 begin
   Result.FEpoch := Epoch.FEpoch-Amount;
+end;
+
+function TUnixEpoch.ToDateTime(AReturnUTC: boolean): TDateTime;
+begin
+  Result := UnixToDateTime(FEpoch, AReturnUTC);
 end;
 
 function TUnixEpoch.ToString(Fmt: string='yyyy-mm-dd hh:nn:ss'): string;
