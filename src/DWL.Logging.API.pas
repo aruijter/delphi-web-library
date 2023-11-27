@@ -19,7 +19,8 @@ function EnableLogDispatchingToAPI(const Endpoint, LogSecret: string; const Iden
 implementation
 
 uses
-  DWL.HTTP.Client, System.NetEncoding, System.SysUtils, DWL.HTTP.Consts;
+  DWL.HTTP.Client, System.NetEncoding, System.SysUtils, DWL.HTTP.Consts,
+  System.Classes;
 
 type
   TdwlLogDispatcher_API = class(TdwlLogDispatcher)
