@@ -495,6 +495,7 @@ type
     /// <param name="CallBackProc">
     ///   The procedure to be called in the case of changes
     /// </param>
+    function PrettyName(const Key: string): string;
     procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc); overload;
     procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc); overload;
     procedure RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
@@ -515,6 +516,7 @@ type
     function DefaultValue(DefaultValue: TValue): IdwlMetaKeyBuilder;
     function MaximumValue(MaximumValue: TValue): IdwlMetaKeyBuilder;
     function MinimumValue(MinimumValue: TValue): IdwlMetaKeyBuilder;
+    function PrettyName(const Prettyname: string): IdwlMetaKeyBuilder;
     function WriteDefaultValue: IdwlMetaKeyBuilder;
   end;
 
@@ -594,6 +596,7 @@ type
     FMaximumValue: TValue;
     FMinimumValue: TValue;
     FWriteDefaultValue: boolean;
+    FPrettyName: string;
     procedure Check(Value: TValue);
     procedure RegisterCalculateProc(CalcProc: TParamTryCalculateProc);
     function TryCalculateValue(Params: IdwlParams; const LowerKey: string; var Value: TValue): boolean;
@@ -671,6 +674,7 @@ type
     procedure Clear;
     procedure RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
     procedure UnRegisterPersistHook;
+    function PrettyName(const Key: string): string;
   public
     class constructor Create;
     class destructor Destroy;
@@ -687,6 +691,7 @@ type
     function MaximumValue(MaximumValue: TValue): IdwlMetaKeyBuilder;
     function MinimumValue(MinimumValue: TValue): IdwlMetaKeyBuilder;
     function WriteDefaultValue: IdwlMetaKeyBuilder;
+    function Prettyname(const PrettyName: string): IdwlMetaKeyBuilder;
   public
     constructor Create(MetaKey: TdwlMetaKey);
   end;
@@ -989,6 +994,15 @@ function TdwlParams.IntValue(const Key: string; Default: integer): integer;
 begin
   if not TryGetIntValue(Key, Result) then
     Result := Default
+end;
+
+function TdwlParams.PrettyName(const Key: string): string;
+begin
+  var MetaKey: TdwlMetaKey;
+  if TryGetMetaKey(Key.ToLower, MetaKey) and (MetaKey.FPrettyname<>'') then
+    Result := MetaKey.FPrettyName
+  else
+    Result := Key;
 end;
 
 procedure TdwlParams.ProvideKeyCallBack(const LowerKey: string; const Value: TValue);
@@ -1405,6 +1419,12 @@ end;
 function TdwlMetakeyBuilder.MinimumValue(MinimumValue: TValue): IdwlMetaKeyBuilder;
 begin
   FMetaKey.FMinimumValue := MinimumValue.Cast(FMetaKey.FTypeInfo);
+  Result := Self;
+end;
+
+function TdwlMetakeyBuilder.Prettyname(const PrettyName: string): IdwlMetaKeyBuilder;
+begin
+  FMetaKey.FPrettyName := PrettyName;
   Result := Self;
 end;
 
