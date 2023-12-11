@@ -308,12 +308,12 @@ end;
 
 destructor TdwlFileCursor.Destroy;
 begin
+  inherited Destroy;
   if FWritable then
     FFile.FSynchronizer.EndWrite
   else
     FFile.FSynchronizer.EndRead;
   FFile._Release;
-  inherited Destroy;
 end;
 
 function TdwlFileCursor.Eof: Boolean;
