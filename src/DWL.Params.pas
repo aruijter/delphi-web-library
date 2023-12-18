@@ -496,8 +496,8 @@ type
     ///   The procedure to be called in the case of changes
     /// </param>
     function PrettyName(const Key: string): string;
-    procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc); overload;
-    procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc); overload;
+    procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false); overload;
+    procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false); overload;
     procedure RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
     procedure UnRegisterPersistHook;
   end;
@@ -513,6 +513,7 @@ type
 
   IdwlMetaKeyBuilder = interface
     function CalculateProc(CalculateProc: TParamTryCalculateProc): IdwlMetaKeyBuilder;
+    function ChangeTracking(const ChangeTrackingEnabled: boolean): IdwlMetaKeyBuilder;
     function DefaultValue(DefaultValue: TValue): IdwlMetaKeyBuilder;
     function MaximumValue(MaximumValue: TValue): IdwlMetaKeyBuilder;
     function MinimumValue(MinimumValue: TValue): IdwlMetaKeyBuilder;
@@ -591,6 +592,7 @@ type
   TdwlMetaKey = class
   private
     FCalculators: TList<TParamTryCalculateProc>;
+    FChangeTracking: boolean;
     FTypeInfo: PTypeInfo;
     FDefaultValue: TValue;
     FMaximumValue: TValue;
@@ -630,6 +632,7 @@ type
     FParams: TDictionary<string, TValue>;
     FTriggers: TList<TPair<string, string>>;
     FDomain: string;
+    FChangeCallBacksRestrictedToConfiguredMetaKeys: boolean;
     FChangeMethodCallbackProc: TChangeMethodCallBackProc;
     FChangeRegularCallbackProc: TChangeRegularCallBackProc;
     class function DictKey(const Domain, Key: string): string;
@@ -656,8 +659,8 @@ type
     function Clone: IdwlParams;
     procedure ExecuteTriggers(const TriggerKey: string);
     procedure Resolve(var Str: string);
-    procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc); overload;
-    procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc); overload;
+    procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false); overload;
+    procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false); overload;
     function CheckValue(const Key: string; const Value: TValue): TdwlCheckResult;
     procedure WriteValue(const Key: string; const Value: TValue; SkipPersisting: boolean=false);
     procedure ClearKey(const Key: string);
@@ -687,6 +690,7 @@ type
     FMetaKey: TdwlMetaKey;
   private
     function CalculateProc(CalculateProc: TParamTryCalculateProc): IdwlMetaKeyBuilder;
+    function ChangeTracking(const ChangeTrackingEnabled: boolean): IdwlMetaKeyBuilder;
     function DefaultValue(DefaultValue: TValue): IdwlMetaKeyBuilder;
     function MaximumValue(MaximumValue: TValue): IdwlMetaKeyBuilder;
     function MinimumValue(MinimumValue: TValue): IdwlMetaKeyBuilder;
@@ -870,10 +874,17 @@ begin
   FParams.Remove(LowerKey);
   if Assigned(FPersistHook) then
     FPersistHook.ClearKey(LowerKey);
-  if Assigned(FChangeMethodCallbackProc) then
-    FChangeMethodCallbackProc(Self, Key, TValue.Empty);
-  if Assigned(FChangeRegularCallbackProc) then
-    FChangeRegularCallbackProc(Self, Key, TValue.Empty);
+  if Assigned(FChangeMethodCallbackProc) or Assigned(FChangeRegularCallbackProc) then
+  begin
+    var MetaKey: TdwlMetaKey;
+    if (not FChangeCallBacksRestrictedToConfiguredMetaKeys) or (TryGetMetaKey(Key, MetaKey) and MetaKey.FChangeTracking) then
+    begin
+      if Assigned(FChangeMethodCallbackProc) then
+        FChangeMethodCallbackProc(Self, Key, TValue.Empty);
+      if Assigned(FChangeRegularCallbackProc) then
+        FChangeRegularCallbackProc(Self, Key, TValue.Empty);
+    end;
+  end;
   ExecuteTriggers(LowerKey);
 end;
 
@@ -935,13 +946,15 @@ begin
     Result := Default
 end;
 
-procedure TdwlParams.EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc);
+procedure TdwlParams.EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false);
 begin
+  FChangeCallBacksRestrictedToConfiguredMetaKeys := FRestrictToConfiguredMetaKeys;
   FChangeMethodCallbackProc := CallBackProc;
 end;
 
-procedure TdwlParams.EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc);
+procedure TdwlParams.EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false);
 begin
+  FChangeCallBacksRestrictedToConfiguredMetaKeys := FRestrictToConfiguredMetaKeys;
   FChangeRegularCallbackProc := CallBackProc;
 end;
 
@@ -1303,10 +1316,16 @@ begin
       FPersistHook.AddOrSetValue(LowerKey, Value);
     FParams.AddOrSetValue(Lowerkey, Value);
   end;
-  if Assigned(FChangeMethodCallbackProc) then
-    FChangeMethodCallbackProc(Self, LowerKey, Value);
-  if Assigned(FChangeRegularCallbackProc) then
-    FChangeRegularCallbackProc(Self, LowerKey, Value);
+  if Assigned(FChangeMethodCallbackProc) or Assigned(FChangeRegularCallbackProc) then
+  begin
+    if (not FChangeCallBacksRestrictedToConfiguredMetaKeys) or (MetaKeyAvailable and MetaKey.FChangeTracking) then
+    begin
+      if Assigned(FChangeMethodCallbackProc) then
+        FChangeMethodCallbackProc(Self, LowerKey, Value);
+      if Assigned(FChangeRegularCallbackProc) then
+        FChangeRegularCallbackProc(Self, LowerKey, Value);
+    end;
+  end;
   ExecuteTriggers(LowerKey);
 end;
 
@@ -1396,6 +1415,12 @@ end;
 function TdwlMetakeyBuilder.CalculateProc(CalculateProc: TParamTryCalculateProc): IdwlMetaKeyBuilder;
 begin
   FMetaKey.RegisterCalculateProc(CalculateProc);
+  Result := Self;
+end;
+
+function TdwlMetakeyBuilder.ChangeTracking(const ChangeTrackingEnabled: boolean): IdwlMetaKeyBuilder;
+begin
+  FMetaKey.FChangeTracking := ChangeTrackingEnabled;
   Result := Self;
 end;
 
