@@ -462,10 +462,10 @@ end;
 procedure TDWLServerSection.Start_ReadParameters_CommandLine_IniFile(ConfigParams: IdwlParams);
 begin
   // at first take parameters from the commandline
-  TdwlParamsUtils.Import_CommandLine(ConfigParams);
+  TdwlParamsUtils.Import_CommandLine(ConfigParams, true);
   // secondary pick parameters from inifile
   TdwlParamsUtils.Import_IniFile_Section(ConfigParams, ChangeFileExt(ParamStr(0), '.ini'),
-    ConfigParams.StrValue(Param_Section_Dwl_Db, ParamDef_Section_Dwl_Db));
+    ConfigParams.StrValue(Param_Section_Dwl_Db, ParamDef_Section_Dwl_Db), true);
   // and later after Init of database parameters from the dwl database are added
 end;
 

@@ -17,7 +17,7 @@ type
     /// <param name="Params">
     ///   Params to fill with the resulting pairs
     /// </param>
-    class procedure Import_CommandLine(const Params: IdwlParams); static;
+    class procedure Import_CommandLine(const Params: IdwlParams; LogImportedKeys: boolean=false); static;
     /// <summary>
     ///   Imports all values from one section of an inifile into an existing
     ///   IdwlParams <br />
@@ -31,17 +31,17 @@ type
     /// <param name="Section">
     ///   Section in IniFile containing Name-value pairs to import
     /// </param>
-    class procedure Import_IniFile_Section(const Params: IdwlParams; const IniFileName, Section: string); static;
+    class procedure Import_IniFile_Section(const Params: IdwlParams; const IniFileName, Section: string; LogImportedKeys: boolean=false); static;
   end;
 
 implementation
 
 uses
-  System.SysUtils, System.IniFiles, System.Classes;
+  System.SysUtils, System.IniFiles, System.Classes, DWL.Logging;
 
 { TdwlParamsUtils }
 
-class procedure TdwlParamsUtils.Import_CommandLine(const Params: IdwlParams);
+class procedure TdwlParamsUtils.Import_CommandLine(const Params: IdwlParams; LogImportedKeys: boolean=false);
 begin
   var ParamNo := 1;
   while ParamNo<=ParamCount do
@@ -64,12 +64,15 @@ begin
         Value := ParamStr(ParamNo);
       end;
     end;
-    Params.WriteValue(Key.TrimLeft(['-','/']), Value);
+    Key := Key.TrimLeft(['-','/']);
+    Params.WriteValue(Key, Value);
+    if LogImportedKeys then
+      TdwlLogger.Log('read kvp: '+Key+'='+Value+' from cmdline');
     inc(ParamNo);
   end;
 end;
 
-class procedure TdwlParamsUtils.Import_IniFile_Section(const Params: IdwlParams; const IniFileName, Section: string);
+class procedure TdwlParamsUtils.Import_IniFile_Section(const Params: IdwlParams; const IniFileName, Section: string; LogImportedKeys: boolean=false);
 begin
   var IniFile := TIniFile.Create(IniFileName);
   try
@@ -77,7 +80,13 @@ begin
     try
       IniFile.ReadSectionValues(Section, Values);
       for var i := 0 to Values.Count-1 do
-        Params.WriteValue(Values.Names[i], Values.ValueFromIndex[i]);
+      begin
+        var Key := Values.Names[i];
+        var Value := Values.ValueFromIndex[i];
+        Params.WriteValue(Key, Value);
+        if LogImportedKeys then
+          TdwlLogger.Log('read kvp: '+Key+'='+Value+' section:'+Section+' file:'+IniFileName);
+      end;
     finally
       Values.Free;
     end;

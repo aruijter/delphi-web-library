@@ -110,7 +110,7 @@ constructor TdwlHTTPHandler_Log.Create(AParams: IdwlParams);
 begin
   inherited Create;
   FMySQL_Profile := New_Params;
-  AParams.AssignTo(FMySQL_Profile, Params_SQLConnection);
+  AParams.AssignKeysTo(FMySQL_Profile, Params_SQLConnection);
   FLogSecret := AParams.StrValue(param_LogSecret);
   FTriggers := TList<TLogTrigger>.Create;
   FTriggerProcessing := TCriticalSection.Create;
