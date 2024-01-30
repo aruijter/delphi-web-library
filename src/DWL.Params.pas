@@ -93,6 +93,7 @@ type
     procedure AssignTo(Params: IdwlParams); overload;
     /// <summary>
     ///   Copy all key/value pairs in the store to another store
+    ///   but skip the calculated fields! (asdefined in the metadata)
     /// </summary>
     /// <param name="Params">
     ///   The Params that will receive the key/value pairs
@@ -750,15 +751,27 @@ procedure TdwlParams.AssignTo(Params: IdwlParams);
 begin
   var Enumerator := GetEnumerator;
   while Enumerator.MoveNext do
+  begin
+      // don't assign calculated values
+      var MetaKey: TdwlMetaKey;
+      if TryGetMetaKey(Enumerator.CurrentKey, MetaKey) and (MetaKey.FCalculators<>nil) then
+        Continue;
     Params.WriteValue(Enumerator.CurrentKey, Enumerator.CurrentValue);
+  end;
 end;
 
 procedure TdwlParams.AssignKeysTo(Params: IdwlParams; Keys: TArray<string>);
 begin
   var V: TValue;
   for var Key in Keys do
+  begin
+    // don't assign calculated values
+    var MetaKey: TdwlMetaKey;
+    if TryGetMetaKey(Key, MetaKey) and (MetaKey.FCalculators<>nil) then
+      Continue;
     if TryGetValue(Key, V) then
       Params.WriteValue(Key, V);
+  end;
 end;
 
 procedure TdwlParams.AssignTo(Params: IdwlParams; ExcludeKeys: TArray<string>);
@@ -771,8 +784,13 @@ begin
     var Enumerator := GetEnumerator;
     while Enumerator.MoveNext do
     begin
-      if ExclList.IndexOf(Enumerator.CurrentKey)<0 then
-        Params.WriteValue(Enumerator.CurrentKey, Enumerator.CurrentValue);
+      if ExclList.IndexOf(Enumerator.CurrentKey)>=0 then
+        Continue;
+      // don't assign calculated values
+      var MetaKey: TdwlMetaKey;
+      if TryGetMetaKey(Enumerator.CurrentKey, MetaKey) and (MetaKey.FCalculators<>nil) then
+        Continue;
+      Params.WriteValue(Enumerator.CurrentKey, Enumerator.CurrentValue);
     end;
   finally
     ExclList.Free;

@@ -573,7 +573,7 @@ begin
           var IntfName := FCursor.ReadString_LenByte;
           var ClassDef: TdwlSerializeClass;
           if not FSerializeClasses.TryGetValue(ClassName, ClassDef) then
-            raise Exception.Create('PersistedParams: No DeSeria lize Class found for '+ClassName);
+            raise Exception.Create('PersistedParams: No DeSerialize Class found for '+ClassName);
 //          var IntfDef: TRttiInterfaceType := nil;
 //          for var IntfType in  ClassDef.RttiType.AsInstance.GetImplementedInterfaces do
 //          begin
