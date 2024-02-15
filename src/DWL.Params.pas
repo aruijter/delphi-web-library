@@ -45,6 +45,11 @@ type
     procedure Initialize(ProvideProc: TProvideKeyCallBack);
   end;
 
+  IdwlMetaKeyConsulter = interface
+    function Prettyname: string;
+    function TypeInfo: PTypeInfo;
+  end;
+
   /// <summary>
   ///   The Params interface is a reference to an object representing an
   ///   inmemory store of key/value pairs. An interface to an empty object can
@@ -496,11 +501,11 @@ type
     /// <param name="CallBackProc">
     ///   The procedure to be called in the case of changes
     /// </param>
-    function PrettyName(const Key: string): string;
     procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false); overload;
     procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false); overload;
     procedure RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
     procedure UnRegisterPersistHook;
+    function MetaKeyConsulter(const Key: string): IdwlMetaKeyConsulter;
   end;
 
   /// <summary>
@@ -678,7 +683,7 @@ type
     procedure Clear;
     procedure RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
     procedure UnRegisterPersistHook;
-    function PrettyName(const Key: string): string;
+    function MetaKeyConsulter(const Key: string): IdwlMetaKeyConsulter;
   public
     class constructor Create;
     class destructor Destroy;
@@ -688,6 +693,7 @@ type
   end;
 
   TdwlMetakeyBuilder = class(TInterfacedObject, IdwlMetaKeyBuilder)
+  strict private
     FMetaKey: TdwlMetaKey;
   private
     function CalculateProc(CalculateProc: TParamTryCalculateProc): IdwlMetaKeyBuilder;
@@ -699,6 +705,17 @@ type
     function Prettyname(const PrettyName: string): IdwlMetaKeyBuilder;
   public
     constructor Create(MetaKey: TdwlMetaKey);
+  end;
+
+  TdwlMetakeyConsulter = class(TInterfacedObject, IdwlMetaKeyConsulter)
+  strict private
+    FKey: string;
+    FMetaKey: TdwlMetaKey;
+  private
+    function Prettyname: string;
+    function TypeInfo: PTypeInfo;
+  public
+    constructor Create(const Key: string; MetaKey: TdwlMetaKey);
   end;
 
 function New_Params(const Domain: string): IdwlParams;
@@ -1027,13 +1044,13 @@ begin
     Result := Default
 end;
 
-function TdwlParams.PrettyName(const Key: string): string;
+function TdwlParams.MetaKeyConsulter(const Key: string): IdwlMetaKeyConsulter;
 begin
+  var LowerKey := Key.ToLower;
   var MetaKey: TdwlMetaKey;
-  if TryGetMetaKey(Key.ToLower, MetaKey) and (MetaKey.FPrettyname<>'') then
-    Result := MetaKey.FPrettyName
-  else
-    Result := Key;
+  if not TryGetMetaKey(LowerKey, MetaKey) then
+    MetaKey := nil;
+  Result := TdwlMetakeyConsulter.Create(Key, MetaKey);
 end;
 
 procedure TdwlParams.ProvideKeyCallBack(const LowerKey: string; const Value: TValue);
@@ -1475,6 +1492,31 @@ function TdwlMetakeyBuilder.WriteDefaultValue: IdwlMetaKeyBuilder;
 begin
   FMetaKey.FWriteDefaultValue := true;
   Result := Self;
+end;
+
+{ TdwlMetakeyConsulter }
+
+constructor TdwlMetakeyConsulter.Create(const Key: string; MetaKey: TdwlMetaKey);
+begin
+  inherited Create;
+  FKey := Key;
+  FMetaKey := MetaKey;
+end;
+
+function TdwlMetakeyConsulter.Prettyname: string;
+begin
+  if FMetaKey<>nil then
+    Result := FMetaKey.FPrettyName
+  else
+    Result := FKey;
+end;
+
+function TdwlMetakeyConsulter.TypeInfo: PTypeInfo;
+begin
+  if FMetaKey<>nil then
+    Result := FMetaKey.FTypeInfo
+  else
+    Result := nil;
 end;
 
 end.
