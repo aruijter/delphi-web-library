@@ -48,6 +48,8 @@ type
   IdwlMetaKeyConsulter = interface
     function Prettyname: string;
     function TypeInfo: PTypeInfo;
+    function MinimumValue: TValue;
+    function MaximumValue: TValue;
   end;
 
   /// <summary>
@@ -714,6 +716,8 @@ type
   private
     function Prettyname: string;
     function TypeInfo: PTypeInfo;
+    function MinimumValue: TValue;
+    function MaximumValue: TValue;
   public
     constructor Create(const Key: string; MetaKey: TdwlMetaKey);
   end;
@@ -1501,6 +1505,22 @@ begin
   inherited Create;
   FKey := Key;
   FMetaKey := MetaKey;
+end;
+
+function TdwlMetakeyConsulter.MaximumValue: TValue;
+begin
+  if FMetaKey<>nil then
+    Result := FMetaKey.FMaximumValue
+  else
+    Result := TValue.Empty;
+end;
+
+function TdwlMetakeyConsulter.MinimumValue: TValue;
+begin
+  if FMetaKey<>nil then
+    Result := FMetaKey.FMinimumValue
+  else
+    Result := TValue.Empty;
 end;
 
 function TdwlMetakeyConsulter.Prettyname: string;

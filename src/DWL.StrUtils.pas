@@ -17,6 +17,7 @@ type
     class function FilterChars(const Value: string; CharsToAllow: TSysCharSet): string; overload; static;
     class function Sanatize(const Value: string; Options: TdwlSanatizeOptions): string; static;
     class function TrimLeft(const Value, TrimStr: string; IgnoreCase: boolean=false): string; static;
+    class function TrimRight(const Value, TrimStr: string; IgnoreCase: boolean=false): string; static;
   end;
 
 implementation
@@ -104,6 +105,13 @@ begin
   Result := Value;
   while Result.StartsWith(TrimStr, IgnoreCase) do
     Result := Result.Substring(Length(TrimStr));
+end;
+
+class function TdwlStrUtils.TrimRight(const Value, TrimStr: string; IgnoreCase: boolean): string;
+begin
+  Result := Value;
+  while Result.EndsWith(TrimStr, IgnoreCase) do
+    Result := Result.Substring(0, Length(Result)-Length(TrimStr));
 end;
 
 end.
