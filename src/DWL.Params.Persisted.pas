@@ -495,6 +495,10 @@ end;
 
 destructor TdwlPersistedParams_Hook.Destroy;
 begin
+  // in case of early destroy: wait for initialisation to finish
+  CheckInitReady;
+  // close cursor to release file early
+  FCursor := nil;
   CloseHandle(FInitEvent);
   FPersistedParams.Free;
   inherited Destroy;

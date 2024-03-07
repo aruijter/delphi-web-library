@@ -1,7 +1,7 @@
 object MainForm: TMainForm
   Left = 0
   Top = 0
-  Caption = 'MainForm'
+  Caption = 'DWL Server'
   ClientHeight = 681
   ClientWidth = 1249
   Color = clBtnFace
@@ -20,7 +20,6 @@ object MainForm: TMainForm
     Align = alTop
     BevelOuter = bvNone
     TabOrder = 0
-    ExplicitWidth = 1749
     object btnStart: TButton
       Left = 4
       Top = 10
@@ -53,6 +52,5 @@ object MainForm: TMainForm
     Font.Style = []
     ParentFont = False
     TabOrder = 1
-    ExplicitWidth = 1749
   end
 end

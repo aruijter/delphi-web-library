@@ -64,12 +64,14 @@ end;
 procedure TMainForm.DoLog(LogItem: PdwlLogItem);
 begin
   if not (csDestroying in ComponentState) then
+  begin
     Memo1.Lines.Add(
       FormatDateTime('dd-mm-yyyy hh:nn:ss', UnixToDateTime(LogItem.TimeStamp, false))+'  '+
       LogItem.Source.PadRight(17)+
       LogItem.Channel.PadRight(17)+
       LogItem.Topic.PadRight(17)+
       LogItem.Msg);
+  end;
 end;
 
 end.
