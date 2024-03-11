@@ -110,7 +110,7 @@ uses
   Winapi.Windows, Winapi.ShLwApi, DWL.Server.Consts,
   DWL.HTTP.Consts, DWL.Mail.Queue, System.Math, DWL.OpenSSL,
   DWL.TCP.SSL, Winapi.WinInet, DWL.Server.Utils, IdContext,
-  DWL.Server.Globals, System.NetEncoding;
+  DWL.Server.Globals, System.NetEncoding, IdMessage, DWL.Mail.Utils;
 
 type
   TdwlHTTPHandler_PassThrough = class(TdwlHTTPHandler)
@@ -589,6 +589,24 @@ begin
   PServerStructure(State._InternalServerStructure).Request.ResponseHeaders.WriteValue(HeaderKey, Value);
 end;
 
+function State_CallService(const State: PdwlHTTPHandlingState; ServiceID: cardinal; const Data: PWideChar): integer; stdcall;
+begin
+  Result := -1;
+  case ServiceID of
+  serverservice_SendEMail:
+    begin
+      var MailMsg := TIdMessage.Create(nil);
+      try
+        TdwlMailUtils.FilldIdMessageFromString(MailMsg, Data);
+        if TdwlMailQueue.QueueForSending(MailMsg) then
+          Result := 1;
+      finally
+        MailMsg.Free;
+      end;
+    end;
+  end;
+end;
+
 procedure AssignServerProcs;
 begin
   serverProcs.ArrangeContentBufferProc := State_ArrangeContentBuffer;
@@ -598,6 +616,7 @@ begin
   serverProcs.GetPayloadPtrProc := State_GetPostDataPtr;
   serverProcs.SetHeaderValueProc := State_SetHeaderValue;
 //  serverProcs.ActivateWebSocketproc := State_ActivateWebSocket;
+  serverProcs.CallServiceProc := State_CallService;
 end;
 
 end.

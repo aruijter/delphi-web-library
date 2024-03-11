@@ -16,6 +16,7 @@ type
   TdwlGetPayloadPtrProc = function(State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean; stdcall;
   TdwlSetHeaderValueProc = procedure(const State: PdwlHTTPHandlingState; const HeaderKey, Value: PWideChar); stdcall;
   TdwlActivateWebSocketProc = function(const State: PdwlHTTPHandlingState; ReceiveProc: TdwlHTTPWebSocket_OnData): TdwlHTTPWebSocket_OnData; stdcall;
+  TdwlCallServiceProc = function(const State: PdwlHTTPHandlingState; ServiceID: cardinal; const Data: PWideChar): integer; stdcall;
 
   /// <summary>
   ///   <para>
@@ -95,6 +96,10 @@ type
     ///   response
     /// </summary>
     GetResponseHeaderValueProc: TdwlGetHeaderValueProc;
+    /// <summary>
+    ///   a callback function to execute services on the server (like email sending)
+    /// </summary>
+    CallServiceProc: TdwlCallServiceProc;
   end;
 
 

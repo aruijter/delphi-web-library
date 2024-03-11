@@ -10,7 +10,7 @@ interface
 
 uses
   DWL.Server.Types, DWL.Params, System.Generics.Collections,
-  System.Classes, System.JSON, DWL.MySQL, Winapi.WinInet, DWL.OpenID;
+  System.Classes, System.JSON, DWL.MySQL, Winapi.WinInet, DWL.OpenID, IdMessage;
 
 type
   TEndpoint_HandleProc = function(const State: PdwlHTTPHandlingState): boolean of object;
@@ -127,6 +127,10 @@ type
     ///   don't write to it!
     /// </summary>
     class function TryGetPayloadPtr(const State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean;
+    /// <summary>
+    ///   Sends an Email through by using the Mailsend service of the the DWLServer
+    /// </summary>
+    class function SendEMail(const State: PdwlHTTPHandlingState; MailMsg: TIdMessage): boolean;
   public
     class function Authorize(const State: PdwlHTTPHandlingState): boolean; virtual;
     class procedure Configure(const Params: string); virtual;
@@ -148,7 +152,7 @@ implementation
 uses
   DWL.HTTP.Consts, System.SysUtils, DWL.JOSE, DWL.Types, DWL.Params.Consts,
   System.Rtti, System.DateUtils, DWL.Logging, DWL.Logging.API,
-  DWL.Server.Utils, DWL.Server.Globals, DWL.Server.Consts;
+  DWL.Server.Utils, DWL.Server.Globals, DWL.Server.Consts, DWL.Mail.Utils;
 
 const
   Param_Body_JSON='body_json';
@@ -478,6 +482,12 @@ begin
     Pair.JSONValue := TJSONBool.Create(IsSuccess)
   else
     Response_JSON(State).AddPair('success', TJSONBool.Create(IsSuccess));
+end;
+
+class function TdwlDLLHandling.SendEMail(const State: PdwlHTTPHandlingState; MailMsg: TIdMessage): boolean;
+begin
+  var MailStr := TdwlMailUtils.IdMessageToString(MailMsg);
+  Result := serverProcs.CallServiceProc(State, serverservice_SendEMail, PWideChar(MailStr))=1;
 end;
 
 class function TdwlDLLHandling.ServerBaseURL: string;
