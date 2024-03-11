@@ -197,7 +197,7 @@ begin
   else
   begin
     var ThreadParams := New_Params;
-    FParams.AssignTo(ThreadParams, Params_SQLConnection);
+    FParams.AssignKeysTo(ThreadParams, Params_SQLConnection);
     FMailSendThread := TMailSendThread.Create(ThreadParams);
     FMailSendThread.FreeOnTerminate := true;
   end;
