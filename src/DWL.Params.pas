@@ -46,6 +46,7 @@ type
   end;
 
   IdwlMetaKeyConsulter = interface
+    function DefaultValue: TValue;
     function Prettyname: string;
     function TypeInfo: PTypeInfo;
     function MinimumValue: TValue;
@@ -714,6 +715,7 @@ type
     FKey: string;
     FMetaKey: TdwlMetaKey;
   private
+    function DefaultValue: TValue;
     function Prettyname: string;
     function TypeInfo: PTypeInfo;
     function MinimumValue: TValue;
@@ -1505,6 +1507,14 @@ begin
   inherited Create;
   FKey := Key;
   FMetaKey := MetaKey;
+end;
+
+function TdwlMetakeyConsulter.DefaultValue: TValue;
+begin
+  if FMetaKey<>nil then
+    Result := FMetaKey.FDefaultValue
+  else
+    Result := TValue.Empty;
 end;
 
 function TdwlMetakeyConsulter.MaximumValue: TValue;
