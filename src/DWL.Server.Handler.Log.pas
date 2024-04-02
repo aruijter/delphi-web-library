@@ -297,6 +297,8 @@ begin
 end;
 
 function TdwlHTTPHandler_Log.Post_Log(const State: PdwlHTTPHandlingState): boolean;
+const
+  defSourceChannelTopic = 'default';
 var
   LogSecret: string;
   Msg: String;
@@ -324,7 +326,14 @@ begin
   if not State.TryGetRequestParamStr('channel', Channel) then
     Channel := '';
   if not State.TryGetRequestParamStr('topic', Topic) then
-    Channel := '';
+    Topic := '';
+  // because regexes do not trigger on empty strings, enforce a default source/channel/topic
+  if Source='' then
+    Source := defSourceChannelTopic;
+  if Channel='' then
+    Channel := defSourceChannelTopic;
+  if Topic='' then
+    Topic := defSourceChannelTopic;
   var Data: pointer;
   var DataSize: Int64;
   var Content: TBytes := nil;
