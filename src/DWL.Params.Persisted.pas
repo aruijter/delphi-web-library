@@ -23,13 +23,14 @@ implementation
 
 uses
   Winapi.Windows, System.Rtti, System.Generics.Collections, DWL.IO,
-  System.Classes, System.SysUtils, System.IOUtils, Vcl.Dialogs;
+  System.Classes, System.SysUtils, System.IOUtils, Vcl.Dialogs, DWL.Types;
 
 const
   MAGIC_WORD = 61374;
   MAGIC_CARDINAL = 3992898270;
-  CURRENT_FILE_VERSION_BYTE_AND_3_RESERVED_BYTES = 1;
+  CURRENT_FILE_VERSION_BYTE = 1;
   OFFSET_FILESIZE = 8;
+  OFFSET_EPOCH_DELETED_FROM_PARAMETERKIND = 10;
   METHOD_SERIALIZETOCURSOR = 'SerializeToCursor';
   METHOD_SERIALIZETOCURSOR_FULL = 'procedure SerializeToCursor(Cursor: IdwlCursor_Write)';
   METHOD_DESERIALIZEFROMCURSOR = 'DeSerializeFromCursor';
@@ -52,7 +53,24 @@ const
   pkDynArraySimpleType = 14;
   pkRecord = 15;
   pkInterface = 16;
-  pkDeleted = 255;
+
+
+// File Layout
+//   0- 3: uint32  MAGIC_CARDINAL
+//   4- 7: uint32  CURRENT_FILE_VERSION_BYTE_AND_3_RESERVED_BYTES
+//   8-15: uint64 File size
+//  Followed by Paramaters blocks
+
+// Parameter Block layout:
+//   0- 1: uint16 MAGIC_WORD
+//   2- 5: uint32 Total Block size
+//   6- 6: uint8  Parameter Kind
+//   7- 7: uint8  Reserved
+//   8-15:  int64 Epoch Created
+//  16-23:  int64 Epoch Deleted
+//  24-24: uint8  Bytes used to store paramter Name
+//  25-  : Parameter Name
+//  followed by the Parameter data
 
 type
   TdwlPersistedParamType = record
@@ -98,6 +116,8 @@ type
       FClassInitNeeded: boolean;
       FCtx: TRttiContext;
     var
+      // to be able to get full change tracking, don't optimize, overwriting breaks history
+      FOverwriteChangedParams: boolean;
       FInitNotReady: boolean;
       FInitEvent: THandle;
       FFileName: string;
@@ -172,14 +192,14 @@ begin
     if Cursor.FileSize=0 then
     begin
       Cursor.WriteUInt32(MAGIC_CARDINAL);
-      Cursor.WriteUInt32(CURRENT_FILE_VERSION_BYTE_AND_3_RESERVED_BYTES);
+      Cursor.WriteUInt32(CURRENT_FILE_VERSION_BYTE); // including 3 reserved bytes
       Cursor.WriteUInt64(16); // empty file size
     end
     else
     begin
       if Cursor.ReadUInt32<>MAGIC_CARDINAL then
         raise Exception.Create('PersistedParams: Invalid Magic Word: wrong filetype?');
-      if Cursor.ReadUInt32<>CURRENT_FILE_VERSION_BYTE_AND_3_RESERVED_BYTES then
+      if Cursor.ReadUInt32<>CURRENT_FILE_VERSION_BYTE {3 reserverd bytes should be zero, so read in one go} then
         raise Exception.Create('PersistedParams: Unknown File Verion!!');
       var StoredFileSize := Cursor.ReadUInt64;
       // check the filesize and correct if needed
@@ -190,11 +210,16 @@ begin
       begin
         if Cursor.ReadUInt16<>MAGIC_WORD then
           raise Exception.Create('PersistedParams: Invalid Entry: wrong filetype?');
+        // add total blocksize to offset to get pointer to next parameter
         inc(NextOffset, Cursor.ReadUInt32);
         var Param: TdwlPersistedParam;
+        // keep offset to paramkind for fast access
         Param.ParamKindOffset := Cursor.CursorOffset;
         Param.ParamKind := Cursor.ReadUInt8;
-        if Param.ParamKind<>pkDeleted then
+        Cursor.ReadUInt8; //reserved
+        Cursor.ReadInt64; // skip Epoch Created
+        var EpochDeleted: TUnixEpoch := Cursor.ReadInt64;
+        if EpochDeleted=0 then // not deleted
         begin
           var Name := Cursor.ReadString_LenByte;
           Param.DataOffSet := Cursor.CursorOffset;
@@ -240,11 +265,11 @@ begin
       raise Exception.Create('PersistedParams: Missing type '+string(Value.TypeInfo.Name));
     end;
   end;
-  // check is value already exists
+  // check if value already exists
   var OldParam: TdwlPersistedParam;
   if FPersistedParams.TryGetValue(LowerKey, OldParam) then
   begin
-    if (OldParam.ParamKind=ParamType.ParamKind) and (ParamType.SimpleDataSize>0) then
+    if FOverwriteChangedParams and (OldParam.ParamKind=ParamType.ParamKind) and (ParamType.SimpleDataSize>0) then
     begin
       FCursor.Seek(OldParam.DataOffset, soBeginning);
       var ValueRawData := Value.GetReferenceToRawData;
@@ -252,8 +277,8 @@ begin
       Exit; // that's it for a simpletype overwrite: finished
     end;
     // otherwise no reuse, delete current value
-    FCursor.Seek(OldParam.ParamKindOffset, soBeginning);
-    FCursor.WriteUInt8(pkDeleted); // assign oldvalue as deleted
+    FCursor.Seek(OldParam.ParamKindOffset+OFFSET_EPOCH_DELETED_FROM_PARAMETERKIND, soBeginning);
+    FCursor.WriteInt64(TUnixEpoch.Now); // assign oldvalue as deleted
     FPersistedParams.Remove(LowerKey);
   end;
   var Param: TdwlPersistedParam;
@@ -267,6 +292,9 @@ begin
     Param.ParamKindOffset := FCursor.CursorOffset;
     Param.ParamKind := ParamType.ParamKind;
     FCursor.WriteUInt8(Param.ParamKind);
+    FCursor.WriteUInt8(0); // reserved
+    FCursor.WriteInt64(TUnixEpoch.Now); // write epoch created
+    FCursor.WriteInt64(0); // write epoch deleted=0 (not deleted)
     FCursor.WriteString_LenByte(LowerKey);
     Param.DataOffSet := FCursor.CursorOffset;
     // Header is ready, now write data
@@ -453,8 +481,8 @@ begin
   var Param: TdwlPersistedParam;
   if FPersistedParams.TryGetValue(LowerKey, Param) then
   begin
-    FCursor.Seek(Param.ParamKindOffset, soBeginning);
-    FCursor.WriteUInt8(pkDeleted);
+    FCursor.Seek(Param.ParamKindOffset+OFFSET_EPOCH_DELETED_FROM_PARAMETERKIND, soBeginning);
+    FCursor.WriteInt64(TUnixEpoch.Now); // assign oldvalue as deleted
     FPersistedParams.Remove(LowerKey);
   end;
 end;
@@ -482,6 +510,7 @@ begin
   FInitEvent := CreateEvent(nil, false, false, nil);
   FInitNotReady := true;
   FFileOptions := [pfoCreateIfNeeded];
+  FOverwriteChangedParams := true; // default optimized
 end;
 
 class destructor TdwlPersistedParams_Hook.Destroy;
@@ -512,10 +541,6 @@ begin
   // flush the memory mapped file
   FCursor.Flush;
 end;
-
-type
-  THackObj = class(TInterfacedObject)
-  end;
 
 function TdwlPersistedParams_Hook.TryGetValueFromFile(Param: PdwlPersistedParam; var Value: TValue): boolean;
 begin

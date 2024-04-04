@@ -15,6 +15,7 @@ type
     function ReadBytes(const Size: UInt32): TBytes;
     function ReadDouble: double;
     function ReadInt8: shortint;
+    function ReadInt64: Int64;
     function ReadString_LenByte: string;
     function ReadString_LenCardinal: string;
     function ReadUInt8: byte;
@@ -32,6 +33,7 @@ type
     procedure WriteBoolean(Value: boolean);
     procedure WriteDouble(Value: double);
     procedure WriteInt8(Value: shortint);
+    procedure WriteInt64(Value: Int64);
     procedure WriteString_LenByte(const S: string; KnownMultiByteLength: UInt8=0);
     procedure WriteString_LenCardinal(const S: string; KnownMultiByteLength: UInt32=0);
     procedure WriteUInt8(Value: byte);
@@ -124,6 +126,7 @@ type
     function ReadBytes(const Size: UInt32): TBytes;
     function ReadDouble: double;
     function ReadInt8: shortint;
+    function ReadInt64: Int64;
     function ReadString_LenByte: string;
     function ReadString_LenCardinal: string;
     function ReadUInt8: byte;
@@ -135,6 +138,7 @@ type
     procedure WriteBoolean(Value: boolean);
     procedure WriteDouble(Value: double);
     procedure WriteInt8(Value: shortint);
+    procedure WriteInt64(Value: Int64);
     procedure WriteString_LenByte(const S: string; KnownMultiByteLength: UInt8=0);
     procedure WriteString_LenCardinal(const S: string; KnownMultiByteLength: UInt32=0);
     procedure WriteUInt8(Value: byte);
@@ -403,6 +407,12 @@ begin
   inc(FCursor, SizeOf(double));
 end;
 
+function TdwlCursor.ReadInt64: Int64;
+begin
+  Result := PInt64(FCursor)^;
+  inc(FCursor, SizeOf(Int64));
+end;
+
 function TdwlCursor.ReadInt8: shortint;
 begin
   Result := PShortInt(FCursor)^;
@@ -485,6 +495,11 @@ end;
 procedure TdwlCursor.WriteDouble(Value: double);
 begin
   Write(Value, Sizeof(double));
+end;
+
+procedure TdwlCursor.WriteInt64(Value: Int64);
+begin
+  Write(Value, SizeOf(Int64));
 end;
 
 procedure TdwlCursor.WriteInt8(Value: shortint);
