@@ -184,7 +184,7 @@ begin
   Result := '';
   try
     var BasicAuth: string;
-    if TryGetHeaderValue(State, 'Authorization', BasicAuth) and SameText(Copy(BasicAuth,1 ,5), 'Basic') then
+    if TryGetHeaderValue(State, HTTP_FIELD_AUTHORIZATION, BasicAuth) and SameText(Copy(BasicAuth,1 ,5), 'Basic') then
     begin
       BasicAuth := trim(Copy(BasicAuth, 6, MaxInt));
       BasicAuth := TNetEncoding.Base64.Decode(BasicAuth);

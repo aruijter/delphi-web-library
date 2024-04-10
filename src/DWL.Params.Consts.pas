@@ -18,6 +18,7 @@ const
   Param_Scopes = 'scopes';
   Param_Refreshtoken = 'refreshtoken';
   Param_Profile = 'profile';
+  Param_Access_Token = 'access_token';
   Param_ErrorMsg = 'errormsg';
   Param_FileName = 'filename';
   Param_Directory='directory';

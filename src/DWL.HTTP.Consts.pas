@@ -20,6 +20,7 @@ const
 
   EXPECT_100_CONTINUE = '100-continue';
 
+  HTTP_FIELD_AUTHORIZATION = 'Authorization';
   HTTP_FIELD_CACHE_CONTROL = 'Cache-Control';
   HTTP_FIELD_CONNECTION = 'Connection';
   HTTP_FIELD_CONTENT_DISPOSITION = 'Content-Disposition';
@@ -40,6 +41,8 @@ const
   HTTP_METHOD_PUT = 'PUT';
   HTTP_METHOD_TRACE = 'TRACE';
   HTTP_METHOD_UNKNOWN = 'UNKNOWN';
+
+  HTTP_AUTHORIZATION_BEARER = 'Bearer';
 
   HTTP_SUBFIELD_CHARSET = 'charset';
 
