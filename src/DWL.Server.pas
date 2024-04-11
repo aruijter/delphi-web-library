@@ -110,7 +110,8 @@ uses
   Winapi.Windows, Winapi.ShLwApi, DWL.Server.Consts,
   DWL.HTTP.Consts, DWL.Mail.Queue, System.Math, DWL.OpenSSL,
   DWL.TCP.SSL, Winapi.WinInet, DWL.Server.Utils, IdContext,
-  DWL.Server.Globals, System.NetEncoding, IdMessage, DWL.Mail.Utils;
+  DWL.Server.Globals, System.NetEncoding, IdMessage, DWL.Mail.Utils,
+  System.JSON;
 
 type
   TdwlHTTPHandler_PassThrough = class(TdwlHTTPHandler)
@@ -602,6 +603,20 @@ begin
           Result := 1;
       finally
         MailMsg.Free;
+      end;
+    end;
+  serverservice_Log:
+    begin
+      var JSON := TJSONValue.ParseJSONValue(Data);
+      try
+        TdwlLogger.Log(
+          JSON.GetValue<string>('msg'),
+          TdwlLogSeverityLevel(JSON.GetValue<integer>('level')),
+          JSON.GetValue<string>('topic'),
+          JSON.GetValue<string>('channel'),
+          JSON.GetValue<string>('source'));
+      finally
+        JSON.Free;
       end;
     end;
   end;

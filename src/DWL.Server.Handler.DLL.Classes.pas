@@ -151,7 +151,7 @@ implementation
 
 uses
   DWL.HTTP.Consts, System.SysUtils, DWL.JOSE, DWL.Types, DWL.Params.Consts,
-  System.Rtti, System.DateUtils, DWL.Logging, DWL.Logging.API,
+  System.Rtti, System.DateUtils, DWL.Logging, DWL.Logging.DWLServer,
   DWL.Server.Utils, DWL.Server.Globals, DWL.Server.Consts, DWL.Mail.Utils;
 
 const
@@ -210,7 +210,7 @@ begin
   FConfigParams.WriteNameValueText(Params);
   FEndpoint := FConfigParams.StrValue(Param_Endpoint);
   FServerBaseURL := FConfigParams.StrValue(Param_ServerBaseURL);
-  EnableLogDispatchingToAPI(FServerBaseURL+EndpointURI_Log, FConfigParams.StrValue(Param_LogSecret))
+  EnableLogDispatchingToDWLServer;
 end;
 
 class procedure TdwlDLLHandling.ProcessOptions(const State: PdwlHTTPHandlingState; var Success: boolean; Cmds: THandlingEndpoints_Dictionary);

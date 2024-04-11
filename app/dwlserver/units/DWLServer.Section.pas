@@ -193,7 +193,7 @@ procedure TDWLServerSection.DoLog(LogItem: PdwlLogItem);
 begin
   if FLogHandler<>nil then
     FLogHandler.SubmitLog('', integer(LogItem.SeverityLevel), LogItem.Source, LogItem.Channel,
-      LogItem.Topic, LogItem.Msg, LogItem.ContentType, LogItem.Content);
+      LogItem.Topic, LogItem.Msg, LogItem.ContentType, LogItem.Content, false);
 end;
 
 class procedure TDWLServerSection.InsertOrUpdateDbParameter(Session: IdwlMySQLSession; const Key, Value: string);
