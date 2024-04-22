@@ -178,7 +178,7 @@ begin
     TdwlToolsAPI.SetProjectOption(Project, 'DebugInfo', true);
     TdwlToolsAPI.SetProjectOption(Project, 'MapFile', 3);
     SetDefines(Project, true);
-    OutputVersionInfo(Project, false, false, true);
+    OutputVersionInfo(Project, false, true, false);
     Project.ProjectBuilder.BuildProject(cmOTABuild, true);
   except
     on E: Exception do
