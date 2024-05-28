@@ -274,12 +274,16 @@ begin
     var Query := WideStr.Split(['&']);
     for var Param in Query do
     begin
-      P := pos('=', Param);
-      if P>1 then
-        // leave the value undecoded, to be able to use stringlist with all provided string values
-        RequestParams.Add(TNetEncoding.URL.Decode(Copy(Param, 1, P-1))+'='+Copy(Param, P+1, MaxInt))
-      else
-        RequestParams.Add(TNetEncoding.URL.Decode(Param));
+      try
+        P := pos('=', Param);
+        if P>1 then
+          // leave the value undecoded, to be able to use stringlist with all provided string values
+          RequestParams.Add(TNetEncoding.URL.Decode(Copy(Param, 1, P-1))+'='+Copy(Param, P+1, MaxInt))
+        else
+          RequestParams.Add(TNetEncoding.URL.Decode(Param));
+      except
+        ReadError('Error Decoding URL Parameter: '+Param);
+      end;
     end;
   end;
 end;
