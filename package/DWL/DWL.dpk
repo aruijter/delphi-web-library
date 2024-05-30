@@ -97,6 +97,7 @@ contains
   DWL.Server.Consts in '..\..\src\DWL.Server.Consts.pas',
   DWL.Server.Globals in '..\..\src\DWL.Server.Globals.pas',
   DWL.Server.Handler.DLL.Classes in '..\..\src\DWL.Server.Handler.DLL.Classes.pas',
-  DWL.TCP.Consts in '..\..\src\DWL.TCP.Consts.pas';
+  DWL.TCP.Consts in '..\..\src\DWL.TCP.Consts.pas',
+  DWl.Logging.DWLServer in '..\..\src\DWl.Logging.DWLServer.pas';
 
 end.
