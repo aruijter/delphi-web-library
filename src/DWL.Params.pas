@@ -836,13 +836,13 @@ begin
   end;
 end;
 
-function TdwlParams.BoolValue(const Key: string; Default: boolean): boolean;
+function TdwlParams.BoolValue(const Key: string; Default: boolean=false): boolean;
 begin
   if not TryGetBoolValue(Key, Result) then
     Result := Default;
 end;
 
-function TdwlParams.CardinalValue(const Key: string;Default: cardinal): cardinal;
+function TdwlParams.CardinalValue(const Key: string;Default: cardinal=0): cardinal;
 begin
   if not TryGetCardinalValue(Key, Result) then
     Result := Default;
@@ -981,7 +981,7 @@ begin
   Result := '#'+Domain+'#'+Key;
 end;
 
-function TdwlParams.DoubleValue(const Key: string; Default: double): double;
+function TdwlParams.DoubleValue(const Key: string; Default: double=0): double;
 begin
   if not TryGetDoubleValue(Key, Result) then
     Result := Default
@@ -1038,13 +1038,13 @@ begin
   Result := (FDomain<>'') and FMetaKeys.TryGetValue(DictKey(FDomain, LowerKey), MetaKey);
 end;
 
-function TdwlParams.Int64Value(const Key: string; Default: Int64): Int64;
+function TdwlParams.Int64Value(const Key: string; Default: Int64=0): Int64;
 begin
   if not TryGetInt64Value(Key, Result) then
     Result := Default
 end;
 
-function TdwlParams.IntValue(const Key: string; Default: integer): integer;
+function TdwlParams.IntValue(const Key: string; Default: integer=0): integer;
 begin
   if not TryGetIntValue(Key, Result) then
     Result := Default
@@ -1125,7 +1125,7 @@ begin
   end;
 end;
 
-function TdwlParams.StrValue(const Key: string; const Default: string): string;
+function TdwlParams.StrValue(const Key: string; const Default: string=''): string;
 begin
   if not TryGetStrValue(Key, Result) then
     Result := Default;
