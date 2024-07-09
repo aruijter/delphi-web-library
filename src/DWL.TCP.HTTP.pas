@@ -126,22 +126,25 @@ procedure TdwlCustomHTTPServer.LogRequest(Socket: TdwlHTTPSocket);
 begin
   if FRequestLogDispatchThread<>nil then
   begin
-    var RequestLog: TdwlRequestLogItem;
-    RequestLog.Method := Socket.RequestMethod;
-    RequestLog.IP_Remote := Socket.Ip_Remote;
-    RequestLog.Port_Local := Socket.Port_Local;
-    RequestLog.Uri := Socket.Uri;
-    RequestLog.StatusCode := Socket.StatusCode;
-    RequestLog.Duration := Socket.RequestDuration;
-    RequestLog.Headers := Socket.RequestHeaders.GetAsNameValueText(false);
-    RequestLog.Params := '';
-    var Prms := Socket.RequestParams;
-    // clear sensitive information before logging
-    Prms.Values['password'] := '';
-    for var i := 0 to Prms.Count-1 do
-       RequestLog.Params :=  RequestLog.Params+Prms.Names[i]+'='+TNetEncoding.URL.Decode(Prms.ValueFromIndex[i])+#13#10;
-
-    TRequestLogDispatchThread(FRequestLogDispatchThread).LogRequest(RequestLog);
+    try
+      var RequestLog: TdwlRequestLogItem;
+      RequestLog.Method := Socket.RequestMethod;
+      RequestLog.IP_Remote := Socket.Ip_Remote;
+      RequestLog.Port_Local := Socket.Port_Local;
+      RequestLog.Uri := Socket.Uri;
+      RequestLog.StatusCode := Socket.StatusCode;
+      RequestLog.Duration := Socket.RequestDuration;
+      RequestLog.Headers := Socket.RequestHeaders.GetAsNameValueText(false);
+      RequestLog.Params := '';
+      var Prms := Socket.RequestParams;
+      // clear sensitive information before logging
+      Prms.Values['password'] := '';
+      for var i := 0 to Prms.Count-1 do
+         RequestLog.Params :=  RequestLog.Params+Prms.Names[i]+'='+TNetEncoding.URL.Decode(Prms.ValueFromIndex[i])+#13#10;
+        TRequestLogDispatchThread(FRequestLogDispatchThread).LogRequest(RequestLog);
+    except
+      // logging errors are mostly due to invalid requests (Problems in NetEncoding.Decode), so skip logging if that is the case
+    end;
   end;
 end;
 
