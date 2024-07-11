@@ -36,24 +36,37 @@ type
     constructor Create(CallbackProc: TdwlAPIAuthorizerCallBackProc);
   end;
 
+  IdwlAPIJSONArray = interface
+    function JSON: TJSONArray;
+  end;
+
   IdwlAPIResponse = interface
     function Data: TJSONObject;
+    function Data_Array(const APath: string): IdwlAPIJSONArray;
+    function HTTPResponse: IdwlHTTPResponse;
     function Success: boolean;
   end;
 
+  IdwlAPIRequest = interface
+    function JSON: TJSONObject;
+    function HTTPRequest: IdwlHTTPRequest;
+    function Execute: IdwlAPIResponse;
+  end;
+
+
   TdwlAPISession = class
   strict private
-    FAuthorizer: IdwlAPIAuthorizer;
     FApiBaseUrl: string;
     function InternalApiRequest(IsARetry: boolean; const UriPart: string; const Http_Method, URLEncodedParamsOrPostBody: string; PostBodyIsJSON, OmitAccessToken: boolean; AOnProgress: TdwlHTTPProgressEvent): IdwlHTTPResponse;
-  protected
+  private
+    FAuthorizer: IdwlAPIAuthorizer;
   public
     property ApiBaseUrl: string read FApiBaseUrl;
     property Authorizer: IdwlAPIAuthorizer read FAuthorizer;
     constructor Create(const AApiBaseUrl: string; Authorizer: IdwlAPIAuthorizer);
     function ExecuteApiRequest(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; const URLEncodedParamsOrPostBody: string=''; PostBodyIsJSON: boolean=true; OmitAccessToken: boolean=false; AOnProgress: TdwlHTTPProgressEvent=nil): IdwlHTTPResponse;
     function ExecuteJSONRequest(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; const URLEncodedParamsOrPostBody: string=''; OmitAccessToken: boolean=false): IdwlAPIResponse;
-    function PrepareAPIRequest(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; OmitAccessToken: boolean=false): IdwlHTTPRequest;
+    function New_APIRequest(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; OmitAccessToken: boolean=false): IdwlAPIRequest;
   end;
 
 implementation
@@ -62,39 +75,67 @@ uses
   System.StrUtils, Winapi.Windows, Winapi.WinInet, System.IOUtils;
 
 type
+  TdwlAPIRequest = class(TInterfacedObject, IdwlAPIRequest)
+  strict private
+    FJSON: TJSonObject;
+    FSession: TdwlAPISession;
+    FHTTPRequest: IdwlHTTPRequest;
+  private
+    function Execute: IdwlAPIResponse;
+    function HTTPRequest: IdwlHTTPRequest;
+    function JSON: TJSONObject;
+  public
+    constructor Create(Session: TdwlAPISession; const Url: string);
+    destructor Destroy; override;
+  end;
+
   TdwlAPIResponse = class(TInterfacedObject, IdwlAPIResponse)
   private
+    FHTTPResponse: IdwlHTTPResponse;
     FJSON: TJSONObject;
     FData: TJSONObject;
+    function Data_Array(const APath: string): IdwlAPIJSONArray;
+    function HTTPResponse: IdwlHTTPResponse;
     function Success: boolean;
   public
-    constructor Create(Response: IdwlHTTPResponse);
+    constructor Create(AHTTPResponse: IdwlHTTPResponse);
     destructor Destroy; override;
     function Data: TJSONObject;
   end;
 
+  TdwlAPIJSONArray = class(TInterfacedObject, IdwlAPIJSONArray)
+  strict private
+    FResponse: IdwlAPIResponse;
+    FJSON: TJSONArray;
+  private
+    function JSON: TJSONArray;
+  public
+    constructor Create(Response: IdwlAPIResponse; AJSON: TJSONArray);
+  end;
+
 { TdwlAPIResponse }
 
-constructor TdwlAPIResponse.Create(Response: IdwlHTTPResponse);
+constructor TdwlAPIResponse.Create(AHTTPResponse: IdwlHTTPResponse);
 begin
   inherited Create;
-  if Response.StatusCode=HTTP_STATUS_OK then
+  FHTTPResponse := AHTTPResponse;
+  if (AHTTPResponse.StatusCode=HTTP_STATUS_OK) then
   begin
-    var JSONResult := TJSONValue.ParseJSONValue(Response.AsString);
-    if JSONResult is TJSONObject then
-    begin
-      FJSON := TJSONObject(JSONResult);
-      var IsOk := FJSON.GetValue<boolean>('success', false);
-      if IsOk then
+    try
+      var JSONResult := TJSONValue.ParseJSONValue(AHTTPResponse.AsString);
+      if JSONResult is TJSONObject then
       begin
-        FData := FJSON.GetValue<TJSONObject>('data');
-        IsOk := FData<>nil;
-      end;
-      if not IsOk then
-        FreeAndNil(FJSON);
-    end
-    else
-      JSONResult.Free;
+        FJSON := TJSONObject(JSONResult);
+        var IsOk := FJSON.GetValue<boolean>('success', false) and
+          FJSON.TryGetValue<TJSONObject>('data', FData);
+        if not IsOk then
+          FreeAndNil(FJSON);
+      end
+      else
+        JSONResult.Free;
+    except
+      FJSON := nil;
+    end;
   end;
 end;
 
@@ -103,10 +144,24 @@ begin
   Result := FData;
 end;
 
+function TdwlAPIResponse.Data_Array(const APath: string): IdwlAPIJSONArray;
+begin
+  var JSON: TJSONArray;
+  if (FData<>nil) and FData.TryGetValue<TJSONArray>(APath, JSON) then
+    Result := TdwlAPIJSONArray.Create(Self, JSON)
+  else
+    Result := nil;
+end;
+
 destructor TdwlAPIResponse.Destroy;
 begin
   FJSON.Free;
   inherited Destroy;
+end;
+
+function TdwlAPIResponse.HTTPResponse: IdwlHTTPResponse;
+begin
+  Result := FHTTPResponse;
 end;
 
 function TdwlAPIResponse.Success: boolean;
@@ -180,20 +235,20 @@ begin
   end;
 end;
 
-function TdwlAPISession.PrepareAPIRequest(const UriPart, Http_Method: string; OmitAccessToken: boolean): IdwlHTTPRequest;
+function TdwlAPISession.New_APIRequest(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; OmitAccessToken: boolean=false): IdwlAPIRequest;
 begin
   try
-    Result := New_HTTPRequest(FApiBaseUrl + UriPart);
-    Result.Method := Http_Method;
+    Result := TdwlAPIRequest.Create(Self, FApiBaseUrl+UriPart);
+    Result.HTTPRequest.Method := Http_Method;
     if not OmitAccessToken then
     begin
       var AccessToken := FAuthorizer.GetAccesstoken;
       if AccessToken='' then
         Exit;
-      Result.Header['Authorization'] := 'Bearer '+AccessToken;
+      Result.HTTPRequest.Header['Authorization'] := 'Bearer '+AccessToken;
     end;
   except
-    Result := nil;
+    // continue un-prepared, this will come out in the execution phase
   end;
 end;
 
@@ -256,6 +311,76 @@ begin
   FRefreshtoken := NewRefreshToken;
   if Assigned(FCallBackProc) then
     FCallBackProc(FRefreshtoken, acaNewRefreshtoken);
+end;
+
+{ TdwlAPIRequest }
+
+constructor TdwlAPIRequest.Create(Session: TdwlAPISession; const Url: string);
+begin
+  inherited Create;
+  FSession := Session;
+  FHTTPRequest := New_HTTPRequest(Url)
+end;
+
+destructor TdwlAPIRequest.Destroy;
+begin
+  FJSON.Free;
+  inherited Destroy;
+end;
+
+function TdwlAPIRequest.Execute: IdwlAPIResponse;
+  function InternalExecute(IsARetry: boolean): IdwlHTTPResponse;
+  begin
+    try
+      Result := HTTPRequest.Execute;
+      case Result.StatusCode of
+      401:
+        begin
+          if not IsARetry then
+          begin
+            if Result.Header['Authorization']<>'' then
+              FSession.FAuthorizer.InvalidateAuthorization;
+            // try again and we will ask for a username password next time
+            Result := InternalExecute(true);
+          end;
+        end;
+      end;
+    except
+      Result := Get_EmptyHTTPResponse(HTTP_STATUS_SERVER_ERROR);
+    end;
+  end;
+begin
+  if FJSON<>nil then
+  begin
+    HTTPRequest.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_JSON;
+    HTTPRequest.WritePostData(FJSON.ToJSON);
+  end;
+  Result := TdwlAPIResponse.Create(InternalExecute(false));
+end;
+
+function TdwlAPIRequest.HTTPRequest: IdwlHTTPRequest;
+begin
+  Result := FHTTPRequest;
+end;
+
+function TdwlAPIRequest.JSON: TJSONObject;
+begin
+  if FJSON=nil then
+    FJSON := TJSONObject.Create;
+  Result := FJSON;
+end;
+
+{ TdwlAPIJSONArray }
+
+constructor TdwlAPIJSONArray.Create(Response: IdwlAPIResponse; AJSON: TJSONArray);
+begin
+  FResponse := Response; // just a interface reference to keep reponse alive and be able to keep accessing JSON
+  FJSON := AJSON;
+end;
+
+function TdwlAPIJSONArray.JSON: TJSONArray;
+begin
+  Result := FJSON;
 end;
 
 end.
