@@ -47,13 +47,15 @@ end;
 procedure TdwlLogDispatcher_TextFile.DispatchLog(LogItem: PdwlLogItem);
 begin
   try
-    var LogTxt := FormatDateTime('YYYY-MM-DD HH:MM:SS', UnixToDateTime(LogItem.TimeStamp, false))+
-      TdwlLogger.GetSeverityLevelAsString(LogItem.SeverityLevel)+
+    var LogTxt := FormatDateTime('YYYY-MM-DD HH:MM:SS', UnixToDateTime(LogItem.TimeStamp, false))+' '+
+      TdwlLogger.GetSeverityLevelAsString(LogItem.SeverityLevel)+' '+
       TdwlStrUtils.Sanatize(LogItem.Msg, [soRemoveLineBreaks])+#13#10;
     if not TFile.Exists(FFileName) then
     begin
       ForceDirectories(ExtractFilePath(FFileName));
       TFile.WriteAllText(FFileName, LogTxt, TEncoding.UTF8);
+      if SameText(Copy(LogItem.ContentType, 1, 4), 'text') then
+        TFile.WriteAllBytes(FFileName, LogItem.Content);
     end
     else
       TFile.AppendAllText(FFileName, LogTxt, TEncoding.UTF8);

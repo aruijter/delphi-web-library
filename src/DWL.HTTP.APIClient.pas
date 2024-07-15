@@ -45,6 +45,7 @@ type
     function Data_Array(const APath: string): IdwlAPIJSONArray;
     function HTTPResponse: IdwlHTTPResponse;
     function Success: boolean;
+    function Errors: TJSONArray;
   end;
 
   IdwlAPIRequest = interface
@@ -92,9 +93,12 @@ type
   TdwlAPIResponse = class(TInterfacedObject, IdwlAPIResponse)
   private
     FHTTPResponse: IdwlHTTPResponse;
+    FSuccess: boolean;
     FJSON: TJSONObject;
     FData: TJSONObject;
+    FErrors: TJSONArray;
     function Data_Array(const APath: string): IdwlAPIJSONArray;
+    function Errors: TJSONArray;
     function HTTPResponse: IdwlHTTPResponse;
     function Success: boolean;
   public
@@ -126,10 +130,7 @@ begin
       if JSONResult is TJSONObject then
       begin
         FJSON := TJSONObject(JSONResult);
-        var IsOk := FJSON.GetValue<boolean>('success', false) and
-          FJSON.TryGetValue<TJSONObject>('data', FData);
-        if not IsOk then
-          FreeAndNil(FJSON);
+        FSuccess := FJSON.GetValue<boolean>('success', false);
       end
       else
         JSONResult.Free;
@@ -141,13 +142,15 @@ end;
 
 function TdwlAPIResponse.Data: TJSONObject;
 begin
+  if FData=nil then
+    FJSON.TryGetValue<TJSONObject>('data', FData);
   Result := FData;
 end;
 
 function TdwlAPIResponse.Data_Array(const APath: string): IdwlAPIJSONArray;
 begin
   var JSON: TJSONArray;
-  if (FData<>nil) and FData.TryGetValue<TJSONArray>(APath, JSON) then
+  if (Data<>nil) and Data.TryGetValue<TJSONArray>(APath, JSON) then
     Result := TdwlAPIJSONArray.Create(Self, JSON)
   else
     Result := nil;
@@ -157,6 +160,13 @@ destructor TdwlAPIResponse.Destroy;
 begin
   FJSON.Free;
   inherited Destroy;
+end;
+
+function TdwlAPIResponse.Errors: TJSONArray;
+begin
+  if FErrors=nil then
+    FJSON.TryGetValue<TJSONArray>('errors', FErrors);
+  Result := FErrors;
 end;
 
 function TdwlAPIResponse.HTTPResponse: IdwlHTTPResponse;
