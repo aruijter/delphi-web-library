@@ -123,7 +123,7 @@ constructor TdwlAPIResponse.Create(AHTTPResponse: IdwlHTTPResponse);
 begin
   inherited Create;
   FHTTPResponse := AHTTPResponse;
-  if (AHTTPResponse.StatusCode=HTTP_STATUS_OK) then
+  if (AHTTPResponse.StatusCode div 100=2) then
   begin
     if AHTTPResponse.Header[HTTP_FIELD_CONTENT_TYPE].StartsWith(CONTENT_TYPE_JSON, true) then
     begin
