@@ -1,7 +1,9 @@
 <!DOCTYPE html>
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <html>
 <head>
+  <title>Please identify</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8">
   <style>
     html{
       overflow: hidden;
@@ -12,10 +14,6 @@
     }
 
     .box {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
       background-color: white;
       font-family: ulp-font, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, sans-serif;
       font-size: 16px;
@@ -24,18 +22,6 @@
       padding: 30px;
     }
 
-    B.box {
-      background-color: white;
-      font-family: ulp-font, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, sans-serif;
-      font-size: 16px;
-      border-radius: 10px;
-      box-shadow: 20px 20px 40px rgba(0, 0, 0, 0.4);
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      padding: 30px;
-    }
     .button {
       background-color: rgb(99, 93, 255);
       color: white;
@@ -80,11 +66,11 @@
     <form method="post" action='./authorize_reply'>
       <input type="hidden" name="p" value="-1">
       <input type="hidden" name="session_state" value="$(session_state)">
-      <input type="email" name="emailaddress" autofocus="true" placeholder="E-mail address">
+      <input type="email" name="emailaddress" autofocus placeholder="E-mail address">
       <br />
       <input type="password" name="password" placeholder="Password">
       <p>
-      <button class="item" style="background-color: rgb(99,93,255);color: white; text-indent: 55px;">Continue</button>
+      <button class="item" type="submit" style="background-color: rgb(99,93,255);color: white; text-indent: 55px;">Continue</button>
     </form>
 	 $(providerforms)
   </div>

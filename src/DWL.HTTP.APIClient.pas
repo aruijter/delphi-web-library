@@ -125,18 +125,26 @@ begin
   FHTTPResponse := AHTTPResponse;
   if (AHTTPResponse.StatusCode=HTTP_STATUS_OK) then
   begin
-    try
-      var JSONResult := TJSONValue.ParseJSONValue(AHTTPResponse.AsString);
-      if JSONResult is TJSONObject then
-      begin
-        FJSON := TJSONObject(JSONResult);
-        FSuccess := FJSON.GetValue<boolean>('success', false);
-      end
-      else
+    if AHTTPResponse.Header[HTTP_FIELD_CONTENT_TYPE].StartsWith(CONTENT_TYPE_JSON, true) then
+    begin
+      var JSONResult: TJSONValue := nil;
+      try
+        JSONResult := TJSONValue.ParseJSONValue(AHTTPResponse.AsString);
+        if JSONResult is TJSONObject then
+        begin
+          FJSON := TJSONObject(JSONResult);
+          FSuccess := FJSON.GetValue<boolean>('success', false);
+        end
+        else
+          JSONResult.Free;
+      except
+        FSuccess := false;
         JSONResult.Free;
-    except
-      FJSON := nil;
-    end;
+        FJSON := nil;
+      end;
+    end
+    else
+      FSuccess := true;
   end;
 end;
 
@@ -176,7 +184,7 @@ end;
 
 function TdwlAPIResponse.Success: boolean;
 begin
-  Result := (FJSON<>nil);
+  Result := FSuccess;
 end;
 
 { TdwlAPISession }

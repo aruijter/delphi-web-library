@@ -265,7 +265,7 @@ begin
   Result.FEpoch := Epoch.FEpoch-Amount;
 end;
 
-function TUnixEpoch.ToDateTime(AReturnUTC: boolean): TDateTime;
+function TUnixEpoch.ToDateTime(AReturnUTC: boolean=true): TDateTime;
 begin
   Result := UnixToDateTime(FEpoch, AReturnUTC);
 end;

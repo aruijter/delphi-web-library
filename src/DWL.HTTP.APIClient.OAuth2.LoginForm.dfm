@@ -31,10 +31,10 @@ object dwlOAuth2LoginForm: TdwlOAuth2LoginForm
       TabOrder = 0
       OnBeforeNavigate2 = BrowserBeforeNavigate2
       OnNavigateComplete2 = BrowserNavigateComplete2
-      ExplicitWidth = 546
-      ExplicitHeight = 644
+      ExplicitWidth = 440
+      ExplicitHeight = 519
       ControlData = {
-        4C000000702D0000993500000000000000000000000000000000000000000000
+        4C000000A5320000BD3B00000000000000000000000000000000000000000000
         000000004C000000000000000000000001000000E0D057007335CF11AE690800
         2B2E126208000000000000004C0000000114020000000000C000000000000046
         8000000000000000000000000000000000000000000000000000000000000000
@@ -59,7 +59,7 @@ object dwlOAuth2LoginForm: TdwlOAuth2LoginForm
         Width = 152
         Height = 30
         Anchors = [akTop, akRight]
-        Caption = 'Inloggen annuleren'
+        Caption = 'Cancel login'
         ModalResult = 2
         TabOrder = 0
       end
@@ -84,6 +84,7 @@ object dwlOAuth2LoginForm: TdwlOAuth2LoginForm
         Align = alClient
         AutoSize = False
         Caption = 'Please login'
+        WordWrap = True
       end
     end
   end
