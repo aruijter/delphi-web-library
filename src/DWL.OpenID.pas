@@ -164,8 +164,17 @@ begin
   var Response := Request.Execute;
   if Response.StatusCode<>HTTP_STATUS_OK then
   begin
-    if Response.StatusCode=HTTP_STATUS_DENIED then
-      Refresh_Token := ''; // we need to re-authenticate
+    if Response.StatusCode=HTTP_STATUS_BAD_REQUEST then
+    begin
+      var JSON := TJSONObject.ParseJSONValue(Response.AsString);
+      try
+        var ErrorString := JSON.GetValue<string>('error');
+        if ErrorString='invalid_grant' then
+          Refresh_Token := ''; // we need to re-authenticate
+      finally
+        JSON.Free;
+      end;
+    end;
     Result.AddErrorMsg('error fetching tokens from OIDC Provider');
     Exit;
   end;

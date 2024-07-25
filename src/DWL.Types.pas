@@ -11,9 +11,9 @@ type
   /// </summary>
   TUnixEpoch = record
   strict private
-    var
-      FEpoch: Int64;
+    FEpoch: Int64;
   public
+    property Epoch: Int64 read FEpoch;
     class function Now(ReturnStartOfTheDay: boolean=false): TUnixEpoch;  static;
     class operator Add(Epoch: TUnixEpoch; Amount: Int64): TUnixEpoch;
     class operator Equal(EpochA, EpochB: TUnixEpoch): boolean;

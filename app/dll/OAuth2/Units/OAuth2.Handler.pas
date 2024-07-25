@@ -118,7 +118,9 @@ const
   IDTOKEN_DURATION = 60*60; // 1 hour
 
   RESPONSE_ERROR_INVALID_REQUEST = 'invalid_request';
-  RESPONSE_ERROR_ACCESS_DENIED = 'access_denied';
+  RESPONSE_ERROR_INVALID_CLIENT = 'invalid_client';
+  RESPONSE_ERROR_INVALID_GRANT = 'invalid_grant';
+  RESPONSE_ERROR_UNSUPPORTED_GRANT_TYPE = 'unsupported_grant_type';
 
 { THandler_OAuth2 }
 
@@ -456,32 +458,32 @@ begin
   var response_type: string;
   if not TryGetRequestParamStr(State, 'response_type', response_type) then
   begin
-    HandlingError(State, 'missing response_type');
+    HandlingError(State);
     Exit;
   end;
   if not SameText(response_type, 'code') then
   begin
-    HandlingError(State, 'unsupported_response_type');
+    HandlingError(State);
     Exit;
   end;
 
   var client_scope: string;
   if (not TryGetRequestParamStr(State, 'scope', client_scope)) or (trim(client_scope)='') then
   begin
-    HandlingError(State, 'missing scope');
+    HandlingError(State);
     Exit;
   end;
   var client_id: string;
   if not TryGetRequestParamStr(State, 'client_id', client_id) then
   begin
-    HandlingError(State, 'missing client_id');
+    HandlingError(State, RESPONSE_ERROR_INVALID_CLIENT);
     Exit;
   end;
 
   var redirect_uri: string;
   if not TryGetRequestParamStr(State, 'redirect_uri', redirect_uri) then
   begin
-    HandlingError(State, 'missing redirect_uri');
+    HandlingError(State);
     Exit;
   end;
 
@@ -500,7 +502,7 @@ begin
   begin
     if (code_challenge_method<>'S256' ) and (code_challenge_method<>'plain') then
     begin
-      HandlingError(State, 'unsupported code_challenge_method');
+      HandlingError(State);
       Exit;
     end;
   end;
@@ -509,7 +511,7 @@ begin
   begin
     if code_challenge_method<>'' then
     begin
-      HandlingError(State, 'missing code_challenge');
+      HandlingError(State);
       Exit;
     end;
     code_challenge := '';
@@ -521,12 +523,12 @@ begin
   Cmd.Execute;
   if not Cmd.Reader.Read then
   begin
-    HandlingError(State, 'invalid client_id');
+    HandlingError(State, RESPONSE_ERROR_INVALID_CLIENT);
     Exit;
   end;
   if Cmd.Reader.GetString(2, true)<>redirect_uri then
   begin
-    HandlingError(State, 'unsupported redirect_uri');
+    HandlingError(State);
     Exit;
   end;
   // create the Authorization session
@@ -588,7 +590,7 @@ begin
   var AuthSession := GetAuthenticationSessionByProviderState(SessionState);
   if AuthSession=nil then
   begin
-    HandlingError(State, 'state mismatch');
+    HandlingError(State);
     Exit;
   end;
   var DisposeAuthSession := true;
@@ -604,14 +606,14 @@ begin
       var EmailAddress: string;
       if not TryGetRequestParamStr(State, 'emailaddress', EmailAddress) then
       begin
-        AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
+        AuthSession.UpdateState_Error(State, RESPONSE_ERROR_INVALID_REQUEST);
         Exit;
       end;
       var Password: string;
       if not TryGetRequestParamStr(State, 'password', Password) then
       begin
         HandlingError(State);
-        AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
+        AuthSession.UpdateState_Error(State, RESPONSE_ERROR_INVALID_REQUEST);
         Exit;
       end;
       // Check the provided credentials
@@ -622,7 +624,7 @@ begin
       var Reader := Cmd.Reader;
       if not Reader.Read then
       begin
-        AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
+        AuthSession.UpdateState_Error(State, RESPONSE_ERROR_INVALID_GRANT);
         Exit;
       end;
       var Salt := Reader.GetString(1, true);
@@ -638,7 +640,7 @@ begin
           begin
             if not SameText(Cmd_Migrate.Reader.GetString(0, true), TdwlCrypt.MD5(Password)) then
             begin
-              State.StatusCode := HTTP_STATUS_DENIED;
+              AuthSession.UpdateState_Error(State, RESPONSE_ERROR_INVALID_GRANT);
               Exit;
             end;
             Salt := TNetEncoding.Base64URL.EncodeBytesToString(TdwlOpenSSL.RandomBytes(32));
@@ -650,13 +652,13 @@ begin
           end
           else
           begin
-            AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
+            AuthSession.UpdateState_Error(State, RESPONSE_ERROR_INVALID_GRANT);
             Exit;
           end;
         end
         else
         begin
-          AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
+          AuthSession.UpdateState_Error(State, RESPONSE_ERROR_INVALID_GRANT);
           Exit;
         end;
       end;
@@ -721,7 +723,7 @@ begin
   var AuthSession := GetAuthenticationSessionByProviderState(ReturnedState);
   if AuthSession=nil then
   begin
-    HandlingError(State, 'authentication state mismatch');
+    HandlingError(State);
     Exit;
   end;
   var DisposeAuthSession := true;
@@ -778,7 +780,7 @@ class procedure THandler_OAuth2.HandlingError(const State: PdwlHTTPHandlingState
 begin
   State.StatusCode := StatusCode;
   if ErrorMessage='' then
-    Response_JSON(State).AddPair('error', 'invalid request')
+    Response_JSON(State).AddPair('error', RESPONSE_ERROR_INVALID_REQUEST)
   else
     Response_JSON(State).AddPair('error', ErrorMessage);
 end;
@@ -795,7 +797,7 @@ begin
   var grant_type: string;
   if not TryGetRequestParamStr(State, 'grant_type', grant_type) then
   begin
-    HandlingError(State, 'missing grant_type parameter');
+    HandlingError(State);
     Exit;
   end;
   var GrantType := grant_type_none;
@@ -809,7 +811,7 @@ begin
     GrantType := grant_type_client_credentials;
   if GrantType=grant_type_none then
   begin
-    HandlingError(State, 'unsupported grant_type');
+    HandlingError(State, RESPONSE_ERROR_UNSUPPORTED_GRANT_TYPE);
     Exit;
   end;
   var UserID := -1;
@@ -821,11 +823,17 @@ begin
   var RequestedScopes := TStringList.Create;
   try
     RequestedScopes.Delimiter := ' ';
-    case GrantType of
-    grant_type_authorization_code: Success := Post_token_handle_authorization_code(State, UserID, RequestedScopes, ClientID, AuthorizeNonce, GrantToken);
-    grant_type_refresh_token: Success := Post_token_handle_refresh_token(State, UserID, Refreshtoken_Order, RequestedScopes, GrantToken);
-    grant_type_client_credentials: Success := Post_token_handle_client_credentials(State, UserID, RequestedScopes);
+    try
+      case GrantType of
+      grant_type_authorization_code: Success := Post_token_handle_authorization_code(State, UserID, RequestedScopes, ClientID, AuthorizeNonce, GrantToken);
+      grant_type_refresh_token: Success := Post_token_handle_refresh_token(State, UserID, Refreshtoken_Order, RequestedScopes, GrantToken);
+      grant_type_client_credentials: Success := Post_token_handle_client_credentials(State, UserID, RequestedScopes);
+      end;
+    except
+      // issue a invalid_grant, do not propagate the error
     end;
+    if not Success then
+      HandlingError(State, RESPONSE_ERROR_INVALID_GRANT);
     if not Success then
       Exit;
     // Scope openid
@@ -886,26 +894,26 @@ begin
     client_secret := GetClientInfoFromHeader(State, client_id);
   if client_id='' then
   begin
-    HandlingError(State, 'missing client_id parameter');
+    HandlingError(State);
     Exit;
   end;
   var Code: string;
   if not TryGetRequestParamStr(State, 'code', Code) then
   begin
-    HandlingError(State, 'missing code parameter');
+    HandlingError(State);
     Exit;
   end;
   var AuthSession := PopAuthenticationSessionByAuthorizationCode(Code);
   if AuthSession=nil then
   begin
-    HandlingError(State, 'authentication state mismatch');
+    HandlingError(State);
     Exit;
   end;
   AuthorizeNonce := AuthSession.replay_nonce;
   try
     if client_id<>AuthSession.client_id then
     begin
-      HandlingError(State, 'client_id mismatch');
+      HandlingError(State);
       Exit;
     end;
     // If PKCE is used, we need to check the challenge
@@ -919,32 +927,32 @@ begin
         code_challenge := TNetEncoding.Base64URL.EncodeBytesToString(TdwlOpenSSL.Calculate_SHA256(ansistring(code_challenge)));
       if code_challenge<>AuthSession.client_code_challenge then
       begin
-        HandlingError(State, 'invalid code_verifier');
+        HandlingError(State);
         Exit;
       end;
     end;
     if (client_secret='') and (code_verifier='') then
     begin
-      HandlingError(State, 'missing code_verifier or client_secret parameter');
+      HandlingError(State);
       Exit;
     end
     else
     begin
       if client_secret<>AuthSession.client_secret then
       begin
-        HandlingError(State, 'client_secret mismatch');
+        HandlingError(State);
         Exit;
       end;
     end;
     var redirect_uri: string;
     if not TryGetRequestParamStr(State, 'redirect_uri', redirect_uri) then
     begin
-      HandlingError(State, 'missing redirect_uri parameter');
+      HandlingError(State);
       Exit;
     end;
     if redirect_uri<>AuthSession.client_redirect_uri then
     begin
-      HandlingError(State, 'redirect_uri mismatch');
+      HandlingError(State);
       Exit;
     end;
     // Everything seems in order, so start issueing the requested tokens
@@ -1014,7 +1022,7 @@ begin
   begin
     if not TryGetRequestParamStr(State, 'client_secret', client_secret) then
     begin
-      HandlingError(State, 'missing client_secret');
+      HandlingError(State);
       Exit;
     end;
   end
@@ -1022,13 +1030,13 @@ begin
     client_secret := GetClientInfoFromHeader(State, client_id);
   if client_id='' then
   begin
-    HandlingError(State, 'missing client_id');
+    HandlingError(State);
     Exit;
   end;
   var RequestedScope: string;
   if (not TryGetRequestParamStr(State, 'scope', RequestedScope)) or (trim(RequestedScope)='') then
   begin
-    HandlingError(State, 'missing scope parameter');
+    HandlingError(State);
     Exit;
   end;
   RequestedScopes.DelimitedText := RequestedScope;
@@ -1042,7 +1050,7 @@ begin
     Result := UserID>=0;
   end;
   if not Result then
-    HandlingError(State, 'wrong credentials', HTTP_STATUS_DENIED);
+    HandlingError(State, RESPONSE_ERROR_INVALID_GRANT);
 end;
 
 class function THandler_OAuth2.Post_token_handle_refresh_token(const State: PdwlHTTPHandlingState; var UserID, Refreshtoken_Order: integer; RequestedScopes: TStringList; var GrantToken: string): boolean;
@@ -1057,13 +1065,13 @@ begin
     GetClientInfoFromHeader(State, client_id);
   if client_id='' then
   begin
-    HandlingError(State, 'missing client_id parameter');
+    HandlingError(State, RESPONSE_ERROR_INVALID_CLIENT);
     Exit;
   end;
   var refresh_token: string;
   if not TryGetRequestParamStr(State, 'refresh_token', refresh_token) then
   begin
-    HandlingError(State, 'missing refresh_token parameter');
+    HandlingError(State);
     Exit;
   end;
   try
@@ -1073,13 +1081,13 @@ begin
     // and we check with the private key as it also containts the public key
     if not JWT.CheckSignature(FSignKey_Priv) then
     begin
-      HandlingError(State, 'invalid refreshtoken', HTTP_STATUS_DENIED);
+      HandlingError(State, RESPONSE_ERROR_INVALID_GRANT);
       Exit;
     end;
     var ThisMoment: Int64 := TUnixEpoch.Now;
     if JWT.Payload.IntValues[jwtclaimEXPIRATION_TIME]<ThisMoment then
     begin
-      HandlingError(State, 'refresh_token expired', HTTP_STATUS_DENIED);
+      HandlingError(State, RESPONSE_ERROR_INVALID_GRANT);
       Exit;
     end;
     var JWTIssuer := JWT.Payload.Values[jwtclaimISSUER];
@@ -1088,7 +1096,7 @@ begin
       // check for migration issuer
       if (FMigration_Issuer='') or (FMigration_Issuer<>JWTIssuer) then
       begin
-        HandlingError(State, 'refresh_token issuer invalid', HTTP_STATUS_DENIED);
+        HandlingError(State, RESPONSE_ERROR_INVALID_GRANT);
         Exit;
       end;
     end;
@@ -1098,17 +1106,17 @@ begin
     Cmd.Execute;
     if not Cmd.Reader.Read then
     begin
-      HandlingError(State, 'invalid refreshtoken', HTTP_STATUS_DENIED);
+      HandlingError(State, RESPONSE_ERROR_INVALID_GRANT);
       Exit;
     end;
     if Cmd.Reader.GetString(2, true)<>client_id then
     begin
-      HandlingError(State, 'invalid client_id parameter');
+      HandlingError(State, RESPONSE_ERROR_INVALID_CLIENT);
       Exit;
     end;
     if Cmd.Reader.GetInt64(3)<ThisMoment then
     begin
-      HandlingError(State, 'refresh_token expired', HTTP_STATUS_DENIED);
+      HandlingError(State, RESPONSE_ERROR_INVALID_GRANT);
       Exit;
     end;
     RequestedScopes.DelimitedText := JWT.Payload.Values[jwt_key_SCOPE];
@@ -1121,7 +1129,7 @@ begin
       var CmdDel := MySQLCommand(State, SQL_Del_Grant);
       CmdDel.Parameters.SetIntegerDataBinding(0, GrantID);
       CmdDel.Execute;
-      HandlingError(State, 'invalid refresh_token', HTTP_STATUS_DENIED);
+      HandlingError(State, RESPONSE_ERROR_INVALID_GRANT);
       Exit;
     end;
     // increment refreshtoken_order and post
@@ -1135,7 +1143,7 @@ begin
     UserID := Cmd.Reader.GetInteger(1);
     // all set, the actual tokens are created below
   except
-    HandlingError(State, 'invalid refresh_token parameter');
+    HandlingError(State, RESPONSE_ERROR_INVALID_GRANT);
     Exit;
   end;
   Result := true;
