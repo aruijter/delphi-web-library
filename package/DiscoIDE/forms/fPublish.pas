@@ -140,26 +140,26 @@ begin
             Exit;
           // SENDING RELEASE
           AddMessage(lsNotice, 'Sending release to server...');
-          var Request := FApiSession.PrepareAPIRequest('upload/package', HTTP_METHOD_POST);
+          var Request := FApiSession.New_APIRequest('upload/package', HTTP_METHOD_POST);
           var Bytes := TFile.ReadAllBytes(ZipTo);
-          Request.PostStream.Write(Bytes[0], Length(Bytes));
-          Request.Header['packagename'] := FPackagename;
-          Request.Header['version'] := FVersionOfFile.GetAsString(true);
+          Request.HTTPRequest.PostStream.Write(Bytes[0], Length(Bytes));
+          Request.HTTPRequest.Header['packagename'] := FPackagename;
+          Request.HTTPRequest.Header['version'] := FVersionOfFile.GetAsString(true);
           if FVersionOfFile.IsPreRelease then
-            Request.Header['kind'] := discoreleasekindPreRelease.ToString
+            Request.HTTPRequest.Header['kind'] := discoreleasekindPreRelease.ToString
           else
-            Request.Header['kind'] := discoreleasekindRelease.ToString;
-          Request.Header['fileextension'] := '7z';
+            Request.HTTPRequest.Header['kind'] := discoreleasekindRelease.ToString;
+          Request.HTTPRequest.Header['fileextension'] := '7z';
           var Response := Request.Execute;
           var IsOk: boolean;
-          IsOk := Response.StatusCode=HTTP_STATUS_OK;
+          IsOk := Response.HTTPResponse.StatusCode=HTTP_STATUS_OK;
           if IsOk then
           begin
-            var JSON := TJSONObject.ParseJSONValue(Response.AsString);
+            var JSON := TJSONObject.ParseJSONValue(Response.HTTPResponse.AsString);
             try
               IsOk := JSON.GetValue<boolean>('success', false);
               if not IsOk then
-                AddMessage(lsError, 'Upload failed: '+Response.AsString);
+                AddMessage(lsError, 'Upload failed: '+Response.HTTPResponse.AsString);
             finally
               JSON.Free;
             end;
