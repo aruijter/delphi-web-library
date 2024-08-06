@@ -181,13 +181,13 @@ end;
 class function TdwlDiscoClient.CheckPreReleaseUpdate: TdwlResult;
 begin
   var Response := TdwlDisco.FApiSession.ExecuteJSONRequest('release', HTTP_METHOD_GET, 'packagename='+AppName);
-  if (not Response.Success) or (Response.Data.GetValue<integer>('kind')<>discoreleasekindPreRelease) then
+  if (not Response.Success) or (Response.JSON_Data.GetValue<integer>('kind')<>discoreleasekindPreRelease) then
   begin
     Result.AddErrorMsg('No PreRelease available right now.');
     Exit;
   end;
   var ConfigVersion: TdwlFileVersionInfo;
-  ConfigVersion.SetFromString(Response.Data.GetValue<string>('version'));
+  ConfigVersion.SetFromString(Response.JSON_Data.GetValue<string>('version'));
   ConfigVersion.IsPreRelease := true;
   var FileVersion := TdwlFileVersionInfo.CreateFromFile;
   if ConfigVersion.IsEmpty or FileVersion.IsEmpty or (FileVersion>=ConfigVersion) then
@@ -325,7 +325,7 @@ begin
   end;
   if (Response<>nil) and Response.Success then
   begin
-    Data := Response.Data;
+    Data := Response.JSON_Data;
     try
       if CacheFn<>'' then
         TFile.WriteAllText(CacheFn, Data.ToJSON);

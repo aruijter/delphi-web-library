@@ -21,7 +21,7 @@ implementation
 
 uses
   System.RegularExpressions, System.Classes, DWL.HTTP.Client, DWL.HTTP.Consts,
-  System.NetEncoding, Winapi.WinInet;
+  System.NetEncoding, Winapi.WinInet, DWL.MediaTypes;
 
 { TdwlMailUtils }
 
@@ -110,7 +110,7 @@ begin
   finally
     Stream.Free;
   end;
-  Request.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_OCTET_STREAM;
+  Request.Header[HTTP_FIELD_CONTENT_TYPE] := MEDIA_TYPE_OCTET_STREAM;
   Request.Method  := HTTP_METHOD_POST;
   var Response := Request.Execute;
   if Response.StatusCode<>HTTP_STATUS_OK then

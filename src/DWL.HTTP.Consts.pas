@@ -8,16 +8,6 @@ const
   CONNECTION_CLOSE = 'Close';
   CONNECTION_KEEP_ALIVE = 'Keep-Alive';
 
-  CONTENT_TYPE_7Z = 'application/x-7z-compressed';
-  CONTENT_TYPE_HTML = 'text/html';
-  CONTENT_TYPE_IMAGE_PNG = 'image/png';
-  CONTENT_TYPE_JOSE_JSON = 'application/jose+json';
-  CONTENT_TYPE_JSON = 'application/json';
-  CONTENT_TYPE_JSONAPI = 'application/vnd.api+json';
-  CONTENT_TYPE_OCTET_STREAM = 'application/octet-stream';
-  CONTENT_TYPE_PLAIN = 'text/plain';
-  CONTENT_TYPE_X_WWW_FORM_URLENCODED = 'application/x-www-form-urlencoded';
-
   EXPECT_100_CONTINUE = '100-continue';
 
   HTTP_FIELD_AUTHORIZATION = 'Authorization';

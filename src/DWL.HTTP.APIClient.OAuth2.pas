@@ -32,7 +32,7 @@ uses
   System.IOUtils, DWL.Crypt;
 
 type
-  TdwlAPIOAuth2Authorizer = class(TdwlAPIAuthorizer, IdwlAPIOAuth2Authorizer)
+  TdwlAPIOAuth2Authorizer = class(TdwlAPIAuthorizerWithRefreshToken, IdwlAPIOAuth2Authorizer)
   strict private
     FOIDC_Client: TdwlOIDC_Client;
     FDialogTitle: string;
@@ -74,6 +74,9 @@ begin
   var Expires_In: integer;
   var Refresh_Token := GetRefreshToken;
   if Refresh_Token='' then
+    Exit;
+  // maybe an access was already provided when getting a refreshtoken
+  if AccessTokenPresent then
     Exit;
   var Res := FOIDC_Client.GetAccessTokenFromRefreshToken(Refresh_Token, Access_Token, Expires_In);
   NewRefreshToken(Refresh_Token); // save new (or invalidated) refreshtoken

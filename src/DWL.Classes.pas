@@ -21,7 +21,7 @@ type
     FSuccess: boolean;
     FErrorMsg: string;
   public
-    class operator Initialize (out Dest: TdwlResult);
+    class operator Initialize(out Dest: TdwlResult);
     /// <summary>
     ///   Call AddErrorMsg during processing when a fault condition is
     ///   encoutered. The Msg will be added to the Msg result and success is

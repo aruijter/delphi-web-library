@@ -15,10 +15,10 @@ implementation
 
 uses
   DWL.HTTP.Client, DWL.HTTP.Consts, System.SysUtils, System.NetEncoding,
-  Winapi.WinInet, Winapi.Windows;
+  Winapi.WinInet, Winapi.Windows, DWL.MediaTypes;
 
 type
-  TdwlAPIUserNamePasswordAuthorizer = class(TdwlAPIAuthorizer)
+  TdwlAPIUserNamePasswordAuthorizer = class(TdwlAPIAuthorizerWithRefreshToken)
   strict private
     FCallBackProc: TdwlAPIUserNamePasswordAuthorizerCallBackProc;
     FAuthorization_Endpoint: string;
@@ -52,7 +52,7 @@ begin
     var lRequest := New_HTTPRequest(FAuthorization_Endpoint+'/refreshtoken');
     lRequest.Method := HTTP_METHOD_POST;
     lRequest.WritePostData(Format('username=%s&password=%s', [TNetEncoding.URL.Encode(Username), TNetEncoding.URL.Encode(Password)]));
-    lRequest.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
+    lRequest.Header[HTTP_FIELD_CONTENT_TYPE] := MEDIA_TYPE_X_WWW_FORM_URLENCODED;
     var lResponse := lRequest.Execute;
     if lResponse.StatusCode=200 then
     begin
@@ -77,10 +77,14 @@ end;
 
 procedure TdwlAPIUserNamePasswordAuthorizer.AcquireAccessToken;
 begin
+  var RefreshToken := GetRefreshToken;
+  // maybe getting refreshtoken already filled accesstoken
+  if AccessTokenPresent then
+    Exit;
   var lRequest := New_HTTPRequest(FAuthorization_Endpoint+'/accesstoken');
   lRequest.Method := HTTP_METHOD_POST;
   lRequest.WritePostData(Format('refreshtoken=%s', [GetRefreshToken]));
-  lRequest.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_X_WWW_FORM_URLENCODED;
+  lRequest.Header[HTTP_FIELD_CONTENT_TYPE] := MEDIA_TYPE_X_WWW_FORM_URLENCODED;
   var lResponse := lRequest.Execute;
   case lResponse.StatusCode of
   HTTP_STATUS_OK:
