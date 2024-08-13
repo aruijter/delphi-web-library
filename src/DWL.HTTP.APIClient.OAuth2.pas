@@ -12,6 +12,7 @@ type
   IdwlAPIOAuth2Authorizer = interface(IdwlAPIAuthorizer)
     ['{A1BB96A5-7391-4633-B9DC-7BD681FF7731}']
     function CheckJWT(JWT: IdwlJWT): TdwlResult;
+    function GetRefreshToken: string;
   end;
 
 /// <summary>

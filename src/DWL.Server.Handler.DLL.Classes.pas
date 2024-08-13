@@ -538,7 +538,10 @@ end;
 class procedure TdwlDLLHandling.WrapUp(const State: PdwlHTTPHandlingState);
 begin
   if (State=nil) then
+  begin
     FHandlingEndpoints.Free;
+    TdwlLogger.FinalizeDispatching;
+  end;
 end;
 
 function THandlingEndpoint_Props.ScopesAllowed(const State: PdwlHTTPHandlingState): boolean;
