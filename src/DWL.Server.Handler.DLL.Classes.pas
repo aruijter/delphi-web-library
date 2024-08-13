@@ -152,7 +152,8 @@ implementation
 uses
   DWL.HTTP.Consts, System.SysUtils, DWL.JOSE, DWL.Types, DWL.Params.Consts,
   System.Rtti, System.DateUtils, DWL.Logging, DWL.Logging.DWLServer,
-  DWL.Server.Utils, DWL.Server.Globals, DWL.Server.Consts, DWL.Mail.Utils;
+  DWL.Server.Utils, DWL.Server.Globals, DWL.Server.Consts, DWL.Mail.Utils,
+  DWL.MediaTypes;
 
 const
   Param_Body_JSON='body_json';
@@ -179,7 +180,7 @@ begin
   begin
     Result := nil;
     var CType: string;
-    if TryGetHeaderValue(State, HTTP_FIELD_CONTENT_TYPE, CType) and SameText(Copy(CType, 1, CONTENT_TYPE_JSON.Length), CONTENT_TYPE_JSON) then
+    if TryGetHeaderValue(State, HTTP_FIELD_CONTENT_TYPE, CType) and SameText(Copy(CType, 1, MEDIA_TYPE_JSON.Length), MEDIA_TYPE_JSON) then
     begin
       var PostData: pointer;
       var PostDataSize: Int64;
@@ -266,7 +267,7 @@ begin
       State.SetContentText(PBaseInternalHandlingStructure(State._InternalHandlingStructure).Response_JSON.ToJSON, '');
       var ContentType: string;
       if not State.TryGetResponseHeaderValue(HTTP_FIELD_CONTENT_TYPE, ContentType) then
-        State.SetContentType(CONTENT_TYPE_JSON, CHARSET_UTF8);
+        State.SetContentType(MEDIA_TYPE_JSON, CHARSET_UTF8);
       PBaseInternalHandlingStructure(State._InternalHandlingStructure).Response_JSON.Free;
     end;
     if PBaseInternalHandlingStructure(State._InternalHandlingStructure).Params<>nil then

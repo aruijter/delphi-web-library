@@ -6,7 +6,7 @@ unit DWL.Server.Utils;
 interface
 
 uses
-  DWL.Server.Types, DWL.HTTP.Consts;
+  DWL.Server.Types, DWL.HTTP.Consts, DWL.MediaTypes;
 
 type
   /// <summary>
@@ -27,7 +27,7 @@ type
     ///   This function uses the server callback function to set the
     ///   contentbuffer/length and contenttype of the request.
     /// </summary>
-    procedure SetContentText(const BodyStr: string; const ContentType: string=CONTENT_TYPE_HTML);
+    procedure SetContentText(const BodyStr: string; const ContentType: string=MEDIA_TYPE_HTML);
     procedure SetHeaderValue(const HeaderKey, Value: string);
   end;
 
@@ -43,7 +43,7 @@ begin
   var CharsetToWrite := CharSet;
   if CharsetToWrite='' then
   begin
-    if SameText(ContentType, CONTENT_TYPE_X_WWW_FORM_URLENCODED) then
+    if SameText(ContentType, MEDIA_TYPE_X_WWW_FORM_URLENCODED) then
       CharsetToWrite := CHARSET_UTF8; // always add charset=utf-8 TNetEncoding.Url does utf8, but default for content type is iso-8859-1
   end;
   var CombinedContentType := ContentType;
@@ -96,7 +96,7 @@ begin
   end;
 end;
 
-procedure TdwlHTTPHandlingStateHelper.SetContentText(const BodyStr: string; const ContentType: string=CONTENT_TYPE_HTML);
+procedure TdwlHTTPHandlingStateHelper.SetContentText(const BodyStr: string; const ContentType: string=MEDIA_TYPE_HTML);
 begin
   if ContentType<>'' then
     Self.SetContentType(ContentType, CHARSET_UTF8);

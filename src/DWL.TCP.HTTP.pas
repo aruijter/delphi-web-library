@@ -86,7 +86,7 @@ implementation
 uses
   Winapi.Windows, System.SysUtils, System.NetEncoding,
   System.StrUtils, DWL.HTTP.Utils, DWL.HTTP.Consts, DWL.Logging,
-  System.Threading;
+  System.Threading, DWL.MediaTypes;
 
 type
   TRequestLogDispatchThread = class(TdwlThread)
@@ -266,7 +266,7 @@ begin
     end;
   end;
   var ContTypeHeader := TdwlHTTPUtils.ParseHTTPFieldValue(RequestHeaders.StrValue(HTTP_FIELD_CONTENT_TYPE));
-  if SameText(ContTypeHeader.MainValue, CONTENT_TYPE_X_WWW_FORM_URLENCODED) and (FRequestBodyStream<>nil) then
+  if SameText(ContTypeHeader.MainValue, MEDIA_TYPE_X_WWW_FORM_URLENCODED) and (FRequestBodyStream<>nil) then
   begin
     var WideStr: string;;
     var CodePage := TdwlHTTPUtils.MIMEnameToCodepage(ContTypeHeader.SubValue(HTTP_SUBFIELD_CHARSET, CHARSET_UTF8));
@@ -442,7 +442,7 @@ begin
       begin
         if FReadError<>'' then
         begin
-          FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_TYPE, CONTENT_TYPE_HTML);
+          FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_TYPE, MEDIA_TYPE_HTML);
           var ErrStr := ansistring('<html><body><h1>'+TNetEncoding.HTML.Encode(FReadError)+'</h1></body></html>');
           FResponseDataStream.WriteBuffer(PAnsiChar(ErrStr)^, Length(ErrStr));
         end;

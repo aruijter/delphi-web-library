@@ -165,7 +165,7 @@ uses
   System.DateUtils, System.IOUtils, System.Math, System.JSON, Winapi.WinInet,
   System.Hash, Winapi.Windows,
   System.Generics.Collections, System.NetEncoding, DWL.TCP.Consts, DWL.TCP.HTTP,
-  DWL.TCP;
+  DWL.TCP, DWL.MediaTypes;
 
 const
   ProductionAPIEndpoint ='https://acme-v02.api.letsencrypt.org/directory';
@@ -312,7 +312,7 @@ begin
   Request.Method := Method;
   if (Method=HTTP_METHOD_POST) then
   begin
-    Request.Header[HTTP_FIELD_CONTENT_TYPE] := CONTENT_TYPE_JOSE_JSON;
+    Request.Header[HTTP_FIELD_CONTENT_TYPE] := MEDIA_TYPE_JOSE_JSON;
     var JWS := New_JWS;
     JWS.SetPayloadString(PayLoad);
     // Payload is always provided as a JWS object if Account URL is not yet available
@@ -741,7 +741,7 @@ end;
 
 function TCallBackServer.HandleRequest(Request: TdwlHTTPSocket): boolean;
 begin
-  Request.ResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_TYPE, CONTENT_TYPE_PLAIN);
+  Request.ResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_TYPE, MEDIA_TYPE_PLAIN);
   Request.ResponseDataStream.WriteBuffer(FCurrentChallengeResponse[1], Length(FCurrentChallengeResponse));
   Result := true;
 end;
