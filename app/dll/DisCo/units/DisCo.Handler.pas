@@ -29,7 +29,7 @@ implementation
 uses
   DWL.HTTP.Consts, DWL.Server.Utils, DWL.MySQL, DWL.Params.Consts,
   System.JSON, DWL.Resolver, System.StrUtils, System.SysUtils, Winapi.WinInet,
-  DWL.Server.Globals, DWL.DisCo.Consts, System.DateUtils;
+  DWL.Server.Globals, DWL.DisCo.Consts, System.DateUtils, DWL.MediaTypes;
 
 const
   Param_Additional_parameters_SQL = 'additional_parameters_sql';
@@ -234,7 +234,7 @@ begin
           var Size: Int64 := dwDataSize;
           serverProcs.ArrangeContentBufferProc(State, ContentBuffer, Size);
           Move(pBuffer^, ContentBuffer^, Size);
-          State.SetContentType(CONTENT_TYPE_OCTET_STREAM);
+          State.SetContentType(MEDIA_TYPE_OCTET_STREAM);
           State.SetHeaderValue(HTTP_FIELD_CONTENT_DISPOSITION, 'filename='+Cmd.Reader.GetString(2, true)+'.'+Cmd.Reader.GetString(1));
         end
         else

@@ -104,7 +104,7 @@ implementation
 uses
   System.SysUtils, System.NetEncoding, DWL.Params.Consts, DWL.MySQL,
   System.JSON, DWL.HTTP.Consts,
-  DWL.Crypt, System.StrUtils, DWL.Server.Utils;
+  DWL.Crypt, System.StrUtils, DWL.Server.Utils, DWL.MediaTypes;
 
 const
   OIDC_Return_Path = '/oidc_return';
@@ -448,7 +448,7 @@ begin
   begin
     var ContType: string;
     if not TryGetHeaderValue(State, HTTP_FIELD_CONTENT_TYPE, ContType) or
-      (ContType<>CONTENT_TYPE_X_WWW_FORM_URLENCODED) then
+      (ContType<>MEDIA_TYPE_X_WWW_FORM_URLENCODED) then
     begin
       HandlingError(State);
       Exit;
@@ -699,7 +699,7 @@ end;
 
 class function THandler_OAuth2.Get_certs(const State: PdwlHTTPHandlingState): boolean;
 begin
-  State.SetContentText(FCertsInfo, CONTENT_TYPE_JSON);
+  State.SetContentText(FCertsInfo, MEDIA_TYPE_JSON);
   Result := true;
 end;
 

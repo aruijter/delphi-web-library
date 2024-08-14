@@ -6,6 +6,9 @@ uses
   System.Rtti, System.UITypes;
 
 type
+  TPeriodicity_Implementation=class;
+  TPeriodicity = class of TPeriodicity_Implementation;
+
   /// <summary>
   ///   A record including class operators to represent a Unix Time.
   /// </summary>
@@ -13,7 +16,7 @@ type
   strict private
     FEpoch: Int64;
   public
-    property Epoch: Int64 read FEpoch;
+    Epoch: Int64;
     class function Now(ReturnStartOfTheDay: boolean=false): TUnixEpoch;  static;
     class operator Add(Epoch: TUnixEpoch; Amount: Int64): TUnixEpoch;
     class operator Equal(EpochA, EpochB: TUnixEpoch): boolean;
@@ -84,6 +87,28 @@ type
     ///   the Julian year component of the Unix Time, This is UTC!
     /// </summary>
     function Year: word;
+    procedure AddPeriod(APeriodicity: TPeriodicity; Amount: integer=1);
+  end;
+
+  TPeriodicity_Implementation = class abstract
+  public
+    class function AddPeriod(Epoch: TUnixEpoch; Amount: integer): TUnixEpoch; virtual; abstract;
+    class function EndOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; virtual; abstract;
+    class function StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; virtual; abstract;
+  end;
+
+  TPeriodicity_Daily = class abstract(TPeriodicity_Implementation)
+  public
+    class function AddPeriod(Epoch: TUnixEpoch; Amount: integer): TUnixEpoch; override;
+    class function EndOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; override;
+    class function StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; override;
+  end;
+
+  TPeriodicity_Dekadal = class abstract(TPeriodicity_Implementation)
+  public
+    class function AddPeriod(Epoch: TUnixEpoch; Amount: integer=1): TUnixEpoch; override;
+    class function EndOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; override;
+    class function StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; override;
   end;
 
   /// <summary>
@@ -175,13 +200,19 @@ const
 implementation
 
 uses
-  System.DateUtils, System.SysUtils, Winapi.Windows, System.UIConsts;
+  System.DateUtils, System.SysUtils, Winapi.Windows, System.UIConsts,
+  System.Math;
 
 { TUnixEpoch }
 
 class operator TUnixEpoch.Add(Epoch: TUnixEpoch; Amount: Int64): TUnixEpoch;
 begin
   Result.FEpoch := Epoch.FEpoch+Amount;
+end;
+
+procedure TUnixEpoch.AddPeriod(APeriodicity: TPeriodicity; Amount: integer=1);
+begin
+  Self := APeriodicity.AddPeriod(Self, Amount);
 end;
 
 constructor TUnixEpoch.Create(ADateTime: TDateTime; IsUTC: boolean=true);
@@ -522,6 +553,90 @@ begin
   Create(StringToColor('$' + Copy(AHTMLColor, 6, 2) + Copy(AHTMLColor, 4, 2) + Copy(AHTMLColor, 2, 2)));
 end;
 
+{ TPeriodicity_Daily }
 
+class function TPeriodicity_Daily.AddPeriod(Epoch: TUnixEpoch; Amount: integer): TUnixEpoch;
+begin
+  Result := Epoch+Amount*86400;
+end;
+
+class function TPeriodicity_Daily.EndOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch;
+begin
+  Result := StartOfThePeriod(Epoch)+86399;
+end;
+
+class function TPeriodicity_Daily.StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch;
+begin
+  // simply return the start of the day
+  Result := TUnixEpoch.Create(trunc(Epoch.ToDateTime));
+end;
+
+{ TPeriodicity_Dekadal }
+
+class function TPeriodicity_Dekadal.AddPeriod(Epoch: TUnixEpoch; Amount: integer=1): TUnixEpoch;
+begin
+  // First decode the Epoch to y,m,d and DekInYear
+  var y, m, d: word;
+  var Input := Epoch.ToDateTime;
+  DecodeDate(Input, y, m, d);
+  var DekInYear := (m-1)*3+Min(3,((d+9) div 10));
+  // Keep the seconds offset from the start of the dekad
+  var SecsOffset := round((Input-EncodeDate(y, m,  (DekInYear-(m-1)*3)*10-9))*SecsPerDay);
+  // do the actual increase
+  inc(DekInYear, Amount);
+  // noermalize values
+  while DekInYear<1 do
+  begin
+    Inc(DekInYear, 36);
+    Dec(y);
+  end;
+  while DekInYear>36 do
+  begin
+    Dec(DekInYear, 36);
+    Inc(y);
+  end;
+  m := (DekInYear+2) div 3;
+  d := (DekInYear-(m-1)*3)*10-9;
+  // assemble the result
+  var Start := TUnixEpoch.Create(EncodeDate(y, m, d));
+  Result := Start+SecsOffset;
+  // not all dekads have the same length, maximize on the last second
+  Result := Min(Result, EndOfThePeriod(Start));
+end;
+
+class function TPeriodicity_Dekadal.EndOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch;
+begin
+  // First decode the Epoch to y,m,d and DekInYear
+  var y, m, d: word;
+  var Input := Epoch.ToDateTime;
+  DecodeDate(Input, y, m, d);
+  var DekInYear := (m-1)*3+Min(3,((d+9) div 10));
+  // go to next dekad
+  inc(DekInYear);
+  // normalize
+  if DekInYear=37 then
+  begin
+    inc(y);
+    DekInYear:= 1;
+  end;
+  // assemble the Reusult
+  m := (DekInYear+2) div 3;
+  d := (DekInYear-(m-1)*3)*10-9;
+  Result := TUnixEpoch.Create(EncodeDate(y, m, d));
+  // and report back the second before the start of the next dekad
+  Result := Result-1;
+end;
+
+class function TPeriodicity_Dekadal.StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch;
+begin
+  // First decode the Epoch to y,m,d and DekOffSet
+  var y, m, d: word;
+  var Input := Epoch.ToDateTime;
+  DecodeDate(Input, y, m, d);
+  var DekOffsetInMonth := Min(3,((d+9) div 10))-1;
+  // And Assemble the result
+  Result := TUnixEpoch.Create(EncodeDate(y, m, 1));
+  Result := Result++DekOffsetInMonth*864000;
+end;
 
 end.
