@@ -553,8 +553,6 @@ begin
   Create(StringToColor('$' + Copy(AHTMLColor, 6, 2) + Copy(AHTMLColor, 4, 2) + Copy(AHTMLColor, 2, 2)));
 end;
 
-<<<<<<< HEAD
-=======
 { TPeriodicity_Daily }
 
 class function TPeriodicity_Daily.AddPeriod(Epoch: TUnixEpoch; Amount: integer): TUnixEpoch;
@@ -641,6 +639,5 @@ begin
   Result := Result++DekOffsetInMonth*864000;
 end;
 
->>>>>>> fd33e51a9e4bf15870ecb3be8617e713958e868d
 end.
 
