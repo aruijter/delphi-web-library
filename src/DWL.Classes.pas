@@ -6,6 +6,11 @@ uses
   DWL.Params, System.Classes;
 
 type
+  IdwlResult_Messages = interface
+    procedure AddErrorMsg(const ErrorMsgToAdd: string);
+    function ErrorMsg: string;
+  end;
+
   /// <summary>
   ///   A record defining a generic multi function structure for methods that
   ///   must provide a non simple signal to the caller. The calling method can
@@ -19,7 +24,7 @@ type
   private
     FParams: IdwlParams;
     FSuccess: boolean;
-    FErrorMsg: string;
+    FMessages: IdwlResult_Messages;
   public
     class operator Initialize(out Dest: TdwlResult);
     /// <summary>
@@ -61,14 +66,28 @@ type
 
 implementation
 
+uses
+  System.SysUtils;
+
+type
+  TdwlResult_ErrorMessages = class(TInterfacedObject, IdwlResult_Messages)
+  strict private
+    FErrorMessages: TStringList;
+  private
+    procedure AddErrorMsg(const ErrorMsgToAdd: string);
+    function ErrorMsg: string;
+  public
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
 { TdwlResult }
 
 procedure TdwlResult.AddErrorMsg(const ErrorMsgToAdd: string);
 begin
-  if ErrorMsg<>'' then
-    FErrorMsg := FErrorMsg+#13#10+ErrorMsgToAdd
-  else
-    FErrorMsg := ErrorMsgToAdd;
+  if FMessages=nil then
+    FMessages := TdwlResult_ErrorMessages.Create;
+  FMessages.AddErrorMsg(ErrorMsgToAdd);
   FSuccess := false;
 end;
 
@@ -87,7 +106,10 @@ end;
 
 function TdwlResult.ErrorMsg: string;
 begin
-  Result := FErrorMsg;
+  if FMessages=nil then
+    Result := ''
+  else
+    Result := FMessages.ErrorMsg;
 end;
 
 function TdwlResult.Params: IdwlParams;
@@ -108,6 +130,32 @@ constructor TdwlReadOnlyBufferStream.Create(ContentBuffer: pointer; ContentSize:
 begin
   inherited Create;
   SetPointer(ContentBuffer, ContentSize);
+end;
+
+{ TdwlResult_ErrorMessages }
+
+procedure TdwlResult_ErrorMessages.AddErrorMsg(const ErrorMsgToAdd: string);
+begin
+  if FErrorMessages.IndexOf(ErrorMsgToAdd)<0 then
+    FErrorMessages.Add(ErrorMsgToAdd);
+end;
+
+constructor TdwlResult_ErrorMessages.Create;
+begin
+  inherited Create;
+  FErrorMessages := TStringList.Create;
+  FErrorMessages.CaseSensitive := false;
+end;
+
+destructor TdwlResult_ErrorMessages.Destroy;
+begin
+  FErrorMessages.Free;
+  inherited Destroy;
+end;
+
+function TdwlResult_ErrorMessages.ErrorMsg: string;
+begin
+  Result := FErrorMessages.Text;
 end;
 
 end.
