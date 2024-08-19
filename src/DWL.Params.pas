@@ -106,7 +106,7 @@ type
     /// <param name="Params">
     ///   The Params that will receive the key/value pairs
     /// </param>
-    /// <param name="ExlcudeKeyss">
+    /// <param name="ExcludeKeys">
     ///   These keys will be skipped and not assigned
     /// </param>
     procedure AssignTo(Params: IdwlParams; ExcludeKeys: TArray<string>); overload;
@@ -504,8 +504,11 @@ type
     /// <param name="CallBackProc">
     ///   The procedure to be called in the case of changes
     /// </param>
-    procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false); overload;
-    procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false); overload;
+    /// <param name="RestrictToConfiguredMetaKeys">
+    ///   Set to true to only report back changes from keys that are defined in metadata
+    /// </param>
+    procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc; RestrictToConfiguredMetaKeys: boolean=false); overload;
+    procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc; RestrictToConfiguredMetaKeys: boolean=false); overload;
     procedure RegisterPersistHook(PersistHook: IdwlParamsPersistHook);
     procedure UnRegisterPersistHook;
     function MetaKeyConsulter(const Key: string): IdwlMetaKeyConsulter;
@@ -572,8 +575,8 @@ function New_Params(ParamPairs: array of TdwlParamPair): IdwlParams; overload;
 /// <param name="Key">
 ///   The key applicable for the given default value
 /// </param>
-/// <param name="Default">
-///   The default value to be returned if the key/value pari is not present
+/// <param name="TypeInfo">
+///   The typeinfo of the metakey
 /// </param>
 /// <remarks>
 ///   <para>
@@ -668,8 +671,8 @@ type
     function Clone: IdwlParams;
     procedure ExecuteTriggers(const TriggerKey: string);
     procedure Resolve(var Str: string);
-    procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false); overload;
-    procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false); overload;
+    procedure EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc; RestrictToConfiguredMetaKeys: boolean=false); overload;
+    procedure EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc; RestrictToConfiguredMetaKeys: boolean=false); overload;
     function CheckValue(const Key: string; const Value: TValue): TdwlCheckResult;
     procedure WriteValue(const Key: string; const Value: TValue; SkipPersisting: boolean=false);
     procedure ClearKey(const Key: string);
@@ -987,15 +990,15 @@ begin
     Result := Default
 end;
 
-procedure TdwlParams.EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false);
+procedure TdwlParams.EnableChangeTracking(CallBackProc: TChangeMethodCallBackProc; RestrictToConfiguredMetaKeys: boolean=false);
 begin
-  FChangeCallBacksRestrictedToConfiguredMetaKeys := FRestrictToConfiguredMetaKeys;
+  FChangeCallBacksRestrictedToConfiguredMetaKeys := RestrictToConfiguredMetaKeys;
   FChangeMethodCallbackProc := CallBackProc;
 end;
 
-procedure TdwlParams.EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc; FRestrictToConfiguredMetaKeys: boolean=false);
+procedure TdwlParams.EnableChangeTracking(CallBackProc: TChangeRegularCallBackProc; RestrictToConfiguredMetaKeys: boolean=false);
 begin
-  FChangeCallBacksRestrictedToConfiguredMetaKeys := FRestrictToConfiguredMetaKeys;
+  FChangeCallBacksRestrictedToConfiguredMetaKeys := RestrictToConfiguredMetaKeys;
   FChangeRegularCallbackProc := CallBackProc;
 end;
 
@@ -1550,3 +1553,4 @@ begin
 end;
 
 end.
+
