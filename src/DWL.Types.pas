@@ -163,33 +163,16 @@ type
     function IsEmpty: boolean;
   end;
 
-  TdwlARGBColor = cardinal;
-  TdwlABGRColor = cardinal;
-
-  TdwlDelphiABGRColorRec = record
-    constructor Create(AColor: TColor); overload;
-    constructor Create(AColor: TdwlARGBColor); overload;
-    constructor Create(const AHTMLColor: string); overload;
-    function AsHTML: string;
-    function AsARGBColor: TdwlARGBCOlor;
-    case Cardinal of
-      0:
-        (Color: TdwlABGRColor);
-      1:
-        (R, G, B, A: System.Byte);
-  end;
-
-  TdwlRestOfTheWorldARGBColorRec = record
-    constructor Create(AColor: TColor); overload;
-    constructor Create(AColor: TdwlARGBColor); overload;
-    constructor Create(const AHTMLColor: string); overload;
-    function AsHTML: string;
-    function AsABGRColor: TdwlABGRCOlor;
-    case Cardinal of
-      0:
-        (Color: TdwlARGBColor);
-      1:
-        (B, G, R, A: System.Byte);
+  TdwlColor = record
+    constructor CreateFromTColor(Color: TColor);
+    constructor CreateFromHex(const Hex: string);
+    function AsHex(IncludeAlpha: boolean=true; LeadChar: WideChar=#0): string;
+    function AsTColor: TColor;
+  case cardinal of
+    0:
+      (ARGB: cardinal);
+    1:
+     (B, G, R, A: byte);
   end;
 
 const
@@ -201,7 +184,7 @@ implementation
 
 uses
   System.DateUtils, System.SysUtils, Winapi.Windows, System.UIConsts,
-  System.Math;
+  System.Math, System.StrUtils;
 
 { TUnixEpoch }
 
@@ -492,67 +475,6 @@ begin
   end;
 end;
 
-{ TdwlDelphiABGRColorRec }
-
-constructor TdwlDelphiABGRColorRec.Create(AColor: TdwlARGBColor);
-begin
-  R := TdwlRestOfTheWorldARGBColorRec(AColor).R;
-  G := TdwlRestOfTheWorldARGBColorRec(AColor).G;
-  B := TdwlRestOfTheWorldARGBColorRec(AColor).B;
-  A := TdwlRestOfTheWorldARGBColorRec(AColor).A;
-end;
-
-constructor TdwlDelphiABGRColorRec.Create(AColor: TColor);
-begin
-  Color := TColorRec.ColorToRGB(AColor);
-end;
-
-function TdwlDelphiABGRColorRec.AsARGBColor: TdwlARGBCOlor;
-begin
-  Result := TdwlRestOfTheWorldARGBColorRec.Create(Color).Color;
-end;
-
-function TdwlDelphiABGRColorRec.AsHTML: string;
-begin
-  Result := '#' + IntToHex(R, 2)+IntToHex(G, 2)+IntToHex(B, 2);
-end;
-
-constructor TdwlDelphiABGRColorRec.Create(const AHTMLColor: string);
-begin
-  Color := StringToColor('$' + Copy(AHTMLColor, 6, 2) + Copy(AHTMLColor, 4, 2) + Copy(AHTMLColor, 2, 2));
-end;
-
-{ TdwlRestOfTheWorldARGBColorRec }
-
-constructor TdwlRestOfTheWorldARGBColorRec.Create(AColor: TColor);
-begin
-  AColor := TColorRec.ColorToRGB(AColor);
-  R := TdwlDelphiABGRColorRec(AColor).R;
-  G := TdwlDelphiABGRColorRec(AColor).G;
-  B := TdwlDelphiABGRColorRec(AColor).B;
-  A := TdwlDelphiABGRColorRec(AColor).A;
-end;
-
-constructor TdwlRestOfTheWorldARGBColorRec.Create(AColor: TdwlARGBColor);
-begin
-  Color := AColor;
-end;
-
-function TdwlRestOfTheWorldARGBColorRec.AsABGRColor: TdwlABGRCOlor;
-begin
-  Result := TdwlDelphiABGRColorRec.Create(Color).Color;
-end;
-
-function TdwlRestOfTheWorldARGBColorRec.AsHTML: string;
-begin
-  Result := '#' + IntToHex(R, 2)+IntToHex(G, 2)+IntToHex(B, 2);
-end;
-
-constructor TdwlRestOfTheWorldARGBColorRec.Create(const AHTMLColor: string);
-begin
-  Create(StringToColor('$' + Copy(AHTMLColor, 6, 2) + Copy(AHTMLColor, 4, 2) + Copy(AHTMLColor, 2, 2)));
-end;
-
 { TPeriodicity_Daily }
 
 class function TPeriodicity_Daily.AddPeriod(Epoch: TUnixEpoch; Amount: integer): TUnixEpoch;
@@ -637,6 +559,45 @@ begin
   // And Assemble the result
   Result := TUnixEpoch.Create(EncodeDate(y, m, 1));
   Result := Result++DekOffsetInMonth*864000;
+end;
+
+{ TdwlColor }
+
+function TdwlColor.AsHex(IncludeAlpha: boolean=true; LeadChar: WideChar=#0): string;
+begin
+  if LeadChar=#0 then
+    Result := ''
+  else
+    Result := LeadChar;
+  if IncludeAlpha then
+    Result := Result+IntToHex(ARGB, 8).ToLower
+  else
+    Result := Result+IntToHex(ARGB and $FFFFFF, 6).ToLower;
+end;
+
+function TdwlColor.AsTColor: TColor;
+begin
+  Result := B;
+  Result := Result shl 8 + G;
+  Result := Result shl 8 + R;
+end;
+
+constructor TdwlColor.CreateFromHex(const Hex: string);
+begin
+  var lHex := Hex;
+  while (lHex<>'') and not CharInSet(lHex[1], ['0'..'9', 'A'..'F', 'a'..'f']) do
+    lHex := Copy(lHex, 2, MaxInt);
+  ARGB := StrToUInt('$'+lHex);
+  if length(lHex)<7 then
+    A := 255;
+end;
+
+constructor TdwlColor.CreateFromTColor(Color: TColor);
+begin
+  A :=  255;
+  R := Color and $0000FF;
+  G := (Color and $00FF00) shr 8;
+  B := (Color and $FF0000) shr 16;
 end;
 
 end.
