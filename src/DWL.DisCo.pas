@@ -8,7 +8,7 @@ uses
 type
   TdwlDiscoMsgFunc = procedure(const Msg: string; ProcessingFinished: boolean) of object;
 
-  TdwlDisCo = class
+  TdwlDisCo = class abstract
   public
     class var
       FApiSession: TdwlAPISession;
@@ -16,7 +16,7 @@ type
     class procedure Initialize(const Disco_BaseURL: string; Authorizer: IdwlAPIAuthorizer); virtual;
   end;
 
-  TdwlDiscoClient = class(TdwlDisCo)
+  TdwlDiscoClient = class abstract(TdwlDisCo)
   strict private
     class var
       FAppName: string;

@@ -919,7 +919,7 @@ begin
 
     if FPort = 0 then
       FPort := 3306;
-
+    MySQLChk(mysql_set_character_set(FMySQL, 'utf8'));
     var ConnectResult := mysql_real_connect(FMySql, PUTF8String(FHost), PUTF8String(FUserName), PUTF8String(FPassword), PUTF8String(FDatabaseName), FPort, nil, ClientFlag);
     if (ConnectResult<>FMySQL) and (mysql_errno(FMySql)=1049) and FCreateDatabase then
     begin
@@ -935,9 +935,7 @@ begin
         ConnectResult := mysql_real_connect(FMySql, PUTF8String(FHost), PUTF8String(FUserName), PUTF8String(FPassword), PUTF8String(FDatabaseName), FPort, nil, ClientFlag);
       end;
     end;
-    if FMySQL=ConnectResult then
-      MySQLChk(mysql_set_character_set(FMySQL, 'utf8'))
-    else
+    if FMySQL<>ConnectResult then
       ErrorMessage := UTF8ToString(mysql_error( FMySQL));
   except
     on E: Exception do
