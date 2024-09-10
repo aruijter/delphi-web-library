@@ -168,6 +168,7 @@ type
     constructor CreateFromHex(const Hex: string);
     function AsHex(IncludeAlpha: boolean=true; LeadChar: WideChar=#0): string;
     function AsTColor: TColor;
+    function AsRGB: cardinal;
   case cardinal of
     0:
       (ARGB: cardinal);
@@ -573,6 +574,11 @@ begin
     Result := Result+IntToHex(ARGB, 8).ToLower
   else
     Result := Result+IntToHex(ARGB and $FFFFFF, 6).ToLower;
+end;
+
+function TdwlColor.AsRGB: cardinal;
+begin
+  Result := ARGB and $ffffff;
 end;
 
 function TdwlColor.AsTColor: TColor;
