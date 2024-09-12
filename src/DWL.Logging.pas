@@ -7,7 +7,7 @@ unit DWL.Logging;
 interface
 
 uses
-  DWL.Types, System.Sysutils;
+  DWL.Types, System.Sysutils, System.Classes;
 
 type
 
@@ -128,7 +128,9 @@ type
   TdwlLogger = record
   private
     class var FHookedRaiseExceptObjProc: TRaiseExceptObjProc;
+    class var FIgnoredExceptions: TStringList;
   public
+    class destructor Destroy;
     /// <summary>
     ///   Default Source to use when LogItem source is not provided, defaults
     ///   to BareModuleName
@@ -147,6 +149,10 @@ type
     ///   the application will be logged with stack frames.
     /// </summary>
     class procedure EnableExceptionLogging; static;
+    /// <summary>
+    ///   Ignore exceptions while doing exception logging
+    /// </summary>
+    class procedure AddIgnoredException(const Msg: string); static;
     /// <summary>
     ///   Posts a log item. Apart from Msg all properties are optional and have
     ///   defaults
@@ -202,7 +208,7 @@ type
 implementation
 
 uses
-  System.Classes, System.Generics.Collections, DWL.SyncObjs, System.NetEncoding,
+  System.Generics.Collections, DWL.SyncObjs, System.NetEncoding,
   {$IFOPT D+}JclDebug,{$ENDIF}
   DWL.Logging.EventLog, System.Hash, DWL.IOUtils;
 
@@ -332,9 +338,26 @@ begin
     TdwlLogger.Log(Exception(P.ExceptObject));
 end;
 
+class procedure TdwlLogger.AddIgnoredException(const Msg: string);
+begin
+  if FIgnoredExceptions=nil then
+  begin
+    FIgnoredExceptions := TStringList.Create;
+    FIgnoredExceptions.CaseSensitive := false;
+    FIgnoredExceptions.Sorted := true;
+  end;
+  FIgnoredExceptions.Add(Msg);
+end;
+
 class function TdwlLogger.Default_Source: string;
 begin
   Result := TLogEngine.FDefaultSource;
+end;
+
+class destructor TdwlLogger.Destroy;
+begin
+  FIgnoredExceptions.Free;
+  inherited;
 end;
 
 class procedure TdwlLogger.EnableExceptionLogging;
@@ -414,6 +437,10 @@ end;
 class procedure TdwlLogger.Log(Exc: Exception; SeverityLevel: TdwlLogSeverityLevel=lsFatal; const Topic: string=''; Channel: string=''; Source: string='');
 begin
   try
+    // see if this Exception needs to be ignored
+    if (FIgnoredExceptions<>nil) and (FIgnoredExceptions.IndexOf(Exc.Message)>=0) then
+      Exit;
+    // create logitem
     var LogItem := TLogEngine.CreateLogItem;
     LogItem.Msg := Exc.Message;
     LogItem.SeverityLevel := SeverityLevel;
@@ -428,6 +455,7 @@ begin
       LogItem.Content := TEncoding.UTF8.GetBytes(S);
     end;
     {$ENDIF}
+    // and post
     TLogEngine.PostLog(LogItem);
   except
     // Logging should not cause more problems
