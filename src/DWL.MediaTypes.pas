@@ -24,6 +24,8 @@ const
   MEDIA_TYPE_PNG = 'image/png';
   MEDIA_TYPE_PLAIN = 'text/plain';
   MEDIA_TYPE_X_WWW_FORM_URLENCODED = 'application/x-www-form-urlencoded';
+  MEDIA_TYPE_MULTIPART_MIXED='multipart/mixed';
+  MEDIA_TYPE_MULTIPART_ALTERNATIVE='multipart/alternative';
 
   FILE_EXT_CSV = '.csv';
   FILE_EXT_DOC = '.doc';
@@ -92,3 +94,4 @@ begin
 end;
 
 end.
+
