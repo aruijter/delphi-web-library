@@ -11,6 +11,7 @@ type
     class var
       FAdditionalParametersSQL: string;
       FSupportPackages: TArray<string>;
+    class function Delete_release(const State: PdwlHTTPHandlingState): boolean;
     class function Get_phonehome(const State: PdwlHTTPHandlingState): boolean;
     class function Get_download_package(const State: PdwlHTTPHandlingState): boolean;
     class function Get_download_supportpackage(const State: PdwlHTTPHandlingState): boolean;
@@ -65,6 +66,7 @@ begin
   FAdditionalParametersSQL := FConfigParams.StrValue(Param_Additional_parameters_SQL);
   FSupportPackages := FConfigParams.StrValue(Param_supportpackages, '7z64,libcrypto-3-x64').Split([',']);
   var AdminScope := FConfigParams.StrValue('scope_admin', 'disco_admin');
+  RegisterHandling(dwlhttpDELETE, '/release', Delete_release, [AdminScope]);
   RegisterHandling(dwlhttpGET, '/phonehome', Get_phonehome, []);
   RegisterHandling(dwlhttpGET, '/download/package', Get_download_package, []);
   RegisterHandling(dwlhttpGET, Uri_download_supportpackage, Get_download_supportpackage, []);
@@ -72,6 +74,24 @@ begin
   RegisterHandling(dwlhttpGET, '/releases', Get_releases, [AdminScope]);
   RegisterHandling(dwlhttpPOST, '/profileip', Post_profileip, [AdminScope]);
   RegisterHandling(dwlhttpPOST, '/upload/package', Post_upload_package, [AdminScope]);
+end;
+
+class function THandler_DisCo.Delete_release(const State: PdwlHTTPHandlingState): boolean;
+const
+  SQL_DeleteRelease = 'DELETE FROM dwl_disco_releases WHERE packagename=? and version=?';
+begin
+  Result := true;
+  var PackageName: string;
+  if not TryGetRequestParamStr(State, 'packagename', PackageName, true) then
+    Exit;
+  var Version: string;
+  if not TryGetRequestParamStr(State, 'version', Version, true) then
+    Exit;
+  var Cmd := MySQLCommand(State, SQL_DeleteRelease);
+  Cmd.Parameters.SetTextDataBinding(0, PackageName);
+  Cmd.Parameters.SetTextDataBinding(1, Version);
+  Cmd.Execute;
+  JSON_Set_Success(State);
 end;
 
 class function THandler_DisCo.Get_phonehome(const State: PdwlHTTPHandlingState): boolean;

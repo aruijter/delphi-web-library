@@ -56,12 +56,16 @@ type
     SaveDialog: TSaveDialog;
     Button3: TButton;
     aiSaveCSV: TAction;
+    Button4: TButton;
+    aiDelete: TAction;
     procedure ApplicationEventsIdle(Sender: TObject; var Done: Boolean);
     procedure lbReleasesClick(Sender: TObject);
     procedure lbPackagesClick(Sender: TObject);
     procedure aiDownloadExecute(Sender: TObject);
     procedure aiUploadExecute(Sender: TObject);
     procedure aiSaveCSVExecute(Sender: TObject);
+    procedure aiDeleteExecute(Sender: TObject);
+    procedure aiDeleteUpdate(Sender: TObject);
   strict private
     FHaveBeenIdle: boolean;
     FConfigParams: IdwlParams;
@@ -76,6 +80,7 @@ type
     procedure UpdateShownRelease;
     procedure UploadFile(FileName: string; BatchMode: boolean=false);
     procedure UploadFromCommandLine(const FileName: string);
+    procedure DeleteCurrentRelease;
   public
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
@@ -89,7 +94,8 @@ implementation
 uses
   System.IOUtils, System.SysUtils, Winapi.WinInet,
   DWL.HTTP.Consts, System.DateUtils, System.Generics.Defaults, System.StrUtils,
-  DWL.DisCo.Consts, DWL.IOUtils, DWL.Compression, Winapi.ShellAPI;
+  DWL.DisCo.Consts, DWL.IOUtils, DWL.Compression, Winapi.ShellAPI,
+  System.UITypes, System.NetEncoding;
 
 {$R *.dfm}
 
@@ -108,6 +114,19 @@ begin
   FConfigParams.WriteJSON(TFile.ReadAllText(ChangeFileExt(ParamStr(0), '.config')));
   FApiSession := TdwlAPISession.Create(FConfigParams.StrValue(paramDisCo_Endpoint),
     New_UserPwAuthorizer(FConfigParams.StrValue(paramAuth_Endpoint), GetUsernamePassword));
+end;
+
+procedure TMainForm.aiDeleteExecute(Sender: TObject);
+begin
+  if MessageDlg('Are you sure you want to delete '+FCurrentRelease.PackageName+' '+IfThen(FCurrentRelease.Kind=discoreleasekindRelease, 'Release', 'PreRelease')+' '+
+    FCurrentRelease.Version+' ?',
+    mtConfirmation, [mbYes,mbNo], 0)=mrYes then
+  DeleteCurrentRelease;
+end;
+
+procedure TMainForm.aiDeleteUpdate(Sender: TObject);
+begin
+  aiDelete.Enabled := FCurrentReleases.Count>1;
 end;
 
 procedure TMainForm.aiDownloadExecute(Sender: TObject);
@@ -162,6 +181,13 @@ begin
   FPackages.Clear;
 end;
 
+procedure TMainForm.DeleteCurrentRelease;
+begin
+  var Request := FApiSession.New_APIRequest('release?packagename='+TNetEncoding.URL.Encode(FCurrentRelease.PackageName)+'&version='+TNetEncoding.URL.Encode(FCurrentRelease.Version), HTTP_METHOD_DELETE);
+  var Response := Request.Execute;
+  LoadReleases;
+end;
+
 procedure TMainForm.GetUserNamePassword(var Username, Password, Token: string; Action: TdwlAPIUserNamePasswordAuthorizerCallBackAction; JSONResponse: TJSONValue);
 begin
   if Action=acapwGetUserNamePassword then
@@ -190,7 +216,7 @@ begin
   var Response := FApiSession.ExecuteJSONRequest('releases');
   if not Response.Success then
     Exit;
-  var JSONReleases := Response.Data.GetValue<TJSONArray>('releases');
+  var JSONReleases := Response.JSON_Data.GetValue<TJSONArray>('releases');
   for var JSONRelease in JSONReleases do
   begin
     var Release: TRelease;
@@ -274,33 +300,19 @@ begin
   FCurrentRelease := FCurrentReleases[lbReleases.ItemIndex];
   lblRelease.Caption := FCurrentRelease.Version;
   lblMoment.Caption := FormatDateTime('yyyy-mm-dd hh:nn', FCurrentRelease.ReleaseMoment);
-  lblSoort.Caption := IfThen(FCurrentRelease.Kind=discoreleasekindRelease, 'Release', 'PreRelease');;
+  lblSoort.Caption := IfThen(FCurrentRelease.Kind=discoreleasekindRelease, 'Release', 'PreRelease');
   lblExtension.Caption := FCurrentRelease.FileExtension;
 end;
 
 procedure TMainForm.UploadFile(FileName: string; BatchMode: boolean=false);
 begin
-  var NextVersion: TdwlFileVersionInfo;
-  NextVersion.SetFromString(FCurrentReleases[0].Version);
-  // increase version
-  if NextVersion.Release=9 then
-  begin
-    NextVersion.Release := 0;
-    if NextVersion.Minor=9 then
-    begin
-      NextVersion.Minor := 0;
-      inc(NextVersion.Major);
-    end
-    else
-      inc(NextVersion.Minor);
-  end
-  else
-    inc(NextVersion.Release);
+  // check packagename
   if not SameText(TdwlFile.ExtractBareName(FileName), FCurrentRelease.PackageName) then
   begin
     ShowMessage('Expected filename '+FCurrentRelease.PackageName+'.exe or '+FCurrentRelease.PackageName+'.dll or '+FCurrentRelease.PackageName+'.7z');
     Exit;
   end;
+  // get the file version
   var FileExt := ExtractFileExt(FileName);
   var FileVersion: TdwlFileVersionInfo;
   if (FileExt='.exe') or (FileExt='.dll') then
@@ -329,13 +341,45 @@ begin
     end;
     FileVersion.SetFromString(TFile.ReadAllText(VersionFile));
   end;
-  if FileVersion<NextVersion then
+  // get the next version
+  var CurrVersion: TdwlFileVersionInfo;
+  CurrVersion.SetFromString(FCurrentReleases[0].Version);
+  if (FileVersion.Build>0) and (CurrVersion.Build>=FileVersion.Build) then
   begin
-    ShowMessage('This file has version '+FileVersion.GetAsString+'.'#13#10'At lease version '+NextVersion.GetAsString+' is needed for release.');
+    ShowMessage('This file has build '+FileVersion.Build.ToString+'.'#13#10'At least build '+(CurrVersion.Build=1).ToString+' is needed.');
     Exit;
   end;
-  if FileVersion.Build<1 then
-    FileVersion.Build := NextVersion.Build+1;
+  // increase version if needed
+  var NextVersion := CurrVersion;
+  if not FileVersion.IsPreRelease then
+  begin
+    if NextVersion.Release=9 then
+    begin
+      NextVersion.Release := 0;
+      if NextVersion.Minor=9 then
+      begin
+        NextVersion.Minor := 0;
+        inc(NextVersion.Major);
+      end
+      else
+        inc(NextVersion.Minor);
+    end
+    else
+      inc(NextVersion.Release);
+  end;
+  NextVersion.Build := 0; // to exclude from compare
+  if (not FileVersion.IsPreRelease) and (FileVersion<NextVersion) then
+  begin
+    ShowMessage('This file has version '+FileVersion.GetAsString+'.'#13#10'At least version '+NextVersion.GetAsString+' is needed for release.');
+    Exit;
+  end;
+  if FileVersion.IsPreRelease and (FileVersion<>NextVersion) then
+  begin
+    ShowMessage('This file has version '+FileVersion.GetAsString+'.'#13#10'The same version '+NextVersion.GetAsString+' is needed for pre-release.');
+    Exit;
+  end;
+  if FileVersion.Build<1 then // in the case of document zips f.e.
+    FileVersion.Build := CurrVersion.Build+1;
   var DeleteTheFile := false;
   if FileExt<>'.7z' then
   begin
@@ -351,40 +395,29 @@ begin
   end;
   // SENDING RELEASE
   try
-    var Request := FApiSession.PrepareAPIRequest('upload/package', HTTP_METHOD_POST);
+    var Request := FApiSession.New_APIRequest('upload/package', HTTP_METHOD_POST);
     var Bytes := TFile.ReadAllBytes(FileName);
-    Request.PostStream.Write(Bytes[0], Length(Bytes));
-    Request.Header['packagename'] := FCurrentRelease.PackageName;
-    Request.Header['version'] := FileVersion.GetAsString(true);
+    Request.HTTPRequest.PostStream.Write(Bytes[0], Length(Bytes));
+    Request.HTTPRequest.Header['packagename'] := FCurrentRelease.PackageName;
+    Request.HTTPRequest.Header['version'] := FileVersion.GetAsString(true);
     if FileVersion.IsPreRelease then
-      Request.Header['kind'] := discoreleasekindPreRelease.ToString
+      Request.HTTPRequest.Header['kind'] := discoreleasekindPreRelease.ToString
     else
-      Request.Header['kind'] := discoreleasekindRelease.ToString;
-    Request.Header['fileextension'] := '7z';
+      Request.HTTPRequest.Header['kind'] := discoreleasekindRelease.ToString;
+    Request.HTTPRequest.Header['fileextension'] := '7z';
     var Response := Request.Execute;
-    var IsOk: boolean;
-    IsOk := Response.StatusCode=HTTP_STATUS_OK;
-    if IsOk then
+    if Response.Success then
     begin
-      var JSON := TJSONObject.ParseJSONValue(Response.AsString);
-      try
-        IsOk := JSON.GetValue<boolean>('success', false);
-        if not IsOk then
-          ShowMessage('Upload failed: '+Response.AsString)
-        else
-        begin
-          if BatchMode then
-            Application.Terminate
-          else
-            ShowMessage('Success! Uploaded file version '+FileVersion.GetAsString(true));
-          LoadReleases;
-        end;
-      finally
-        JSON.Free;
+      if BatchMode then
+        Application.Terminate
+      else
+      begin
+        ShowMessage('Success! Uploaded file version '+FileVersion.GetAsString(true));
+        LoadReleases;
       end;
     end
     else
-      ShowMessage('Upload failed');
+      ShowMessage('Upload failed: '+Response.HTTPResponse.AsString);
   finally
     if DeleteTheFile then
       TFile.Delete(FileName);

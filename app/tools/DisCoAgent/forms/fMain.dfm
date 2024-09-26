@@ -32,8 +32,6 @@ object MainForm: TMainForm
     ParentCtl3D = False
     ParentDoubleBuffered = False
     TabOrder = 0
-    ExplicitWidth = 953
-    ExplicitHeight = 810
     object Splitter1: TSplitter
       Left = 310
       Top = 0
@@ -59,7 +57,6 @@ object MainForm: TMainForm
         BevelOuter = bvNone
         ParentColor = True
         TabOrder = 0
-        ExplicitWidth = 198
         object lblPackages: TLabel
           Left = 8
           Top = 8
@@ -96,9 +93,6 @@ object MainForm: TMainForm
       Align = alClient
       BevelOuter = bvNone
       TabOrder = 1
-      ExplicitLeft = 203
-      ExplicitWidth = 750
-      ExplicitHeight = 810
       object pnlRightTop: TPanel
         Left = 0
         Top = 0
@@ -109,7 +103,6 @@ object MainForm: TMainForm
         Color = clInfoBk
         ParentBackground = False
         TabOrder = 0
-        ExplicitWidth = 750
         object lblPackageName: TLabel
           Left = 6
           Top = 7
@@ -133,8 +126,6 @@ object MainForm: TMainForm
         BevelOuter = bvNone
         TabOrder = 1
         Visible = False
-        ExplicitWidth = 750
-        ExplicitHeight = 775
         object Panel1: TPanel
           Left = 0
           Top = 0
@@ -143,7 +134,6 @@ object MainForm: TMainForm
           Align = alLeft
           BevelOuter = bvNone
           TabOrder = 0
-          ExplicitHeight = 775
           object Panel2: TPanel
             Left = 0
             Top = 0
@@ -170,7 +160,7 @@ object MainForm: TMainForm
             Align = alClient
             ItemHeight = 20
             TabOrder = 1
-            OnClick = lbPackagesClick
+            OnClick = lbReleasesClick
           end
         end
         object pnlRelease: TPanel
@@ -181,8 +171,6 @@ object MainForm: TMainForm
           Align = alClient
           BevelOuter = bvNone
           TabOrder = 1
-          ExplicitWidth = 552
-          ExplicitHeight = 775
           object Label2: TLabel
             Left = 18
             Top = 57
@@ -257,7 +245,6 @@ object MainForm: TMainForm
             Color = clInfoBk
             ParentBackground = False
             TabOrder = 2
-            ExplicitWidth = 552
             object lblRelease: TLabel
               Left = 6
               Top = 9
@@ -271,6 +258,14 @@ object MainForm: TMainForm
               Font.Style = [fsBold]
               ParentFont = False
             end
+          end
+          object Button4: TButton
+            Left = 146
+            Top = 287
+            Width = 97
+            Height = 25
+            Action = aiDelete
+            TabOrder = 3
           end
         end
       end
@@ -295,6 +290,11 @@ object MainForm: TMainForm
     object aiSaveCSV: TAction
       Caption = '->CSV'
       OnExecute = aiSaveCSVExecute
+    end
+    object aiDelete: TAction
+      Caption = 'Delete'
+      OnExecute = aiDeleteExecute
+      OnUpdate = aiDeleteUpdate
     end
   end
   object OpenDialog: TOpenDialog
