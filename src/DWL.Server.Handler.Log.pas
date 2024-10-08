@@ -46,6 +46,7 @@ type
     FParameters: string;
     FSuppressDuplicateMSecs: cardinal;
     FSuppressEvaluateContent: boolean;
+    FStopProcessingWhenTriggered: boolean;
     // suppresshash is a list of hashes and the tick when the hashed value should not longer be suppressed
     FSuppressHashes: TDictionary<integer, UInt64>;
     // cleanup is done every TRIGGER_CLEANUP_COUNT trigger events
@@ -60,6 +61,7 @@ type
     property Parameters: string read FParameters write FParameters;
     property SuppressDuplicateMSecs: cardinal read FSuppressDuplicateMSecs write SetSuppressDuplicateMSecs;
     property SuppressEvaluateContent: boolean read FSuppressEvaluateContent write FSuppressEvaluateContent;
+    property StopProcessingWhenTriggered: boolean read FStopProcessingWhenTriggered write FStopProcessingWhenTriggered;
     function IsSuppressed(Level: Byte; const Source, Channel, Topic, Msg: string; Content: TBytes): boolean;
   public
     constructor Create(AId: cardinal);
@@ -161,6 +163,7 @@ const
   SQL_CheckTable_LogTriggers=
     'CREATE TABLE IF NOT EXISTS `dwl_log_triggers` ('+
     '`Id` INT UNSIGNED NOT NULL AUTO_INCREMENT, '+
+    '`ProcessingOrder` INT UNSIGNED NOT NULL, '+
     '`Level_From` TINYINT UNSIGNED, '+
     '`Level_To` TINYINT UNSIGNED, '+
     '`Channel` VARCHAR(50), '+
@@ -168,7 +171,9 @@ const
     '`Parameters` TEXT, '+
     '`SuppressDuplicateSeconds` SMALLINT UNSIGNED, '+
     '`SuppressEvaluateContent` TINYINT UNSIGNED, '+
-    'PRIMARY KEY (`Id`))';
+    '`StopProcessingWhenTriggered` TINYINT UNSIGNED, '+
+    'PRIMARY KEY (`Id`), '+
+    'INDEX `ProcessingOrderIndex` (`ProcessingOrder`))';
   SQL_CheckTable_LogTriggerAvoids=
     'CREATE TABLE IF NOT EXISTS `dwl_log_trigger_avoids` ('+
     '`Id` INT UNSIGNED NOT NULL AUTO_INCREMENT, '+
@@ -191,10 +196,11 @@ end;
 procedure TdwlHTTPHandler_Log.CheckTriggers;
 const
   SQL_Get_Triggers=
-    'SELECT Id, Level_From, Level_to, Channel, Topic, Parameters, SuppressDuplicateSeconds, SuppressEvaluateContent FROM dwl_log_triggers';
+    'SELECT Id, Level_From, Level_to, Channel, Topic, Parameters, SuppressDuplicateSeconds, SuppressEvaluateContent, StopProcessingWhenTriggered FROM dwl_log_triggers ORDER BY ProcessingOrder';
   GetTriggers_Idx_Id=0; GetTriggers_Idx_Level_From=1; GetTriggers_Idx_Level_to=2;
   GetTriggers_Idx_Channel=3; GetTriggers_Idx_Topic=4; GetTriggers_Idx_Parameters=5;
   GetTriggers_Idx_SuppressDuplicateSeconds=6; GetTriggers_Idx_SuppressEvaluateContent=7;
+  GetTriggers_Idx_StopProcessingWhenTriggered=8;
   SQL_Get_TriggerAvoids=
     'SELECT Id, Msg, MaxAvoidCount, ClearSeconds FROM dwl_log_trigger_avoids';
   GetTriggerAvoids_Idx_Id=0; GetTriggerAvoids_Idx_Msg=1; GetTriggerAvoids_Idx_MaxAvoidCount=2; GetTriggerAvoids_Idx_ClearSeconds=3;
@@ -243,6 +249,7 @@ begin
         Trigger.Parameters := Cmd.Reader.GetString(GetTriggers_Idx_Parameters, true);
         Trigger.SuppressDuplicateMSecs := Max(0, Cmd.Reader.GetInteger(GetTriggers_Idx_SuppressDuplicateSeconds, true))*1000;
         Trigger.SuppressEvaluateContent := Cmd.Reader.GetInteger(GetTriggers_Idx_SuppressEvaluateContent, true)<>0;
+        Trigger.StopProcessingWhenTriggered := Cmd.Reader.GetInteger(GetTriggers_Idx_StopProcessingWhenTriggered, true)<>0;
         FTriggers.Add(Trigger);
       end;
       // dispose no longer used triggers
@@ -384,45 +391,49 @@ begin
       for var Trig in FTriggers do
       begin
         if Trig.Channel.IsMatch(Channel) and Trig.Topic.IsMatch(Topic) and
-          (Level>=Trig.MinLevel) and (Level<=Trig.MaxLevel) and
-          (not Trig.IsSuppressed(Level, Source, Channel, Topic, Msg, Content)) then
+          (Level>=Trig.MinLevel) and (Level<=Trig.MaxLevel) then
         begin
-          var Parms := TStringList.Create;
-          try
-            Parms.Text := Trig.Parameters;
-            var MailMsg := TIdMessage.Create(nil);
+          if not Trig.IsSuppressed(Level, Source, Channel, Topic, Msg, Content) then
+          begin
+            var Parms := TStringList.Create;
             try
-              MailMsg.Recipients.EMailAddresses := Parms.Values[Param_EMail_To];
-              MailMsg.From.Address := Parms.Values[Param_Email_From];
-              MailMsg.From.Name := Parms.Values[Param_EMail_FromName];
-              var Subject := parms.Values[Param_EMail_Subject];
-              Subject := ReplaceStr(Subject, '$(level)', TdwlLogger.GetSeverityLevelAsString(TdwlLogSeverityLevel(Level)));
-              Subject := ReplaceStr(Subject, '$(source)', Source);
-              Subject := ReplaceStr(Subject, '$(channel)', Channel);
-              Subject := ReplaceStr(Subject, '$(topic)', Topic);
-              Subject := ReplaceStr(Subject, '$(msg)', Msg.Substring(0, 100).Replace(#13, '').Replace(#10, ''));
-              MailMsg.Subject := Subject;
-              if SameText(Copy(trim(ContentType), 1, 5), 'text/') then
-              begin
-                MailMsg.Body.Text := TEncoding.UTF8.GetString(Content);
-                MailMsg.ContentType := ContentType;
-              end
-              else
-              begin
-                if Length(Content)>0 then
+              Parms.Text := Trig.Parameters;
+              var MailMsg := TIdMessage.Create(nil);
+              try
+                MailMsg.Recipients.EMailAddresses := Parms.Values[Param_EMail_To];
+                MailMsg.From.Address := Parms.Values[Param_Email_From];
+                MailMsg.From.Name := Parms.Values[Param_EMail_FromName];
+                var Subject := parms.Values[Param_EMail_Subject];
+                Subject := ReplaceStr(Subject, '$(level)', TdwlLogger.GetSeverityLevelAsString(TdwlLogSeverityLevel(Level)));
+                Subject := ReplaceStr(Subject, '$(source)', Source);
+                Subject := ReplaceStr(Subject, '$(channel)', Channel);
+                Subject := ReplaceStr(Subject, '$(topic)', Topic);
+                Subject := ReplaceStr(Subject, '$(msg)', Msg.Substring(0, 100).Replace(#13, '').Replace(#10, ''));
+                MailMsg.Subject := Subject;
+                if SameText(Copy(trim(ContentType), 1, 5), 'text/') then
                 begin
-                  var Attachment := TIdAttachmentMemory.Create(MailMsg.MessageParts);
-                  Attachment.ContentType := ContentType;
-                  Attachment.DataStream.WriteBuffer(Content[0], Length(Content));
+                  MailMsg.Body.Text := TEncoding.UTF8.GetString(Content);
+                  MailMsg.ContentType := ContentType;
+                end
+                else
+                begin
+                  if Length(Content)>0 then
+                  begin
+                    var Attachment := TIdAttachmentMemory.Create(MailMsg.MessageParts);
+                    Attachment.ContentType := ContentType;
+                    Attachment.DataStream.WriteBuffer(Content[0], Length(Content));
+                  end;
                 end;
+                TdwlMailQueue.QueueForSending(MailMsg);
+              finally
+                MailMsg.Free;
               end;
-              TdwlMailQueue.QueueForSending(MailMsg);
             finally
-              MailMsg.Free;
+              Parms.Free;
             end;
-          finally
-            Parms.Free;
           end;
+          if Trig.StopProcessingWhenTriggered then
+            Break;
         end;
       end;
     except

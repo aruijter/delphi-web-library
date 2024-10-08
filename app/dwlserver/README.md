@@ -141,6 +141,7 @@ The table dwl_urialiases  has a record for each uri redirection. The fields must
 There is also a configuration table dwl_log_triggers. In this table triggers can be defined which will push email messages to listeners using the trigger conditions.
 |Fieldname|Default|Description
 |-|-|-|
+|ProcessingOrder|0|The order in which the triggers will be processed. The lower the value, the earlier the trigger will be processed
 |Level_From|3 (lsNotice)|The minimum level of the messages to be pushed|
 |Level_To|7 (lsFatal)|The maximum level of the messages to be pushed|
 |Channel|\<all\>|The channel from which the messages are requested, this a RegEx expression, set to NULL (not empty string) to receive message from all channels|
@@ -148,6 +149,7 @@ There is also a configuration table dwl_log_triggers. In this table triggers can
 |Parameters|-|Parameters that define the addressing of the push message. At this moment only E=Mail destinations can be configured.
 |SuppressDuplicateSeconds|0|If non NULL it will suppress triggers for recurring identical messages for X seconds.
 |SuppressEvaluateContent|false|If non NULL / nonzero the content will also be evaluated to conclude if it is a duplicate.
+|StopProcessingOnTriggered|false|If non NULL / nonzero the processing of rules (with a higher ProcessingOrder) will be stopped.
 
 ## Configuration table dwl_log_trigger_avoids
 There is also a configuration table dwl_log_trigger_avoids. In this table messages can be defined for which triggering will be suppressed on first X occurences.
