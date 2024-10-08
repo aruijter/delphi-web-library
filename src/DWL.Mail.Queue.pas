@@ -492,7 +492,8 @@ begin
     Token := FCurrentRefreshToken;
   if Action=acaNewRefreshtoken then
   begin
-    FCurrentContextParams.WriteValue(Param_Refreshtoken, Token);
+    if Token<>'' then
+      FCurrentContextParams.WriteValue(Param_Refreshtoken, Token);
     // we need to add here that the mailqueue_domains is written back to params
   end;
 end;
