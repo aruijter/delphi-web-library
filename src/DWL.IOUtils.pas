@@ -10,11 +10,25 @@ type
     class function ExtractBareName(const Path: string=''): string; static;
   end;
 
-  TdwlPath = record
-    class procedure Listing(const ListedItems: TStrings; const Directory: string;
-      const Mask: string = '*.*'; Recursive: boolean=false; ListDirectories:
-      boolean=false; ListFiles: boolean=true; BareDirOrFileNames: boolean=false;
-      const ExcludeMask: string=''; MaxRecurseDepth:integer=MaxInt); static;
+  TdwlDirectoryEnumOption = (eoRecurse, eoIncludeFiles, eoIncludeDirectories);
+  TdwlDirectoryEnumOptions = set of TdwlDirectoryEnumOption;
+
+  IdwlDirectoryEnumerator = interface
+    function CurrentDirectory: string;
+    function CurrentBareName: string;
+    function CurrentName: string;
+    function CurrentFullPath: string;
+    function CurrentIsDirectory: boolean;
+    function CurrentRelativePath: string;
+    function MoveNext: boolean;
+  end;
+
+  TdwlDirectory = record
+  strict private
+    class var FApplication_TempDir: string;
+  public
+    class function Application_TempDir: string; static;
+    class function GetEnumerator(const Directory: string; Options: TdwlDirectoryEnumOptions=[eoIncludeFiles]; const FileMask: string='*.*'): IdwlDirectoryEnumerator; static;
   end;
 
   TdwlFileVersionInfo = record
@@ -45,7 +59,41 @@ type
 implementation
 
 uses
-  System.SysUtils, Winapi.Windows, DWL.Resolver, System.Masks;
+  System.SysUtils, Winapi.Windows, DWL.Resolver, System.Masks, System.StrUtils;
+
+type
+  PDirEnum = ^TDirEnum;
+  TDirEnum = record
+    hFind: THandle;
+    FindData: TWin32FindData;
+    Parent: PDirEnum;
+    BaseDirectory: string;
+    RelativeDirectory: string;
+    class procedure Close(var DirEnum: PDirEnum); static;
+    class function Open(const BaseDirectory, RelativeDirectory: string): PDirENum; static;
+    function IsDirectory: boolean;
+    function Name: string;
+    function Directory: string;
+  end;
+
+  TdwlDirectoryEnumerator = class(TInterfacedObject, IdwlDirectoryEnumerator)
+  strict private
+    FDirEnum: PDirEnum;
+    FFileMask: string;
+    FOptions: TdwlDirectoryEnumOptions;
+    function UnfilteredMoveNext: boolean;
+  private
+    function CurrentDirectory: string;
+    function CurrentBareName: string;
+    function CurrentName: string;
+    function CurrentFullPath: string;
+    function CurrentIsDirectory: boolean;
+    function CurrentRelativePath: string;
+    function MoveNext: boolean;
+  public
+    constructor Create(const Directory: string; Options: TdwlDirectoryEnumOptions; const FileMask: string);
+    destructor Destroy; override;
+  end;
 
 { TdwlFile }
 
@@ -239,67 +287,180 @@ begin
   Build := StrToIntDef(Copy(VersionStr, P+1, MaxInt), 0);
 end;
 
-{ TdwlPath }
+{ TdwlDirectory }
 
-class procedure TdwlPath.Listing(const ListedItems: TStrings; const Directory, Mask: string;
-  Recursive, ListDirectories, ListFiles, BareDirOrFileNames: boolean;
-  const ExcludeMask: string; MaxRecurseDepth: integer);
-//var
-//  TheDir: string;
-//  SResult: integer;
+class function TdwlDirectory.Application_TempDir: string;
 begin
-  if MaxRecurseDepth<0 then
-    Exit;
-  var ThePath := IncludeTrailingPathDelimiter(Directory);
-  TdwlResolver.Resolve(ThePath);
-  var SearchRec: TSearchRec;
-  var SearchResult := FindFirst(ThePath+Mask, faAnyFile, SearchRec);
-  try
-    while SearchResult = 0 do
-    begin
-      if (ExcludeMask='') or not MatchesMask(SearchRec.Name, ExcludeMask) then
-      begin
-        if (SearchRec.Attr and faDirectory)=0 then
-        begin
-          if ListFiles then
-          begin
-            if BareDirOrFileNames then
-              ListedItems.Add(TdwlFile.ExtractBareName(SearchRec.Name))
-            else
-              ListedItems.Add(ThePath+SearchRec.Name);
-          end;
-        end
-        else
-          if ListDirectories and (SearchRec.Name<>'.') and (SearchRec.Name<>'..') then
-          begin
-            if BareDirOrFileNames then
-              ListedItems.Add(TdwlFile.ExtractBareName(SearchRec.Name))
-            else
-              ListedItems.Add(ThePath+SearchRec.Name);
-          end;
-      end;
-      SearchResult := FindNext(SearchRec);
-    end;
-  finally
-    System.SysUtils.FindClose(SearchRec);
-  end;
-  if Recursive then // recurse into subdirs
+  if FApplication_TempDir='' then
   begin
-    SearchResult := FindFirst(ThePath+'*.*', faAnyFile, SearchRec);
-    try
-      while SearchResult = 0 do
+    FApplication_TempDir := TPath.GetTempPath+TdwlFile.ExtractBareName(ParamStr(0));
+    ForceDirectories(FApplication_TempDir);
+  end;
+  Result := FApplication_TempDir;
+end;
+
+class function TdwlDirectory.GetEnumerator(const Directory: string; Options: TdwlDirectoryEnumOptions=[eoIncludeFiles]; const FileMask: string='*.*'): IdwlDirectoryEnumerator;
+begin
+  Result := TdwlDirectoryEnumerator.Create(Directory, Options, FileMask);
+end;
+
+{ TdwlDirectoryEnumerator }
+
+function TdwlDirectoryEnumerator.CurrentBareName: string;
+begin
+  Result := TdwlFile.ExtractBareName(FDirEnum.Name)
+end;
+
+function TdwlDirectoryEnumerator.CurrentFullPath: string;
+begin
+  Result := FDirEnum.Directory+'\'+FDirEnum.Name;
+end;
+
+constructor TdwlDirectoryEnumerator.Create(const Directory: string; Options: TdwlDirectoryEnumOptions; const FileMask: string);
+begin
+  inherited Create;
+  FOptions := Options;
+  FFileMask := FileMask;
+  FDirEnum := TDirEnum.Open(Directory, '');
+end;
+
+destructor TdwlDirectoryEnumerator.Destroy;
+begin
+  while FDirEnum<>nil do
+    TDirEnum.Close(FDirEnum);
+  inherited Destroy;
+end;
+
+function TdwlDirectoryEnumerator.CurrentDirectory: string;
+begin
+  Result := FDirEnum.BaseDirectory+IfThen(FDirEnum.RelativeDirectory<>'', '\')+FDirEnum.RelativeDirectory;
+end;
+
+function TdwlDirectoryEnumerator.UnfilteredMoveNext: boolean;
+begin
+if FDirEnum.hFind=0 then  // not initialized, initialize and find first file
+  begin
+    var hFind := FindFirstFile(PChar(FDirEnum.Directory+'\'+FFileMask), FDirEnum.FindData);
+    if hFind=INVALID_HANDLE_VALUE  then
+    begin
+      var Err := GetLastError;
+      if Err=ERROR_FILE_NOT_FOUND then // no results found, return
+        Exit(false);
+      raise Exception.Create('Error enumerating '+FDirEnum.Directory+' : '+SysErrorMessage(GetLastError));
+    end;
+    FDirEnum.hFind := hFind;
+    Result := true;
+  end
+  else
+  begin
+    Result := FindNextFile(FDirEnum.hFind, FDirEnum.FindData);
+    if not Result then
+    begin
+      var Err := GetLastError;
+      if Err<>ERROR_NO_MORE_FILES then
+        raise Exception.Create('Error enumerating '+FDirEnum.Directory+' : '+SysErrorMessage(GetLastError));
+      // if there is a parent, recurse back and replace DirEnum with parent
+      // the parent is still pointing at the dir and this dir will become the current
+      // the parent dir has not been visited yet (we recursed first), so leave it there
+      if FDirEnum.Parent<>nil then
       begin
-        if ((SearchRec.Attr and faDirectory)<>0) and (SearchRec.Name<>'.') and
-          (SearchRec.Name<>'..') and ((ExcludeMask='') or
-            not MatchesMask(SearchRec.Name, ExcludeMask)) then
-          Listing(ListedItems, ThePath+SearchRec.Name, Mask, true,
-            ListDirectories, ListFiles, BareDirOrFileNames, ExcludeMask, MaxRecurseDepth-1);
-        SearchResult := FindNext(SearchRec);
+        var Me := FDirEnum;
+        FDirEnum := FDirEnum.Parent;
+        TDirEnum.Close(Me);
+        // and now exit here, otherwise we will recurse again into this dir.
+        Exit(true);
       end;
-    finally
-      System.SysUtils.FindClose(SearchRec);
     end;
   end;
+  // Check if result is a directory
+  if Result and FDirEnum.IsDirectory then
+  begin
+    if (FDirEnum.Name='.') or (FDirEnum.Name='..') then // skip these useless entries
+      Result := UnfilteredMoveNext
+    else
+    begin
+      // recurse into directory
+      if eoRecurse in FOptions then
+      begin
+        var Me := FDirEnum;
+        FDirEnum := TDirEnum.Open(FDirEnum.BaseDirectory, FDirEnum.RelativeDirectory+IfThen(FDirEnum.RelativeDirectory<>'', '\')+FDirEnum.Name);
+        FDirEnum.Parent := Me;
+        // call InternalMoveNext iterative to first get results from child directory
+        Result := UnfilteredMoveNext;
+        if not Result then
+        begin // this worked out to be an empty dir, so step back, don't known if it works in real life, because . and .. seems to be standard returns from a directory
+          TDirEnum.Close(FDirEnum);
+          FDirEnum := Me;
+          Result := true;
+        end;
+      end;
+    end;
+  end;
+end;
+
+function TdwlDirectoryEnumerator.CurrentIsDirectory: boolean;
+begin
+  Result := FDirEnum.IsDirectory;
+end;
+
+function TdwlDirectoryEnumerator.MoveNext: boolean;
+begin
+  Result := UnfilteredMoveNext;
+  // do filtering
+  if Result then
+  begin
+    if ((FILE_ATTRIBUTE_DIRECTORY and FDirEnum.FindData.dwFileAttributes)<>0) and (not (eoIncludeDirectories in FOptions)) then
+      Exit(MoveNext);
+    if ((FILE_ATTRIBUTE_DIRECTORY and FDirEnum.FindData.dwFileAttributes)=0) and (not (eoIncludeFiles in FOptions)) then
+      Exit(MoveNext);
+  end;
+end;
+
+function TdwlDirectoryEnumerator.CurrentName: string;
+begin
+  Result := FDirEnum.Name;
+end;
+
+function TdwlDirectoryEnumerator.CurrentRelativePath: string;
+begin
+  Result := FDirEnum.RelativeDirectory+IfThen(FDirEnum.RelativeDirectory<>'', '\')+FDirEnum.Name;
+end;
+
+{ TDirEnum }
+
+class procedure TDirEnum.Close(var DirEnum: PDirEnum);
+begin
+  var ParentEnum := DirEnum.Parent;
+  if DirEnum.hFind<>0 then
+    FindClose(DirEnum.hFind);
+  Dispose(DirENum);
+  DirEnum := ParentEnum;
+end;
+
+function TDirEnum.Directory: string;
+begin
+  Result := BaseDirectory+IfThen(RelativeDirectory<>'', '\')+RelativeDirectory;
+end;
+
+function TDirEnum.IsDirectory: boolean;
+begin
+  Result := (hFind<>0) and ((FindData.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY)<>0);
+end;
+
+function TDirEnum.Name: string;
+begin
+  if hFind=0 then
+    Exit('');
+  Result := FindData.cFileName;
+end;
+
+class function TDirEnum.Open(const BaseDirectory, RelativeDirectory: string): PDirENum;
+begin
+  New(Result);
+  Result.hFind := 0;
+  Result. BaseDirectory := BaseDirectory;
+  Result. RelativeDirectory := RelativeDirectory;
+  Result.Parent := nil;
 end;
 
 end.

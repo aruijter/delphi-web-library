@@ -38,7 +38,8 @@ implementation
 
 uses
   System.SysUtils, DWL.Logging, DWL.HTTP.Consts, DWL.Server.Utils,
-  DWL.Params.Consts, System.Math, System.NetEncoding, DWL.StrUtils;
+  DWL.Params.Consts, System.Math, System.NetEncoding, DWL.StrUtils,
+  DWL.MediaTypes;
 
 const
   Param_Resources = 'resources';
@@ -283,7 +284,7 @@ begin
     end;
   end;
   JSON_Meta_Object(State).AddPair('total', TJSONNumber.Create(TotalCount));
-  State.SetContentType(CONTENT_TYPE_JSONAPI, CHARSET_UTF8);
+  State.SetContentType(MEDIA_TYPE_JSONAPI, CHARSET_UTF8);
   Result := true;
 end;
 
