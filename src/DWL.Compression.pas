@@ -11,7 +11,7 @@ type
     class constructor Create;
     class function ExtractArchive(const ArchiveFileName: string; const DestinationDir: string=''; const Password: string=''; OnProgress: TJclCompressionProgressEvent=nil): TdwlResult; static;
     class function ZipFile(const ArchiveFileName, FileToZip: string): TdwlResult; static;
-    class function ZipDirectory(const ArchiveFileName, DirectoryToZip: string; Options: TdwlDirectoryEnumOptions=[eoIncludeFiles]; const FileMask: string = '*.*'): TdwlResult; static;
+    class function ZipDirectory(const ArchiveFileName, DirectoryToZip: string; Options: TdwlIOEnumOptions=[ioIncludeFiles]; const FileMask: string = '*.*'): TdwlResult; static;
   end;
 
 implementation
@@ -51,14 +51,16 @@ begin
   end;
 end;
 
-class function TdwlCompression.ZipDirectory(const ArchiveFileName, DirectoryToZip: string; Options: TdwlDirectoryEnumOptions=[eoIncludeFiles]; const FileMask: string = '*.*'): TdwlResult;
+class function TdwlCompression.ZipDirectory(const ArchiveFileName, DirectoryToZip: string; Options: TdwlIOEnumOptions=[ioIncludeFiles]; const FileMask: string = '*.*'): TdwlResult;
 begin
   try
+    // in case someone asked something strange:
+    Options := Options - [ioIncludeDirectories];
     var CompressArchive :=  TJcl7ZCompressArchive.Create(ArchiveFileName);
     try
-      var ENum := TdwlDirectory.GetEnumerator(DirectoryToZip, Options, FileMask);
+      var ENum := TdwlDirectory.Enumerator(DirectoryToZip, Options, FileMask);
       while ENum.MoveNext do
-        CompressArchive.AddFile(ENum.CurrentName, ENum.CurrentRelativePath);
+        CompressArchive.AddFile(ENum.Current.RelativePathName, ENum.Current.FullPathName);
       CompressArchive.Compress;
     finally
       CompressArchive.Free;
