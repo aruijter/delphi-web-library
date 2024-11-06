@@ -2201,7 +2201,7 @@ begin
   // This would raise issues when the connection is re-used and the originally
   // selected database went out of scope.
   // It's an assertion, so released functionality goes without this check
-  Assert((FConnectionPool.FConnectionProperties.Database='')  or (Pos('USE ', Query.ToUpper)=0), 'USE <database> is not allowed when database is provided on session initiate');
+  Assert((FConnectionPool.FConnectionProperties.Database='')  or (not SameText(Copy(Trim(Query), 1, 4), 'USE ')), 'USE <database> is not allowed when database is provided on session initiate');
   Result := TdwlMySQLCommand.Create(Self, FConnection, Query);
 end;
 
