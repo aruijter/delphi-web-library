@@ -335,7 +335,7 @@ begin
   if Assigned(TdwlLogger.FHookedRaiseExceptObjProc) then
     TdwlLogger.FHookedRaiseExceptObjProc(P);
   if (P.ExceptionCode = cDelphiException) and (P.ExceptObject <> nil) then
-    TdwlLogger.Log(Exception(P.ExceptObject));
+    TdwlLogger.Log(Exception(P.ExceptObject), lsError, 'exception');
 end;
 
 class procedure TdwlLogger.AddIgnoredException(const Msg: string);
