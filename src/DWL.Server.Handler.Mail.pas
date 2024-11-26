@@ -25,7 +25,8 @@ implementation
 
 uses
   DWL.HTTP.Consts, DWL.Server.Globals, DWL.Server.Utils,
-  System.SysUtils, DWL.Classes, IdMessage, DWL.Mail.Queue, DWL.Server.Consts;
+  System.SysUtils, DWL.Classes, IdMessage, DWL.Mail.Queue, DWL.Server.Consts,
+  DWL.Mail.Utils;
 
 
 { TdwlHTTPHandler_Mail }
@@ -67,6 +68,8 @@ begin
     try
       var Msg := TIdMessage.Create;
       try
+        // bugfix for non unique indy temp file name
+        Msg.OnCreateAttachment := TdwlIndyBugFix.CreateAttachment;
         Msg.LoadFromStream(Stream);
         var BccRecipients: string;
         if State.TryGetRequestParamStr('bcc', BccRecipients) then

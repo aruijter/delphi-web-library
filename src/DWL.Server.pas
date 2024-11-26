@@ -598,6 +598,8 @@ begin
     begin
       var MailMsg := TIdMessage.Create(nil);
       try
+        // bugfix for non unique indy temp file name
+        MailMsg.OnCreateAttachment := TdwlIndyBugFix.CreateAttachment;
         TdwlMailUtils.FilldIdMessageFromString(MailMsg, Data);
         if TdwlMailQueue.QueueForSending(MailMsg) then
           Result := 1;
