@@ -66,10 +66,8 @@ begin
   begin
     var Stream := TdwlReadOnlyBufferStream.Create(Data, DataSize);
     try
-      var Msg := TIdMessage.Create;
+      var Msg := TdwlMailUtils.New_IdMessage;;
       try
-        // bugfix for non unique indy temp file name
-        Msg.OnCreateAttachment := TdwlIndyBugFix.CreateAttachment;
         Msg.LoadFromStream(Stream);
         var BccRecipients: string;
         if State.TryGetRequestParamStr('bcc', BccRecipients) then

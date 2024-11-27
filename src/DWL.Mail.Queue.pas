@@ -350,10 +350,8 @@ begin
         inc(Attempts);
         var Str := TStringStream.Create(Reader.GetString(1));
         try
-          var Msg := TIdMessage.Create(nil);
+          var Msg := TdwlMailUtils.New_IdMessage;
           try
-            // bugfix for non unique indy temp file name
-            Msg.OnCreateAttachment := TdwlIndyBugFix.CreateAttachment;
             Msg.LoadFromStream(Str);
             Msg.BccList.EMailAddresses := Cmd_Queue.Reader.GetString(2, true);
             var Update_SQL := SQL_UPDATE_part1;

@@ -14,11 +14,13 @@ type
     class function SendMailToAPI(const Endpoint, LogSecret: string; Msg: TIdMessage): TdwlResult; static;
     class function IdMessageToBytes(Msg: TIdMessage): TBytes; static;
     class function IdMessageToString(Msg: TIdMessage): string; static;
-    class procedure FilldIdMessageFromString(Msg: TIdMessage; const Value: string); static;
-  end;
-
-  TdwlIndyBugFix = class abstract
-    class procedure CreateAttachment(const AMsg: TIdMessage; const AHeaders: TStrings; var AAttachment: TIdAttachment);
+    class procedure FillIdMessageFromString(Msg: TIdMessage; const Value: string); static;
+    /// <summary>
+    ///   Creates an TIdMessage and applies bugfix for temp file naming
+    ///  Use this function wherever you want to create an IdMessage
+    ///  So we can prepare the message with these kind of things
+    /// </summary>
+    class function New_IdMessage: TIdMessage; static;
   end;
 
 implementation
@@ -30,13 +32,15 @@ uses
 
 type
   TIdAttachmentFile_BugFix = class(TIdAttachmentFile)
+  private
+    class procedure CreateAttachment(const AMsg: TIdMessage; const AHeaders: TStrings; var AAttachment: TIdAttachment);
   public
     function PrepareTempStream: TStream; override;
   end;
 
 { TdwlMailUtils }
 
-class procedure TdwlMailUtils.FilldIdMessageFromString(Msg: TIdMessage; const Value: string);
+class procedure TdwlMailUtils.FillIdMessageFromString(Msg: TIdMessage; const Value: string);
 begin
   var Stream := TStringStream.Create(Value);
   try
@@ -108,6 +112,12 @@ begin
     Result := TRegEx.IsMatch(EMail2Check, EMAIL_REGEX);
 end;
 
+class function TdwlMailUtils.New_IdMessage: TIdMessage;
+begin
+  Result := TIdMessage.Create;
+  Result.OnCreateAttachment := TIdAttachmentFile_BugFix.CreateAttachment;
+end;
+
 class function TdwlMailUtils.SendMailToAPI(const Endpoint, LogSecret: string; Msg: TIdMessage): TdwlResult;
 begin
   var Url := Endpoint+'?secret='+TNetEncoding.URL.Encode(LogSecret);
@@ -128,14 +138,12 @@ begin
     Result.AddErrorMsg('Error '+Response.StatusCode.ToString+': '+Response.ErrorMsg);
 end;
 
-{ TdwlIndyBugFix }
+{ TIdAttachmentFile_BugFix }
 
-class procedure TdwlIndyBugFix.CreateAttachment(const AMsg: TIdMessage; const AHeaders: TStrings; var AAttachment: TIdAttachment);
+class procedure TIdAttachmentFile_BugFix.CreateAttachment(const AMsg: TIdMessage; const AHeaders: TStrings; var AAttachment: TIdAttachment);
 begin
   AAttachment := TIdAttachmentFile_BugFix.Create(AMsg.MessageParts);
 end;
-
-{ TIdAttachmentFile_BugFix }
 
 function TIdAttachmentFile_BugFix.PrepareTempStream: TStream;
 begin

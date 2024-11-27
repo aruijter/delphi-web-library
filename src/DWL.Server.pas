@@ -596,10 +596,8 @@ begin
   case ServiceID of
   serverservice_SendEMail:
     begin
-      var MailMsg := TIdMessage.Create(nil);
+      var MailMsg := TdwlMailUtils.New_IdMessage;
       try
-        // bugfix for non unique indy temp file name
-        MailMsg.OnCreateAttachment := TdwlIndyBugFix.CreateAttachment;
         TdwlMailUtils.FilldIdMessageFromString(MailMsg, Data);
         if TdwlMailQueue.QueueForSending(MailMsg) then
           Result := 1;
