@@ -335,7 +335,7 @@ begin
   if Assigned(TdwlLogger.FHookedRaiseExceptObjProc) then
     TdwlLogger.FHookedRaiseExceptObjProc(P);
   if (P.ExceptionCode = cDelphiException) and (P.ExceptObject <> nil) then
-    TdwlLogger.Log(Exception(P.ExceptObject), lsError, 'exception');
+    TdwlLogger.Log(Exception(P.ExceptObject), lsError);
 end;
 
 class procedure TdwlLogger.AddIgnoredException(const Msg: string);
@@ -446,7 +446,10 @@ begin
     LogItem.SeverityLevel := SeverityLevel;
     LogItem.Source := Source;
     LogItem.Channel := Channel;
-    LogItem.Topic := Topic;
+    if Topic='' then
+      LogItem.Topic := 'exception'
+    else
+      LogItem.Topic := Topic;
     {$IFOPT D+}
     var S := Exc.StackTrace;
     if S<>'' then
