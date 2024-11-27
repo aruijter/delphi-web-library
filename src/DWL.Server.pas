@@ -598,7 +598,7 @@ begin
     begin
       var MailMsg := TdwlMailUtils.New_IdMessage;
       try
-        TdwlMailUtils.FilldIdMessageFromString(MailMsg, Data);
+        TdwlMailUtils.FillIdMessageFromString(MailMsg, Data);
         if TdwlMailQueue.QueueForSending(MailMsg) then
           Result := 1;
       finally
