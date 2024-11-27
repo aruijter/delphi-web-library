@@ -3,7 +3,8 @@ unit DWL.Mail.Utils;
 interface
 
 uses
-  IdMessage, System.SysUtils, DWL.Classes, IdAttachment, System.Classes;
+  IdMessage, System.SysUtils, DWL.Classes, IdAttachment, System.Classes,
+  IdAttachmentFile;
 
 type
   TdwlMailCheckOption=(mcEmptyStringIsValid, mcDoNotTrimSpaces, mcEvaluateCommaSeparatedList);
@@ -23,20 +24,20 @@ type
     class function New_IdMessage: TIdMessage; static;
   end;
 
-implementation
-
-uses
-  System.RegularExpressions, DWL.HTTP.Client, DWL.HTTP.Consts,
-  System.NetEncoding, Winapi.WinInet, DWL.MediaTypes, IdAttachmentFile,
-  IdGlobal, DWL.IOUtils, DWL.Types;
-
 type
-  TIdAttachmentFile_BugFix = class(TIdAttachmentFile)
+  TIdAttachmentFile_BetterTempFile = class(TIdAttachmentFile)
   private
     class procedure CreateAttachment(const AMsg: TIdMessage; const AHeaders: TStrings; var AAttachment: TIdAttachment);
   public
     function PrepareTempStream: TStream; override;
   end;
+
+implementation
+
+uses
+  System.RegularExpressions, DWL.HTTP.Client, DWL.HTTP.Consts,
+  System.NetEncoding, Winapi.WinInet, DWL.MediaTypes,
+  IdGlobal, DWL.IOUtils, DWL.Types;
 
 { TdwlMailUtils }
 
@@ -115,7 +116,7 @@ end;
 class function TdwlMailUtils.New_IdMessage: TIdMessage;
 begin
   Result := TIdMessage.Create;
-  Result.OnCreateAttachment := TIdAttachmentFile_BugFix.CreateAttachment;
+  Result.OnCreateAttachment := TIdAttachmentFile_BetterTempFile.CreateAttachment;
 end;
 
 class function TdwlMailUtils.SendMailToAPI(const Endpoint, LogSecret: string; Msg: TIdMessage): TdwlResult;
@@ -138,14 +139,14 @@ begin
     Result.AddErrorMsg('Error '+Response.StatusCode.ToString+': '+Response.ErrorMsg);
 end;
 
-{ TIdAttachmentFile_BugFix }
+{ TIdAttachmentFile_BetterTempFile }
 
-class procedure TIdAttachmentFile_BugFix.CreateAttachment(const AMsg: TIdMessage; const AHeaders: TStrings; var AAttachment: TIdAttachment);
+class procedure TIdAttachmentFile_BetterTempFile.CreateAttachment(const AMsg: TIdMessage; const AHeaders: TStrings; var AAttachment: TIdAttachment);
 begin
-  AAttachment := TIdAttachmentFile_BugFix.Create(AMsg.MessageParts);
+  AAttachment := TIdAttachmentFile_BetterTempFile.Create(AMsg.MessageParts);
 end;
 
-function TIdAttachmentFile_BugFix.PrepareTempStream: TStream;
+function TIdAttachmentFile_BetterTempFile.PrepareTempStream: TStream;
 begin
   FStoredPathName := TdwlDirectory.Application_TempDir+'\Indy_'+TdwlUUID.CreateNew.AsString+'.tmp';
   FTempFileStream := TIdFileCreateStream.Create(FStoredPathName);
