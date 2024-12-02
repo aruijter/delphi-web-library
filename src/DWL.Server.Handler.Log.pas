@@ -96,7 +96,7 @@ uses
   DWL.Server.Globals, DWL.Server.Utils, System.Masks, System.Classes,
   IdMessage, System.StrUtils, IdAttachmentMemory, DWL.Mail.Queue,
   Winapi.WinInet, Winapi.Windows, System.Math, System.Hash, DWL.Server.Consts,
-  DWL.Mail.Utils;
+  DWL.Mail.Utils, DWL.MediaTypes;
 
 const
   TRIGGER_RELOAD_MSECS = 60000; // 1 minute
@@ -411,6 +411,11 @@ begin
                 Subject := ReplaceStr(Subject, '$(topic)', Topic);
                 Subject := ReplaceStr(Subject, '$(msg)', Msg.Substring(0, 100).Replace(#13, '').Replace(#10, ''));
                 MailMsg.Subject := Subject;
+                if (Msg.Length>100) then
+                begin
+                  MailMsg.Body.Text := Msg;
+                  MailMsg.ContentType := MEDIA_TYPE_PLAIN;
+                end;
                 if SameText(Copy(trim(ContentType), 1, 5), 'text/') then
                 begin
                   MailMsg.Body.Text := TEncoding.UTF8.GetString(Content);

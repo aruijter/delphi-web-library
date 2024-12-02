@@ -341,15 +341,15 @@ begin
   var ENum := Enumerator(Directory, Options);
   while ENum.MoveNext do
   begin
+    if ioRemoveReadOnly in Options then
+      TdwlFile.SetReadOnlyFlag(ENum.Current.FullPathName, false);
     if ENum.Current.IsDirectory then
     begin
       if not RemoveDirectory(PChar(ENum.Current.FullPathName)) then
-        raise Exception.Create('Error deleting directcory '+ENum.Current.FullPathName+' : '+SysErrorMessage(GetLastError));
+        raise Exception.Create('Error deleting directory '+ENum.Current.FullPathName+' : '+SysErrorMessage(GetLastError));
     end
     else
     begin
-      if ioRemoveReadOnly in Options then
-        TdwlFile.SetReadOnlyFlag(ENum.Current.FullPathName, false);
       if not WinApi.Windows.DeleteFile(PChar(ENum.Current.FullPathName)) then
         raise Exception.Create('Error deleting file '+ENum.Current.FullPathName+' : '+SysErrorMessage(GetLastError));
     end;
