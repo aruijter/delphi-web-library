@@ -203,6 +203,7 @@ begin
   try
     State._InternalServerStructure := AllocMem(SizeOf(TServerStructure));
     State.RequestMethod := Request.RequestMethod;
+    State.Flags := Request.Flags;
     PServerStructure(State._InternalServerStructure).State_URI := Request.URI;
     PServerStructure(State._InternalServerStructure).Request := Request;
     ProcessRequest(State);
@@ -214,6 +215,7 @@ begin
       State.SetContentText('<!DOCTYPE html><html lang=""><head><title>Internal server error</title></head><body>Internal server error</body></html>');
     end;
   end;
+  Request.Flags := State.Flags;
   Request.StatusCode := State.StatusCode;
   Request.ResponseDataStream.WriteBuffer(PServerStructure(State._InternalServerStructure).ContentBuffer^, PServerStructure(State._InternalServerStructure).ContentLength);
   // freeing up resources

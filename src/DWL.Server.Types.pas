@@ -48,9 +48,9 @@ type
     /// </summary>
     RequestMethod: byte;
     /// <summary>
-    ///   bi directional flags, not used by now <br />
+    ///   bi directional flags<br />
     /// </summary>
-    Flags: integer;
+    Flags: cardinal;
     /// <summary>
     ///   Statuscode can be changed by handler, but is default 200
     ///   a server fault situation detected by the server (as f.e. result=false)

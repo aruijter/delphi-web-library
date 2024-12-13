@@ -44,6 +44,7 @@ type
   strict private
     FRequestMethod: byte;
     FUri: string;
+    FFlags: cardinal;
     FState: TdwlHTTPServerConnectionState;
     FPendingLine: string;
     // FRequestParams is a key/value pair list holding the requestparams
@@ -67,6 +68,7 @@ type
     procedure ReadProcessURI;
     procedure ReadError(const ErrorText: string; NewStatusCode: integer = HTTP_STATUS_BAD_REQUEST);
   public
+    property Flags: cardinal read FFlags write FFlags;
     property RequestMethod: byte read FRequestMethod;
     property RequestBodyStream: TMemoryStream read FRequestBodyStream;
     property RequestHeaders: IdwlParams read FRequestHeaders;
@@ -86,7 +88,7 @@ implementation
 uses
   Winapi.Windows, System.SysUtils, System.NetEncoding,
   System.StrUtils, DWL.HTTP.Utils, DWL.HTTP.Consts, DWL.Logging,
-  System.Threading, DWL.MediaTypes;
+  System.Threading, DWL.MediaTypes, DWL.TCP.Consts;
 
 type
   TRequestLogDispatchThread = class(TdwlThread)
@@ -124,6 +126,8 @@ end;
 
 procedure TdwlCustomHTTPServer.LogRequest(Socket: TdwlHTTPSocket);
 begin
+  if (Socket.Flags and FLAG_SKIPLOG)>0  then
+    Exit;
   if FRequestLogDispatchThread<>nil then
   begin
     try

@@ -18,7 +18,8 @@ type
 implementation
 
 uses
-  System.SysUtils, DWL.HTTP.Consts, DWL.Server.Utils, DWL.MediaTypes;
+  System.SysUtils, DWL.HTTP.Consts, DWL.Server.Utils, DWL.MediaTypes,
+  DWL.TCP.Consts;
 
 { TdwlHTTPHandler_Ping }
 
@@ -29,6 +30,7 @@ end;
 
 function TdwlHTTPHandler_Ping.Get_Ping(const State: PdwlHTTPHandlingState): boolean;
 begin
+  State.Flags := FLAG_SKIPLOG;
   State.SetContentType(MEDIA_TYPE_HTML);
   State.SetContentText('<!DOCTYPE html><html><head><title>Hello</title></head><body>Hello</body></html>');
   Result := true;
