@@ -22,6 +22,7 @@ const
   Param_ServerBaseURL = 'serverbaseurl';
 
   EndpointURI_Log = '/log';
+  EndpointURI_Ping = '/ping';
   EndpointURI_Mail = '/mail';
   EndpointURI_OAuth2 = '/oauth2';
 

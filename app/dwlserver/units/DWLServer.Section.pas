@@ -28,6 +28,7 @@ type
     procedure Start_ProcessBindings(ConfigParams: IdwlParams);
     procedure Start_LoadDLLHandlers(Session: IdwlMySQLSession; ConfigParams: IdwlParams);
     procedure Start_Enable_Logging(ConfigParams: IdwlParams);
+    procedure Start_Create_PingHandler;
     procedure Start_LoadURIAliases(Session: IdwlMySQLSession);
   private
     FServer: TDWLServer;
@@ -49,7 +50,7 @@ uses
   System.Math, DWL.TCP.Consts, System.StrUtils, Winapi.Windows,
   System.Threading, DWL.Logging.Callback, Winapi.ShLwApi, DWL.Mail.Queue,
   DWL.Server.Handler.Mail, DWL.Server.Handler.DLL, Winapi.WinInet,
-  System.NetEncoding, DWL.TCP;
+  System.NetEncoding, DWL.TCP, DWL.Server.Handler.Ping;
 
 const
   TOPIC_BOOTSTRAP = 'bootstrap';
@@ -386,6 +387,7 @@ begin
       ConfigParams.AssignTo(FRequestLoggingParams);
       TdwlMailQueue.Configure(ConfigParams, true);
       Start_Enable_Logging(ConfigParams);
+      Start_Create_PingHandler;
       TdwlLogger.Log('DWL Server starting', lsTrace, TOPIC_BOOTSTRAP);
       DWL.Server.AssignServerProcs;
       FServer.OnlyLocalConnections := ConfigParams.BoolValue(Param_TestMode);
@@ -414,6 +416,11 @@ begin
     end;
     FServerStarting := false;
   end);
+end;
+
+procedure TDWLServerSection.Start_Create_PingHandler;
+begin
+  FServer.RegisterHandler(EndpointURI_Ping, TdwlHTTPHandler_Ping.Create);
 end;
 
 procedure TDWLServerSection.Start_Enable_Logging(ConfigParams: IdwlParams);
