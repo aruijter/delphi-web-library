@@ -489,15 +489,15 @@ end;
 function TdwlDirectoryEnumerator.MoveNext: boolean;
 begin
   Result := UnfilteredMoveNext;
-  // do filtering
-  if Result then
+  while Result do
   begin
-    if ((FILE_ATTRIBUTE_DIRECTORY and FDirEnum.FindData.dwFileAttributes)<>0) and (not (ioIncludeDirectories in FOptions)) then
-      Exit(MoveNext);
-    if ((FILE_ATTRIBUTE_DIRECTORY and FDirEnum.FindData.dwFileAttributes)=0) and (not (ioIncludeFiles in FOptions)) then
-      Exit(MoveNext);
-    if (((FILE_ATTRIBUTE_HIDDEN+FILE_ATTRIBUTE_SYSTEM) and FDirEnum.FindData.dwFileAttributes)>0) and (not (ioIncludeHidden in FOptions)) then
-      Exit(MoveNext);
+    // do filtering
+    if (((FILE_ATTRIBUTE_DIRECTORY and FDirEnum.FindData.dwFileAttributes)<>0) and (not (ioIncludeDirectories in FOptions))) or
+      (((FILE_ATTRIBUTE_DIRECTORY and FDirEnum.FindData.dwFileAttributes)=0) and (not (ioIncludeFiles in FOptions))) or
+      ((((FILE_ATTRIBUTE_HIDDEN+FILE_ATTRIBUTE_SYSTEM) and FDirEnum.FindData.dwFileAttributes)>0) and (not (ioIncludeHidden in FOptions))) then
+      Result := UnfilteredMoveNext
+    else
+      Break;
   end;
 end;
 
