@@ -33,7 +33,7 @@ type
     /// <returns>
     ///   indicating if the execution was successful
     /// </returns>
-    class function ExecuteFile(const FileName: string; const Params: string=''; const DefaultDir: string=''; ShowCmd: integer=SW_SHOW): TdwlResult; static;
+    class function ExecuteFile(const FileName: string; const Params: string=''; const DefaultDir: string=''; ShowCmd: integer=SW_SHOWNORMAL): TdwlResult; static;
     /// <summary>
     ///   Executes a file within the windows environment and waits until it is
     ///   finished. Basically a nice wrapper around the Windows ShellExecute

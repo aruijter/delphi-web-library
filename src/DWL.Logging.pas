@@ -210,7 +210,7 @@ implementation
 uses
   System.Generics.Collections, DWL.SyncObjs, System.NetEncoding,
   {$IFOPT D+}JclDebug,{$ENDIF}
-  DWL.Logging.EventLog, System.Hash, DWL.IOUtils;
+  DWL.Logging.EventLog, System.Hash, DWL.IOUtils, DWL.Application;
 
 type
   TLogDispatchThread = class(TThread)
@@ -228,6 +228,8 @@ type
   end;
 
   TLogEngine = record
+  strict private
+    class procedure MyExitProc; static;
   private
     class var
       FLogsQueue: TdwlThreadQueue_Evented<PdwlLogItem>;
@@ -239,7 +241,6 @@ type
     class procedure FinalizeDispatching; static;
   public
     class constructor Create;
-    class destructor Destroy;
     class procedure  PostLog(const LogItem: PdwlLogItem); static;
     class function CreateLogItem: PdwlLogItem; static;
   end;
@@ -251,32 +252,17 @@ begin
   inherited;
   FLogsQueue := TdwlThreadQueue_Evented<PdwlLogItem>.Create;
   FLogDispatchThread := TLogDispatchThread.Create;
-  FLogDispatchThread.FreeOnTerminate := true;
   FLogDispatchers := TdwlThreadList<IdwlLogDispatcher>.Create;
   FDefaultSource := TdwlFile.ExtractBareName(GetModuleName(hInstance)).ToLower;
   FDefaultChannel := FDefaultSource;
   FDefaultTopic := 'generic';
+  TdwlApplication.RegisterFinalExitProc(MyExitProc);
 end;
 
 class function TLogEngine.CreateLogItem: PdwlLogItem;
 begin
   New(Result);
   Result.TimeStamp := TUnixEpoch.Now;
-end;
-
-class destructor TLogEngine.Destroy;
-begin
-  // terminate thread
-  FLogDispatchThread.Terminate; {it's free on terminate}
-  FLogsQueue.Set_Event; {To wake up thread for termination}
-  // clean lists
-  var Item: PdwlLogItem;
-  while FLogsQueue.TryPop(Item) do
-    Dispose(Item);
-  // free objects
-  FLogDispatchers.Free;
-  FLogsQueue.Free; {the last one to be quite sure the thread is not using it anymore}
-  inherited;
 end;
 
 class procedure TLogEngine.FinalizeDispatching;
@@ -288,6 +274,22 @@ begin
       Break;
     Sleep(300);
   end;
+end;
+
+class procedure TLogEngine.MyExitProc;
+begin
+  // terminate thread
+  FLogDispatchThread.Terminate; {it's free on terminate}
+  FLogsQueue.Set_Event; {To wake up thread for termination}
+  FLogDispatchThread.WaitFor;
+  FLogDispatchThread.Free;
+  // clean lists
+  var Item: PdwlLogItem;
+  while FLogsQueue.TryPop(Item) do
+    Dispose(Item);
+  // free objects
+  FLogDispatchers.Free;
+  FLogsQueue.Free; {the last one to be quite sure the thread is not using it anymore}
 end;
 
 class procedure TLogEngine.PostLog(const LogItem: PdwlLogItem);
