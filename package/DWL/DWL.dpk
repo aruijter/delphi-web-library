@@ -99,6 +99,7 @@ contains
   DWL.Server.Handler.DLL.Classes in '..\..\src\DWL.Server.Handler.DLL.Classes.pas',
   DWL.TCP.Consts in '..\..\src\DWL.TCP.Consts.pas',
   DWl.Logging.DWLServer in '..\..\src\DWl.Logging.DWLServer.pas',
-  DWL.MediaTypes in '..\..\src\DWL.MediaTypes.pas';
+  DWL.MediaTypes in '..\..\src\DWL.MediaTypes.pas',
+  DWL.Application in '..\..\src\DWL.Application.pas';
 
 end.
