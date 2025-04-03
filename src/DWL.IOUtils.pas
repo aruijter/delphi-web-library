@@ -7,6 +7,7 @@ uses
 
 type
   TdwlFile = record
+    class function Delete(const FileName: string): boolean; static;
     class function ExtractBareName(const Path: string=''): string; static;
     class procedure SetReadOnlyFlag(const FileName: string; ReadOnly: boolean); static;
   end;
@@ -46,6 +47,7 @@ type
     class function Application_TempDir: string; static;
     class procedure Copy(const SourceDirectory, DestinationDirectory: string; Options: TdwlIOEnumOptions=[ioIncludeFiles, ioIncludeDirectories, ioRecurse]); static;
     class procedure Delete(const Directory: string; Options: TdwlIOEnumOptions=[ioIncludeFiles, ioIncludeDirectories, ioRecurse]); static;
+    class procedure Empty(const Directory: string; Options: TdwlIOEnumOptions=[ioIncludeFiles, ioIncludeDirectories, ioRecurse]); static;
     class procedure Move(const FromDirectory, ToDirectory: string; Options: TdwlIOEnumOptions=[ioIncludeFiles, ioIncludeDirectories, ioRecurse]); static;
     class function Enumerator(const Directory: string; Options: TdwlIOEnumOptions=[ioIncludeFiles]; const FileMask: string='*.*'): IdwlDirectoryEnumerator; static;
   end;
@@ -96,6 +98,11 @@ type
   end;
 
 { TdwlFile }
+
+class function TdwlFile.Delete(const FileName: string): boolean;
+begin
+  Result := WinApi.Windows.DeleteFile(PChar(FileName));
+end;
 
 class function TdwlFile.ExtractBareName(const Path: string=''): string;
 begin
@@ -336,6 +343,23 @@ end;
 
 class procedure TdwlDirectory.Delete(const Directory: string; Options: TdwlIOEnumOptions=[ioIncludeFiles, ioIncludeDirectories, ioRecurse]);
 begin
+  Empty(Directory, Options);
+  // Remove the Dir itself
+  if ioRemoveReadOnly in Options then
+    TdwlFile.SetReadOnlyFlag(Directory, false);
+  if not RemoveDirectory(PChar(Directory)) then
+    raise Exception.Create('Error deleting directcory '+Directory+' : '+SysErrorMessage(GetLastError));
+end;
+
+class destructor TdwlDirectory.Destroy;
+begin
+  if FApplication_TempDir<>'' then
+    Delete(FApplication_TempDir);
+  inherited;
+end;
+
+class procedure TdwlDirectory.Empty(const Directory: string; Options: TdwlIOEnumOptions);
+begin
   if not DirectoryExists(Directory) then
     Exit;
   var ENum := Enumerator(Directory, Options);
@@ -354,18 +378,6 @@ begin
         raise Exception.Create('Error deleting file '+ENum.Current.FullPathName+' : '+SysErrorMessage(GetLastError));
     end;
   end;
-  // Finally Remove the Dir itself
-  if ioRemoveReadOnly in Options then
-    TdwlFile.SetReadOnlyFlag(Directory, false);
-  if not RemoveDirectory(PChar(Directory)) then
-    raise Exception.Create('Error deleting directcory '+Directory+' : '+SysErrorMessage(GetLastError));
-end;
-
-class destructor TdwlDirectory.Destroy;
-begin
-  if FApplication_TempDir<>'' then
-    Delete(FApplication_TempDir);
-  inherited;
 end;
 
 class function TdwlDirectory.Enumerator(const Directory: string; Options: TdwlIOEnumOptions=[ioIncludeFiles]; const FileMask: string='*.*'): IdwlDirectoryEnumerator;
