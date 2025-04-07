@@ -1290,9 +1290,13 @@ end;
 procedure TdwlParams.WriteJSON(const JSON: string);
 begin
   var Obj := TJSONObject(TJSONObject.ParseJSONValue(JSON));
-  if not (Obj is TJSONObject) then
-    raise Exception.Create('JSON is not an object');
-  WriteJSON(Obj);
+  try
+    if not (Obj is TJSONObject) then
+      raise Exception.Create('JSON is not an object');
+    WriteJSON(Obj);
+  finally
+    Obj.Free;
+  end;
 end;
 
 procedure TdwlParams.WriteJSON(const JSON: TJSONObject);
