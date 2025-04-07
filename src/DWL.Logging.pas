@@ -279,7 +279,7 @@ end;
 class procedure TLogEngine.MyExitProc;
 begin
   // terminate thread
-  FLogDispatchThread.Terminate; {it's free on terminate}
+  FLogDispatchThread.Terminate;
   FLogsQueue.Set_Event; {To wake up thread for termination}
   FLogDispatchThread.WaitFor;
   FLogDispatchThread.Free;

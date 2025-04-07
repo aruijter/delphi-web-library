@@ -153,7 +153,7 @@ uses
   DWL.HTTP.Consts, System.SysUtils, DWL.JOSE, DWL.Types, DWL.Params.Consts,
   System.Rtti, System.DateUtils, DWL.Logging, DWL.Logging.DWLServer,
   DWL.Server.Utils, DWL.Server.Globals, DWL.Server.Consts, DWL.Mail.Utils,
-  DWL.MediaTypes;
+  DWL.MediaTypes, DWL.Application;
 
 const
   Param_Body_JSON='body_json';
@@ -541,6 +541,7 @@ begin
   begin
     FHandlingEndpoints.Free;
     TdwlLogger.FinalizeDispatching;
+    TdwlApplication.Finalize;
   end;
 end;
 
