@@ -11,6 +11,7 @@ type
     class var FOwnedObjects: TList<TObject>;
     class var FFinalProcs: TList<TProcedure>;
   public
+    class constructor Create;
     class destructor Destroy;
     class procedure Finalize; static;
     class procedure RegisterFinalExitProc(Proc: TProcedure); static;
@@ -21,6 +22,16 @@ implementation
 
 uses
   Vcl.Dialogs;
+
+class constructor TdwlApplication.Create;
+begin
+  // An exit proc is usable only for executables, not DLL's and packages
+  // then try to detect packages, this is not straighforward
+  // IsLibrary only works for DLL's , so an additional test is needed
+  // by looking extension of modulename
+  if (not IsLibrary) and Sametext(ExtractFileExt(GetModuleName(HInstance)), '.exe') then
+    AddExitProc(Finalize);
+end;
 
 class destructor TdwlApplication.Destroy;
 begin
