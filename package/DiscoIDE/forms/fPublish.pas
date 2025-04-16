@@ -32,14 +32,12 @@ type
     FSignCmd: string;
     FZipToDir: string;
     FProject: IOTAProject;
-    FApiSession: TdwlAPISession;
+    FApiSession: IdwlAPISession;
     procedure Initialize;
     procedure GoAndPublish;
     procedure AddMessage(SeverityLevel: TdwlLogSeverityLevel; const ErrorStr: string);
     procedure PutErrorInMemo(SeverityLevel: TdwlLogSeverityLevel; const ErrorStr: string);
     procedure GetUserNamePassword(var Username, Password, Token: string; Action: TdwlAPIUserNamePasswordAuthorizerCallBackAction; JSONResponse: TJSONValue);
-  public
-    destructor Destroy; override;
   end;
 
 implementation
@@ -91,12 +89,6 @@ begin
   GoAndPublish;
 end;
 
-destructor TPublishForm.Destroy;
-begin
-  FApiSession.Free;
-  inherited Destroy;
-end;
-
 procedure TPublishForm.GetUserNamePassword(var Username, Password, Token: string; Action: TdwlAPIUserNamePasswordAuthorizerCallBackAction; JSONResponse: TJSONValue);
 begin
   if Action=acapwGetUserNamePassword then
@@ -140,7 +132,7 @@ begin
             Exit;
           // SENDING RELEASE
           AddMessage(lsNotice, 'Sending release to server...');
-          var Request := FApiSession.New_APIRequest('upload/package', HTTP_METHOD_POST);
+          var Request := FApiSession.Request('upload/package', HTTP_METHOD_POST);
           var Bytes := TFile.ReadAllBytes(ZipTo);
           Request.HTTPRequest.PostStream.Write(Bytes[0], Length(Bytes));
           Request.HTTPRequest.Header['packagename'] := FPackagename;
@@ -242,10 +234,11 @@ begin
           FPackageName := TdwlFile.ExtractBareName(FTargetName);
           //CHECKING  VERSIONINFO
           var VersionOnServer: TdwlFileVersionInfo;
-          FApiSession := TdwlAPISession.Create(TDisCoIde_General.FConfigParams.StrValue(paramDisco_Endpoint),
+          var ApiBaseUrl := TDisCoIde_General.FConfigParams.StrValue(paramDisco_Endpoint);
+          FApiSession := New_APISession(ApiBaseUrl,
             New_UserPwAuthorizer(TDisCoIde_General.FConfigParams.StrValue(paramAuth_Endpoint), GetUsernamePassword));
-          AddMessage(lsNotice, 'Fetching release info from '+FApiSession.ApiBaseUrl+'release');
-          var Response := FApiSession.ExecuteApiRequest('release', HTTP_METHOD_GET, 'packagename='+FPackageName);
+          AddMessage(lsNotice, 'Fetching release info from '+ApiBaseUrl+'release');
+          var Response := FApiSession.Request('release?packagename='+FPackageName).Execute;
           if Response.StatusCode<>HTTP_STATUS_OK then
           begin
             if Response.StatusCode=HTTP_STATUS_NO_CONTENT then
@@ -256,7 +249,7 @@ begin
           end
           else
           begin
-            var JSON := TJSONValue.ParseJSONValue(Response.AsString);
+            var JSON := TJSONValue.ParseJSONValue(Response.HTTPResponse.AsString);
             try
               var Params := JSON.GetValue<TJSONObject>('data');
               VersionOnServer.SetFromString(Params.GetValue<string>('version'));

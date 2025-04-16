@@ -22,7 +22,7 @@ type
 ///   Params: <br/>param_ForceLoginPrompt; bool; to force a login-prompt and skip SingleSignOn in the browser.
 /// </summary>
 function New_OAuth2Authorizer(CallbackProc: TdwlAPIAuthorizerCallBackProc; const Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string; Params: IdwlParams=nil): IdwlAPIOAuth2Authorizer; overload;
-function New_OAuth2Authorizer(const Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName: string; AESKey: TBytes): IdwlAPIOAuth2Authorizer; overload;
+function New_OAuth2Authorizer(const SecretsFileName: string; AESKey: TBytes; Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string): IdwlAPIOAuth2Authorizer; overload;
 
 
 implementation
@@ -54,7 +54,7 @@ type
     FAESKey: TBytes;
     procedure CallBack(var Token: string; Action: TdwlAPIAuthorizerCallBackAction);
   public
-    constructor Create(const Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName: string; AESKey: TBytes);
+    constructor Create(const SecretsFileName: string; AESKey: TBytes; const Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string);
   end;
 
 function New_OAuth2Authorizer(CallbackProc: TdwlAPIAuthorizerCallBackProc; const Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string; Params: IdwlParams=nil): IdwlAPIOAuth2Authorizer;
@@ -62,9 +62,9 @@ begin
   Result := TdwlAPIOAuth2Authorizer.Create(CallbackProc, Issuer_Uri, Client_Id, Redirect_Uri, Scopes, DialogTitle, Params);
 end;
 
-function New_OAuth2Authorizer(const Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName: string; AESKey: TBytes): IdwlAPIOAuth2Authorizer; overload;
+function New_OAuth2Authorizer(const SecretsFileName: string; AESKey: TBytes; Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string): IdwlAPIOAuth2Authorizer; overload;
 begin
-  Result := TdwlAPIOAuth2SecretsFileAuthorizer.Create(Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName, AESKey);
+  Result := TdwlAPIOAuth2SecretsFileAuthorizer.Create(SecretsFileName, AESKey, Issuer_Uri, Client_Id, Redirect_Uri, Scopes, DialogTitle);
 end;
 
 { TdwlAPIOAuth2Authorizer }
@@ -133,15 +133,14 @@ end;
 constructor TdwlAPIOAuth2Authorizer.Create(CallbackProc: TdwlAPIAuthorizerCallBackProc; const Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string; Params: IdwlParams=nil);
 begin
   inherited Create(CallbackProc);
-  PutInternetExplorerBrowserEmulationInRegistry;
+  if DialogTitle<>'' then
+    PutInternetExplorerBrowserEmulationInRegistry;
   FOIDC_Client := TdwlOIDC_Client.Create(Issuer_Uri, Client_Id, Redirect_Uri);
   for var Scope in Scopes do
     FOIDC_Client.Scopes.Add(Scope);
   FDialogTitle := DialogTitle;
   if Params<>nil then
-  begin
     FForceLoginPrompt := Params.BoolValue(param_ForceLoginPrompt);
-  end;
 end;
 
 destructor TdwlAPIOAuth2Authorizer.Destroy;
@@ -157,8 +156,11 @@ begin
   case Action of
     acaGetRefreshtoken:
       begin
-        Token := TFile.ReadAllText(FSecretsFileName, TEncoding.UTF8);
-        TdwlCrypt.AES_Decrypt(Token, FAESKey);
+        if FileExists(FSecretsFileName) then
+        begin
+          Token := TFile.ReadAllText(FSecretsFileName, TEncoding.UTF8);
+          TdwlCrypt.AES_Decrypt(Token, FAESKey);
+        end;
       end;
     acaNewRefreshtoken:
       begin
@@ -170,11 +172,11 @@ begin
   end;
 end;
 
-constructor TdwlAPIOAuth2SecretsFileAuthorizer.Create(const Issuer_Uri, Client_Id, Redirect_Uri, SecretsFileName: string; AESKey: TBytes);
+constructor TdwlAPIOAuth2SecretsFileAuthorizer.Create(const SecretsFileName: string; AESKey: TBytes; const Issuer_Uri, Client_Id, Redirect_Uri: string; Scopes: array of string; const DialogTitle: string);
 begin
   FSecretsFileName := SecretsFileName;
   FAESKey := AESKey;
-  inherited Create(CallBack, Issuer_Uri, Client_Id, Redirect_Uri, [], '');
+  inherited Create(CallBack, Issuer_Uri, Client_Id, Redirect_Uri, Scopes, DialogTitle);
 end;
 
 end.

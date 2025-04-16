@@ -78,12 +78,22 @@ type
     function JSON: TJSONObject;
     function HTTPRequest: IdwlHTTPRequest;
     function Execute: IdwlAPIResponse;
+    procedure SetOnProgress(OnProgress: TdwlHTTPProgressEvent);
   end;
 
   IdwlAPISession = interface
-    function New_APIRequest(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; OmitAccessToken: boolean=false): IdwlAPIRequest;
+    function Request(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; OmitAccessToken: boolean=false): IdwlAPIRequest;
   end;
 
+function New_APISession(const AApiBaseUrl: string; Authorizer: IdwlAPIAuthorizer): IdwlAPISession;
+
+implementation
+
+uses
+  System.StrUtils, Winapi.Windows, Winapi.WinInet, System.IOUtils,
+  DWL.MediaTypes;
+
+type
   TdwlAPISession = class(TInterfacedObject, IdwlAPISession)
   strict private
     FApiBaseUrl: string;
@@ -96,16 +106,8 @@ type
     constructor Create(const AApiBaseUrl: string; Authorizer: IdwlAPIAuthorizer);
     function ExecuteApiRequest(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; const URLEncodedParamsOrPostBody: string=''; PostBodyIsJSON: boolean=true; OmitAccessToken: boolean=false; AOnProgress: TdwlHTTPProgressEvent=nil): IdwlHTTPResponse;
     function ExecuteJSONRequest(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; const URLEncodedParamsOrPostBody: string=''; OmitAccessToken: boolean=false): IdwlAPIResponse;
-    function New_APIRequest(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; OmitAccessToken: boolean=false): IdwlAPIRequest;
+    function Request(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; OmitAccessToken: boolean=false): IdwlAPIRequest;
   end;
-
-function New_APISession(const AApiBaseUrl: string; Authorizer: IdwlAPIAuthorizer): IdwlAPISession;
-
-implementation
-
-uses
-  System.StrUtils, Winapi.Windows, Winapi.WinInet, System.IOUtils,
-  DWL.MediaTypes;
 
 function New_APISession(const AApiBaseUrl: string; Authorizer: IdwlAPIAuthorizer): IdwlAPISession;
 begin
@@ -125,6 +127,7 @@ type
     function GetMethod: string;
     procedure SetMethod(const Value: string);
     procedure WritePostData(const PostData: string);
+    procedure SetOnProgress(OnProgress: TdwlHTTPProgressEvent);
   public
     constructor Create(Session: TdwlAPISession; const Url: string);
     destructor Destroy; override;
@@ -305,7 +308,7 @@ begin
   end;
 end;
 
-function TdwlAPISession.New_APIRequest(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; OmitAccessToken: boolean=false): IdwlAPIRequest;
+function TdwlAPISession.Request(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; OmitAccessToken: boolean=false): IdwlAPIRequest;
 begin
   try
     Result := TdwlAPIRequest.Create(Self, FApiBaseUrl+UriPart);
@@ -419,6 +422,11 @@ begin
   if FJSON=nil then
     FJSON := TJSONObject.Create;
   Result := FJSON;
+end;
+
+procedure TdwlAPIRequest.SetOnProgress(OnProgress: TdwlHTTPProgressEvent);
+begin
+  HTTPRequest.OnProgress := OnProgress;
 end;
 
 procedure TdwlAPIRequest.SetMethod(const Value: string);

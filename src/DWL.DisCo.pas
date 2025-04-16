@@ -9,10 +9,10 @@ type
   TdwlDiscoMsgFunc = procedure(const Msg: string; ProcessingFinished: boolean) of object;
 
   TdwlDisCo = class abstract
-  public
+  private
     class var
-      FApiSession: TdwlAPISession;
-    class destructor Destroy;
+      FApiSession: IdwlAPISession;
+  public
     class procedure Initialize(const Disco_BaseURL: string; Authorizer: IdwlAPIAuthorizer); virtual;
   end;
 
@@ -60,15 +60,7 @@ uses
 
 class procedure TdwlDisCo.Initialize(const Disco_BaseURL: string; Authorizer: IdwlAPIAuthorizer);
 begin
-  if FApiSession<>nil then
-    FApiSession.Free;
-  FApiSession := TdwlAPISession.Create(Disco_BaseURL, Authorizer);
-end;
-
-class destructor TdwlDisCo.Destroy;
-begin
-  FApiSession.Free;
-  inherited;
+  FApiSession := New_APISession(Disco_BaseURL, Authorizer);
 end;
 
 { TdwlDiscoClient }
@@ -180,7 +172,7 @@ end;
 
 class function TdwlDiscoClient.CheckPreReleaseUpdate: TdwlResult;
 begin
-  var Response := TdwlDisco.FApiSession.ExecuteJSONRequest('release', HTTP_METHOD_GET, 'packagename='+AppName);
+  var Response := TdwlDisco.FApiSession.Request('release?packagename='+AppName).Execute;
   if (not Response.Success) or (Response.JSON_Data.GetValue<integer>('kind')<>discoreleasekindPreRelease) then
   begin
     Result.AddErrorMsg('No PreRelease available right now.');
@@ -252,15 +244,17 @@ begin
   try
     ProgressMsg('Downloading '+PackageName);
     try
-      var Response := FApiSession.ExecuteApiRequest(IfThen(WithoutAuthentication, 'download/supportpackage', 'download/package'), HTTP_METHOD_GET, 'packagename='+TNetEncoding.URL.Encode(PackageName)+'&kind='+
-        IfThen(RequestPrerelease, discoreleasekindPreRelease, discoreleasekindRelease).ToString, true, WithoutAuthentication, FProgressBytesFunc);
-      if (Response=nil) or (Response.StatusCode<>HTTP_STATUS_OK) then
+      var Request := FApiSession.Request(IfThen(WithoutAuthentication, 'download/supportpackage', 'download/package')+
+        '?packagename='+TNetEncoding.URL.Encode(PackageName)+'&kind='+IfThen(RequestPrerelease, discoreleasekindPreRelease, discoreleasekindRelease).ToString, HTTP_METHOD_GET, WithoutAuthentication);
+      Request.SetOnProgress(FProgressBytesFunc);
+      var Response := Request.Execute;
+      if Response.StatusCode<>HTTP_STATUS_OK then
         Exit;
       var FileName: string;
       var DispList := TStringList.Create;
       try
         DispList.Delimiter := ';';
-        DispList.DelimitedText := Response.Header[HTTP_FIELD_CONTENT_DISPOSITION];
+        DispList.DelimitedText := Response.HTTPResponse.Header[HTTP_FIELD_CONTENT_DISPOSITION];
         FileName := DispList.Values['filename'];
       finally
         DispList.Free;
@@ -272,7 +266,7 @@ begin
       begin
         CheckDLL_7Z;
         var ZipFn := TempUpdateDir+'\'+FileName;
-        TFile.WriteAllBytes(ZipFn, Response.AsBytes);
+        TFile.WriteAllBytes(ZipFn, Response.HTTPResponse.AsBytes);
         if not TdwlCompression.ExtractArchive(ZipFn, DestinationDir).Success then
           Exit;
         try
@@ -281,7 +275,7 @@ begin
         end;
       end
       else
-        TFile.WriteAllBytes(DestinationDir+'\'+FileName, Response.AsBytes);
+        TFile.WriteAllBytes(DestinationDir+'\'+FileName, Response.HTTPResponse.AsBytes);
       Result := true;
     finally
       ProgressMsg('', true);
@@ -305,12 +299,7 @@ begin
   if Profile='' then
     Profile := 'localhost';
   {$ENDIF}
-  var Response: IdwlAPIResponse := nil;
-  try
-    Response := FApiSession.ExecuteJSONRequest('phonehome', HTTP_METHOD_GET, 'appname='+AppName.ToLower+IfThen(Profile<>'', '&profile='+Profile));
-  except
-    Response := nil;
-  end;
+  var Response := FApiSession.Request('phonehome?appname='+AppName.ToLower+IfThen(Profile<>'', '&profile='+Profile)).Execute;
   var Data: TJSONObject := nil;
   var FreeData := false;
   var CacheFn: string;
