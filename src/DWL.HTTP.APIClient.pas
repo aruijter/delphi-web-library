@@ -207,9 +207,9 @@ end;
 
 function TdwlAPIResponse.JSON_Data_Array(const APath: string): IdwlAPIJSONArray;
 begin
-  var JSON: TJSONArray;
-  if (JSON_Data<>nil) and JSON_Data.TryGetValue<TJSONArray>(APath, JSON) then
-    Result := TdwlAPIJSONArray.Create(Self, JSON)
+  var JSONArray: TJSONArray;
+  if (JSON_Data<>nil) and JSON_Data.TryGetValue<TJSONArray>(APath, JSONArray) then
+    Result := TdwlAPIJSONArray.Create(Self, JSONArray)
   else
     Result := nil;
 end;
