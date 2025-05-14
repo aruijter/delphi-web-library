@@ -183,7 +183,7 @@ end;
 
 procedure TMainForm.DeleteCurrentRelease;
 begin
-  var Request := FApiSession.New_APIRequest('release?packagename='+TNetEncoding.URL.Encode(FCurrentRelease.PackageName)+'&version='+TNetEncoding.URL.Encode(FCurrentRelease.Version), HTTP_METHOD_DELETE);
+  var Request := FApiSession.Request('release?packagename='+TNetEncoding.URL.Encode(FCurrentRelease.PackageName)+'&version='+TNetEncoding.URL.Encode(FCurrentRelease.Version), HTTP_METHOD_DELETE);
   var Response := Request.Execute;
   LoadReleases;
 end;
@@ -395,7 +395,7 @@ begin
   end;
   // SENDING RELEASE
   try
-    var Request := FApiSession.New_APIRequest('upload/package', HTTP_METHOD_POST);
+    var Request := FApiSession.Request('upload/package', HTTP_METHOD_POST);
     var Bytes := TFile.ReadAllBytes(FileName);
     Request.HTTPRequest.PostStream.Write(Bytes[0], Length(Bytes));
     Request.HTTPRequest.Header['packagename'] := FCurrentRelease.PackageName;

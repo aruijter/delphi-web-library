@@ -85,14 +85,6 @@ type
     function Request(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; OmitAccessToken: boolean=false): IdwlAPIRequest;
   end;
 
-function New_APISession(const AApiBaseUrl: string; Authorizer: IdwlAPIAuthorizer): IdwlAPISession;
-
-implementation
-
-uses
-  System.StrUtils, Winapi.Windows, Winapi.WinInet, System.IOUtils,
-  DWL.MediaTypes;
-
 type
   TdwlAPISession = class(TInterfacedObject, IdwlAPISession)
   strict private
@@ -108,6 +100,14 @@ type
     function ExecuteJSONRequest(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; const URLEncodedParamsOrPostBody: string=''; OmitAccessToken: boolean=false): IdwlAPIResponse;
     function Request(const UriPart: string; const Http_Method: string=HTTP_METHOD_GET; OmitAccessToken: boolean=false): IdwlAPIRequest;
   end;
+
+function New_APISession(const AApiBaseUrl: string; Authorizer: IdwlAPIAuthorizer): IdwlAPISession;
+
+implementation
+
+uses
+  System.StrUtils, Winapi.Windows, Winapi.WinInet, System.IOUtils,
+  DWL.MediaTypes;
 
 function New_APISession(const AApiBaseUrl: string; Authorizer: IdwlAPIAuthorizer): IdwlAPISession;
 begin
