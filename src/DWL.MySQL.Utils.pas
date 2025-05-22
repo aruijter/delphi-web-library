@@ -3,7 +3,7 @@ unit DWL.MySQL.Utils;
 interface
 
 uses
-  System.SysUtils, System.StrUtils;
+  System.SysUtils;
 
 type
   TdwlMySQLUtils = record

@@ -19,7 +19,7 @@ implementation
 
 uses
   DWL.HTTP.Consts, System.StrUtils, Winapi.WinInet, System.SysUtils,
-  System.Classes, DWL.Logging;
+  System.Classes;
 
 type
   TdwlHTTPField = class(TInterfacedObject, IdwlHTTPFieldValue)

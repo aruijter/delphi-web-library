@@ -185,7 +185,7 @@ implementation
 
 uses
   System.DateUtils, System.SysUtils, Winapi.Windows, System.UIConsts,
-  System.Math, System.StrUtils;
+  System.Math;
 
 { TUnixEpoch }
 

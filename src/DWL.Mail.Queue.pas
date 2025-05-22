@@ -60,7 +60,7 @@ uses
   DWL.MySQL, DWL.Params.Consts, System.JSON, Winapi.Windows, System.SysUtils,
   IdSMTP, IdSSLOpenSSL, DWL.HTTP.APIClient.OAuth2, DWL.HTTP.APIClient, DWL.Mail.SASL,
   IdAssignedNumbers, System.Math, IdExplicitTLSClientServerBase, DWL.Classes,
-  DWL.StrUtils, DWL.Mail.Utils;
+  DWL.Mail.Utils;
 
 const
   MAILQUEUE_SLEEP_MSECS=120000{2 min};

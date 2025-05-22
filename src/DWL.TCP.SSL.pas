@@ -71,8 +71,7 @@ type
 implementation
 
 uses
-  Winapi.Windows, DWL.OpenSSL, System.SysUtils, System.StrUtils,
-  DWL.HTTP.Consts, DWL.Logging;
+  Winapi.Windows, DWL.OpenSSL, System.SysUtils;
 
 const
   SSL_EX_DATA_SELF_INDEX = 0;

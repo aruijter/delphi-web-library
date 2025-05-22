@@ -5,7 +5,7 @@ unit DWL.Server;
 interface
 
 uses
-  System.Threading, DWL.Params, DWL.Logging,
+  System.Threading, DWL.Logging,
   DWL.TCP.HTTP,
   System.Generics.Collections, System.SysUtils,
   DWL.Server.Types;
@@ -104,12 +104,12 @@ procedure AssignServerProcs;
 implementation
 
 uses
-  System.Classes, DWL.ACME,
-  System.Rtti, DWL.Params.Consts, System.StrUtils,
-  DWL.MySQL, DWL.Server.Handler.DLL,
-  Winapi.Windows, Winapi.ShLwApi, DWL.Server.Consts,
-  DWL.HTTP.Consts, DWL.Mail.Queue, System.Math, DWL.OpenSSL,
-  DWL.TCP.SSL, Winapi.WinInet, DWL.Server.Utils, IdContext,
+  System.Classes,
+  System.Rtti,
+
+  Winapi.Windows, DWL.Server.Consts,
+  DWL.HTTP.Consts, DWL.Mail.Queue, System.Math,
+  Winapi.WinInet, DWL.Server.Utils,
   DWL.Server.Globals, System.NetEncoding, IdMessage, DWL.Mail.Utils,
   System.JSON;
 

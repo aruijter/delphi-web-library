@@ -3,7 +3,7 @@ unit DWL.TCP.HTTP;
 interface
 
 uses
-  DWL.TCP.Server, Winapi.Winsock2, System.Generics.Collections, DWL.Params,
+  DWL.TCP.Server, System.Generics.Collections, DWL.Params,
   System.Classes, DWL.TCP, Winapi.WinInet, System.Diagnostics, DWL.SyncObjs;
 
 type

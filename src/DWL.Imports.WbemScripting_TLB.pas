@@ -34,7 +34,7 @@ unit DWL.Imports.WbemScripting_TLB;
 {$ALIGN 4}
 interface
 
-uses Windows, ActiveX, Classes, Vcl.Graphics, Vcl.OleServer, StdVCL, Variants;
+uses Windows, ActiveX, Classes, Vcl.Graphics, Vcl.OleServer, Variants;
   
 
 // *********************************************************************//

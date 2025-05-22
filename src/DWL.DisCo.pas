@@ -53,7 +53,7 @@ uses
   DWL.HTTP.Consts, DWL.IOUtils, System.SysUtils, System.JSON, System.IOUtils,
   Winapi.WinInet, System.Classes, DWL.Compression, DWL.DisCo.Consts,
   System.Math, DWL.OS, sevenzip, DWL.Params.Utils, DWL.Params.Consts,
-  System.StrUtils, DWL.StrUtils, System.NetEncoding;
+  System.StrUtils, System.NetEncoding;
 
 
 { TdwlDisCo }

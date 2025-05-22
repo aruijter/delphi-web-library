@@ -80,7 +80,7 @@ type
 implementation
 
 uses
-  System.SysUtils, DWL.Resolver, System.Masks, System.StrUtils;
+  System.SysUtils, System.StrUtils;
 
 type
   TdwlDirectoryEnumerator = class(TInterfacedObject, IdwlDirectoryEnumerator)

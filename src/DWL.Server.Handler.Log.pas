@@ -9,7 +9,7 @@ interface
 
 uses
   DWL.Server, DWL.Server.Types, DWL.Params,
-  System.Generics.Collections, System.SysUtils, System.SyncObjs, DWL.SyncObjs,
+  System.Generics.Collections, System.SysUtils, System.SyncObjs,
   System.RegularExpressions;
 
 const
@@ -93,7 +93,7 @@ implementation
 
 uses
   DWL.Params.Consts, DWL.MySQL, DWL.HTTP.Consts, DWL.Logging,
-  DWL.Server.Globals, DWL.Server.Utils, System.Masks, System.Classes,
+  DWL.Server.Globals, DWL.Server.Utils, System.Classes,
   IdMessage, System.StrUtils, IdAttachmentMemory, DWL.Mail.Queue,
   Winapi.WinInet, Winapi.Windows, System.Math, System.Hash, DWL.Server.Consts,
   DWL.Mail.Utils, DWL.MediaTypes;

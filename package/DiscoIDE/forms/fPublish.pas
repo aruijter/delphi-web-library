@@ -45,7 +45,7 @@ implementation
 uses
   DWL.ToolsAPI, Vcl.Graphics, System.SysUtils, System.Threading,
   DWL.HTTP.Consts, Winapi.WinInet, DWL.DisCo.Consts,
-  System.StrUtils, sevenzip, DWL.OS, System.IOUtils, JclCompression,
+  sevenzip, DWL.OS, System.IOUtils, JclCompression,
   DisCoIde.General, DisCoIde.Consts, System.DateUtils;
 
 {$R *.dfm}

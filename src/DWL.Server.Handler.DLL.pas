@@ -33,7 +33,7 @@ type
 implementation
 
 uses
-  Winapi.Windows, DWL.Logging, System.SysUtils, DWL.Server.Globals,
+  Winapi.Windows, System.SysUtils, DWL.Server.Globals,
   DWL.Server.Utils;
 
 const

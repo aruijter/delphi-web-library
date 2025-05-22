@@ -161,10 +161,10 @@ type
 implementation
 
 uses
-  System.Classes, System.AnsiStrings, System.StrUtils,
-  System.DateUtils, System.IOUtils, System.Math, System.JSON, Winapi.WinInet,
+  System.Classes,
+  System.DateUtils, System.Math, System.JSON, Winapi.WinInet,
   System.Hash, Winapi.Windows,
-  System.Generics.Collections, System.NetEncoding, DWL.TCP.Consts, DWL.TCP.HTTP,
+  System.NetEncoding, DWL.TCP.Consts, DWL.TCP.HTTP,
   DWL.TCP, DWL.MediaTypes;
 
 const
