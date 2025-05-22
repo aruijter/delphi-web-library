@@ -46,13 +46,15 @@ type
   end;
 
   IdwlAPIJSONArray = interface
+    function Errors: TJSONArray;
     function JSON: TJSONArray;
+    function Success: boolean;
   end;
 
   IdwlAPIResponse = interface
     function JSON: TJSONObject;
     function JSON_Data: TJSONObject;
-    function JSON_Data_Array(const APath: string): IdwlAPIJSONArray;
+    function JSON_Data_Array(const APath: string=''): IdwlAPIJSONArray;
     function HTTPResponse: IdwlHTTPResponse;
     function StatusCode: cardinal;
     function Success: boolean;
@@ -142,7 +144,7 @@ type
     FErrors: TJSONArray;
     function JSON: TJSONObject;
     function JSON_Data: TJSONObject;
-    function JSON_Data_Array(const APath: string): IdwlAPIJSONArray;
+    function JSON_Data_Array(const APath: string=''): IdwlAPIJSONArray;
     function Errors: TJSONArray;
     function HTTPResponse: IdwlHTTPResponse;
     function StatusCode: cardinal;
@@ -155,11 +157,20 @@ type
   TdwlAPIJSONArray = class(TInterfacedObject, IdwlAPIJSONArray)
   strict private
     FResponse: IdwlAPIResponse;
-    FJSON: TJSONArray;
   private
+    function Errors: TJSONArray;
     function JSON: TJSONArray;
+    function Success: boolean;
+  protected
+    FJSON: TJSONArray;
   public
     constructor Create(Response: IdwlAPIResponse; AJSON: TJSONArray);
+  end;
+
+  TdwlAPIJSONObject = class(TdwlAPIJSONArray)
+  public
+    constructor Create(Response: IdwlAPIResponse; AJSON: TJSONObject);
+    destructor Destroy; override;
   end;
 
 { TdwlAPIResponse }
@@ -168,28 +179,24 @@ constructor TdwlAPIResponse.Create(AHTTPResponse: IdwlHTTPResponse);
 begin
   inherited Create;
   FHTTPResponse := AHTTPResponse;
-  if (AHTTPResponse.StatusCode div 100=2) then
+  FSuccess := AHTTPResponse.StatusCode div 100=2;
+  if AHTTPResponse.Header[HTTP_FIELD_CONTENT_TYPE].StartsWith(MEDIA_TYPE_JSON, true) then
   begin
-    if AHTTPResponse.Header[HTTP_FIELD_CONTENT_TYPE].StartsWith(MEDIA_TYPE_JSON, true) then
-    begin
-      var JSONResult: TJSONValue := nil;
-      try
-        JSONResult := TJSONValue.ParseJSONValue(AHTTPResponse.AsString);
-        if JSONResult is TJSONObject then
-        begin
-          FJSON := TJSONObject(JSONResult);
-          FSuccess := FJSON.GetValue<boolean>('success', false);
-        end
-        else
-          JSONResult.Free;
-      except
-        FSuccess := false;
+    var JSONResult: TJSONValue := nil;
+    try
+      JSONResult := TJSONValue.ParseJSONValue(AHTTPResponse.AsString);
+      if JSONResult is TJSONObject then
+      begin
+        FJSON := TJSONObject(JSONResult);
+        FSuccess := FJSON.GetValue<boolean>('success', false);
+      end
+      else
         JSONResult.Free;
-        FJSON := nil;
-      end;
-    end
-    else
-      FSuccess := true;
+    except
+      FSuccess := false;
+      JSONResult.Free;
+      FJSON := nil;
+    end;
   end;
 end;
 
@@ -205,13 +212,26 @@ begin
   Result := FJSON_Data;
 end;
 
-function TdwlAPIResponse.JSON_Data_Array(const APath: string): IdwlAPIJSONArray;
+function TdwlAPIResponse.JSON_Data_Array(const APath: string=''): IdwlAPIJSONArray;
 begin
-  var JSONArray: TJSONArray;
-  if (JSON_Data<>nil) and JSON_Data.TryGetValue<TJSONArray>(APath, JSONArray) then
-    Result := TdwlAPIJSONArray.Create(Self, JSONArray)
+  if (JSON_Data<>nil) then
+  begin
+    var JSON: TJSONValue;
+    if JSON_Data.TryGetValue<TJSONValue>(APath, JSON) then
+    begin
+      if JSON is TJSONArray then
+         Result := TdwlAPIJSONArray.Create(Self, TJSONArray(JSON))
+      else
+      begin
+        if JSOn is TJSONObject then
+          Result := TdwlAPIJSONObject.Create(Self, TJSONObject(JSON))
+        else
+          Result := TdwlAPIJSONObject.Create(Self, nil);
+      end;
+    end;
+  end
   else
-    Result := nil;
+    Result := TdwlAPIJSONObject.Create(Self, nil);
 end;
 
 destructor TdwlAPIResponse.Destroy;
@@ -447,9 +467,19 @@ begin
   FJSON := AJSON;
 end;
 
+function TdwlAPIJSONArray.Errors: TJSONArray;
+begin
+  Result := FResponse.Errors;
+end;
+
 function TdwlAPIJSONArray.JSON: TJSONArray;
 begin
   Result := FJSON;
+end;
+
+function TdwlAPIJSONArray.Success: boolean;
+begin
+  Result := FResponse.Success;
 end;
 
 { TdwlAPIAuthorizer }
@@ -482,6 +512,24 @@ procedure TdwlAPIAuthorizer.NewAccessToken(const NewAccessToken: string; NewAcce
 begin
   FAccessToken := NewAccessToken;
   FAccessTokenExpireTick := NewAccessTokenExpireTick;
+end;
+
+{ TdwlAPIJSONObject }
+
+constructor TdwlAPIJSONObject.Create(Response: IdwlAPIResponse; AJSON: TJSONObject);
+begin
+  var Arr := TJSONArray.Create;
+  if AJSON<>nil then
+    Arr.Add(AJSON);
+  inherited Create(Response, Arr);
+end;
+
+destructor TdwlAPIJSONObject.Destroy;
+begin
+  if FJSON.Count>0 then
+    FJSON.Remove(0);
+  FJSON.Free;
+  inherited Destroy;
 end;
 
 end.
