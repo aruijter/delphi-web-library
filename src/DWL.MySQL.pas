@@ -636,7 +636,7 @@ implementation
 
 uses
   Winapi.Windows, System.SyncObjs, DWL.MySQL.Utils, System.Math,
-  System.SysUtils, DWL.SyncObjs;
+  System.SysUtils, DWL.SyncObjs, DWL.Application;
 
 const
   TIMEOUT_CONNECTION = 300000; //msecs = 5 min
@@ -727,13 +727,16 @@ type
   end;
 
   TdwlMySQLManager = class
-  private
+  strict private
     class var
       FAccess: TCriticalSection;
-      FConnectionPools: TObjectDictionary<string, TConnectionPool>;
       FCleanUpThread: TdwlThread;
-    class function CreateSession(Params: IdwlParams): IdwlMySQLSession;
-    class procedure Cleanup;
+    class procedure ExitProc; static;
+  private
+    class var
+      FConnectionPools: TObjectDictionary<string, TConnectionPool>;
+    class procedure Cleanup; static;
+    class function CreateSession(Params: IdwlParams): IdwlMySQLSession; static;
   public
     class constructor Create;
     class destructor Destroy;
@@ -2041,16 +2044,20 @@ begin
   FAccess := TCriticalSection.Create;
   FConnectionPools := TObjectDictionary<string, TConnectionPool>.Create([doOwnsValues]);
   FCleanUpThread := TManagerCleanupThread.Create;
-  FCleanUpThread.FreeOnTerminate := true;
+  TdwlApplication.RegisterFinalExitProc(ExitProc);
 end;
 
 class destructor TdwlMySQLManager.Destroy;
 begin
-  FCleanUpThread.Terminate;
-  // FCleanUpThread is FreeOnTerminate, so no Free needed
+  TdwlThread.ShutdownAndFree(FCleanUpThread);
   FConnectionPools.Free;
   FAccess.Free;
   inherited;
+end;
+
+class procedure TdwlMySQLManager.ExitProc;
+begin
+  TdwlThread.ShutdownAndFree(FCleanUpThread);
 end;
 
 class procedure TdwlMySQLManager.Cleanup;
