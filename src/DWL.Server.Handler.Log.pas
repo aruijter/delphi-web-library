@@ -81,11 +81,12 @@ type
     function Post_Log(const State: PdwlHTTPHandlingState): boolean;
     function Options_Log(const State: PdwlHTTPHandlingState): boolean;
     procedure ProcessTriggers(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes);
+  protected
+    function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
+    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
   public
     constructor Create(AParams: IdwlParams);
     destructor Destroy; override;
-    function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
-    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
     function SubmitLog(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes; ForwardLog: boolean): boolean;
   end;
 

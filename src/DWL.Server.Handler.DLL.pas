@@ -23,11 +23,11 @@ type
     FDoAllowOrigins: boolean;
   protected
     function LogDescription: string; override;
+    function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
+    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
   public
     constructor Create(DLLHandle: HModule; ProcessProc: TDLL_ProcessRequestProc; AuthorizeProc: TDLL_AuthorizeProc; const Endpoint: string; Params: IdwlParams);
     destructor Destroy; override;
-    function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
-    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
   end;
 
 implementation

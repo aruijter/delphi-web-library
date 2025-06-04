@@ -9,7 +9,7 @@ type
   TdwlHTTPHandler_Ping = class(TdwlHTTPHandler)
   strict private
     function Get_Ping(const State: PdwlHTTPHandlingState): boolean;
-  public
+  protected
     function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
     function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
   end;

@@ -363,7 +363,6 @@ type
     FBinds: PMySQL_Bind;
     FStmt: PMySQL_Stmt;
     FFields: TObjectList<TdwlMySQLResultField>;
-    function GetRowsAffected: UInt64;
     function Bind(AIdx: cardinal): PMySQL_Bind;
     function ReturnDefaultOnNull<T>(AIdx: integer; NullReturnsDefault: boolean; Default: T; var RetVal: T): boolean;
   public
@@ -527,10 +526,6 @@ type
     /// </param>
     procedure GetBlobRef(AIdx: Integer; cbUseBlob: TdwlMySQLUseOutputBindingCallback);
     /// <summary>
-    ///   The amount of rows affected by the execution of the query
-    /// </summary>
-    property RowsAffected: UInt64 read GetRowsAffected;
-    /// <summary>
     ///   The description of the fields applicable for the result set.
     /// </summary>
     property Fields: TObjectList<TdwlMySQLResultField> read FFields;
@@ -578,6 +573,10 @@ type
     ///   Inserts
     /// </summary>
     function LastInsertID: UInt64;
+    /// <summary>
+    ///   The amount of rows affected by the execution of the command
+    /// </summary>
+    function RowsAffected: UInt64;
   end;
 
   /// <summary>
@@ -709,6 +708,7 @@ type
     function Reader: TdwlMySQLDataReader;
     function Parameters: TdwlMySQLDataBindingCollection;
     function LastInsertID: UInt64;
+    function RowsAffected: UInt64;
   public
     constructor Create(Session: IdwlMySQLSession; Connection: TdwlMySQLConnection; const Query: string);
     destructor Destroy; override;
@@ -1103,6 +1103,11 @@ begin
   Result := FReader;
 end;
 
+function TdwlMySQLCommand.RowsAffected: UInt64;
+begin
+  Result := mysql_stmt_affected_rows(FStmt);
+end;
+
 { TdwlMySQLDataReader }
 
 function TdwlMySQLDataReader.Bind(AIdx: cardinal): PMySQL_Bind;
@@ -1176,11 +1181,6 @@ function TdwlMySQLDataReader.GetInteger(AIdx: Integer; NullReturnsDefault: boole
 begin
   if not ReturnDefaultOnNull<integer>(AIdx, NullReturnsDefault, Default, Result) then
     Result := FFields[AIdx].FBinding.GetData_Integer(FStmt, AIdx);
-end;
-
-function TdwlMySQLDataReader.GetRowsAffected: UInt64;
-begin
-  Result := mysql_stmt_affected_rows(FStmt);
 end;
 
 function TdwlMySQLDataReader.GetDateTime(AIdx: integer; NullReturnsDefault: boolean=false; Default: TDateTime=0): TDateTime;

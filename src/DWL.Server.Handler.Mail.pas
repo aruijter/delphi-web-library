@@ -15,10 +15,11 @@ type
     FLogSecret: string;
     function Post_Mail(const State: PdwlHTTPHandlingState): boolean;
     function Options_Mail(const State: PdwlHTTPHandlingState): boolean;
-  public
-    constructor Create(AParams: IdwlParams);
+  protected
     function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
     function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
+  public
+    constructor Create(AParams: IdwlParams);
   end;
 
 implementation

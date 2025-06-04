@@ -165,7 +165,7 @@ uses
   System.DateUtils, System.Math, System.JSON, Winapi.WinInet,
   System.Hash, Winapi.Windows,
   System.NetEncoding, DWL.TCP.Consts, DWL.TCP.HTTP,
-  DWL.TCP, DWL.MediaTypes;
+  DWL.TCP, DWL.MediaTypes, System.Generics.Collections;
 
 const
   ProductionAPIEndpoint ='https://acme-v02.api.letsencrypt.org/directory';

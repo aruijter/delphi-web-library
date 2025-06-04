@@ -12,11 +12,23 @@ uses
 
 type
   TDWlServer=class;
+
+  IdwlHTTPHandler = interface
+    function Authorize(const State: PdwlHTTPHandlingState): boolean;
+    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean;
+  end;
+
   /// <summary>
   ///   The TdwlHTTPHandler class is the base class from which you can derive
   ///   you own handler to process requests
   /// </summary>
-  TdwlHTTPHandler = class
+  TdwlHTTPHandler = class(TInterfacedObject, IdwlHTTPHandler)
+  strict private
+    FURI: string;
+    FURICutIndex: cardinal;
+    procedure SetUri(Value: string);
+  private
+    function RemoveLeadUri(const URI: string): string;
   protected
     /// <summary>
     ///   If the variable FWrapupProc is assigned, it will be called everytime a request has finished
@@ -27,11 +39,6 @@ type
     FWrapupProc: TdwlWrapupProc;
     FServer: TDWLServer;
     function LogDescription: string; virtual;
-  public
-    FURI: string;
-    property URI: string read FURI;
-    property WrapupProc: TdwlWrapupProc read FWrapupProc;
-    destructor Destroy; override;
     /// <summary>
     ///   When authorizing clients, the handler that will actual handle the
     ///   request will first be asked to authorize the user and allow this
@@ -42,7 +49,11 @@ type
     ///   Override this abstract function and implement the actual process in
     ///   this function
     /// </summary>
-    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; virtual; abstract;
+    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; virtual;
+  public
+    property URI: string read FURI write SetUri;
+    property WrapupProc: TdwlWrapupProc read FWrapupProc;
+    destructor Destroy; override;
   end;
 
   TDWLServer = class(TdwlCustomHTTPServer)
@@ -50,7 +61,7 @@ type
     FURIAliases: TDictionary<string, string>;
     FOnlyLocalConnections: boolean;
     FExecutionTask: ITask;
-    FRootHandlerAccess: TMultiReadExclusiveWriteSynchronizer;
+    FHandlerAccess: TMultiReadExclusiveWriteSynchronizer;
     FRootHandler: TdwlHTTPHandler;
     FGlobalIssuer: string;
   private
@@ -64,7 +75,6 @@ type
     property OnlyLocalConnections: boolean read FOnlyLocalConnections write FOnlyLocalConnections;
     constructor Create;
     destructor Destroy; override;
-    procedure ProcessRequest(const State: PdwlHTTPHandlingState);
     /// <summary>
     ///   By adding and URL alias, in the case the alias URI is called by a
     ///   client, the traffice is rerouted to the given URI Handler
@@ -87,12 +97,12 @@ type
     /// <summary>
     ///   Get the handler bound to the given URI
     /// </summary>
-    function FindHandler(const URI: string): TdwlHTTPHandler;
+    function FindHandler(const URI: string): IdwlHTTPHandler;
     /// <summary>
     ///   register a handler bound to a URI. All requests starting with this
     ///   specific URI will be routed through this handler
     /// </summary>
-    procedure RegisterHandler(const URI: string; Handler: TdwlHTTPHandler);
+    procedure RegisterHandler(const URI: string; Handler: IdwlHTTPHandler);
     /// <summary>
     ///   Unregister the handler bound to a specific URI
     /// </summary>
@@ -116,14 +126,12 @@ uses
 type
   TdwlHTTPHandler_PassThrough = class(TdwlHTTPHandler)
   strict private
-    FHandlers: TObjectDictionary<string, TdwlHTTPHandler>;
+    FHandlers: TDictionary<string, IdwlHTTPHandler>;
   private
-    function FindHandler(const URI: string): TdwlHTTPHandler;
-    procedure RegisterHandler(const URI: string; Handler: TdwlHTTPHandler);
-    function UnRegisterHandler(const URI: string): boolean;
+    function FindHandler(const EndpointURI: string): IdwlHTTPHandler;
+    procedure RegisterHandler(const EndpointURI: string; Handler: IdwlHTTPHandler);
+    function UnRegisterHandler(const EndpointURI: string): boolean;
     procedure UnRegisterAllHandlers;
-  protected
-    function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
   public
     constructor Create(AServer: TDWLServer);
     destructor Destroy; override;
@@ -134,7 +142,7 @@ type
   PServerStructure = ^TServerStructure;
   TServerStructure = record
     State_URI: string;
-    FinalHandler: TdwlHTTPHandler;
+    FinalHandler: IdwlHTTPHandler;
     WebSocketsReceiveProc: TdwlHTTPWebSocket_OnData;
     ContentBuffer: pointer;
     ContentLength: cardinal;
@@ -160,7 +168,7 @@ end;
 constructor TDWLServer.Create;
 begin
   inherited Create;
-  FRootHandlerAccess := TMultiReadExclusiveWriteSynchronizer.Create;
+  FHandlerAccess := TMultiReadExclusiveWriteSynchronizer.Create;
   FRootHandler := TdwlHTTPHandler_PassThrough.Create(Self);
 end;
 
@@ -169,17 +177,17 @@ begin
   Active := false;
   FURIAliases.Free;
   FRootHandler.Free;
-  FRootHandlerAccess.Free;
+  FHandlerAccess.Free;
   inherited Destroy;
 end;
 
-function TDWLServer.FindHandler(const URI: string): TdwlHTTPHandler;
+function TDWLServer.FindHandler(const URI: string): IdwlHTTPHandler;
 begin
-  FRootHandlerAccess.BeginRead;
+  FHandlerAccess.BeginRead;
   try
     Result := TdwlHTTPHandler_PassThrough(FRootHandler).FindHandler(URI);
   finally
-    FRootHandlerAccess.EndRead;
+    FHandlerAccess.EndRead;
   end;
 end;
 
@@ -189,45 +197,75 @@ begin
 end;
 
 function TDWLServer.HandleRequest(Request: TdwlHTTPSocket): boolean;
-begin
-  Result := false;
-  if OnlyLocalConnections then
+  procedure WriteNotFound;
+  const
+    S: ansistring = '<!DOCTYPE html><html lang=""><head><title>Not Found</title></head><body>Not Found</body></html>';
   begin
-    if (Request.IP_Remote<>'127.0.0.1') then
+    Request.StatusCode := HTTP_STATUS_NOT_FOUND;
+    Request.ResponseDataStream.WriteBuffer(S[1], Length(S));
+  end;
+  procedure WriteServerError;
+  const
+    S: ansistring = '<!DOCTYPE html><html lang=""><head><title>Internal server error</title></head><body>Internal server error</body></html>';
+  begin
+    Request.StatusCode := HTTP_STATUS_SERVER_ERROR;
+    Request.ResponseDataStream.WriteBuffer(S[1], Length(S));
+  end;
+begin
+  Result := true;
+  try
+    if OnlyLocalConnections and (Request.IP_Remote<>'127.0.0.1') then
     begin
-      Request.StatusCode := HTTP_STATUS_FORBIDDEN;
+      WriteNotFound;
       Exit;
     end;
-  end;
-  var State: PdwlHTTPHandlingState := AllocMem(SizeOf(TdwlHTTPHandlingState));
-  try
+    var Uri := Request.Uri;
+    var NewUri: string;
+    if (FURIAliases<>nil) and FURIAliases.TryGetValue(Uri, NewURI) then
+      Uri := NewUri;
+    var Handler := FindHandler(Uri);
+    if Handler=nil then
+    begin
+      WriteNotFound;
+      Exit;
+    end;
+    var State: PdwlHTTPHandlingState := AllocMem(SizeOf(TdwlHTTPHandlingState));
     State._InternalServerStructure := AllocMem(SizeOf(TServerStructure));
-    State.RequestMethod := Request.RequestMethod;
-    State.Flags := Request.Flags;
-    PServerStructure(State._InternalServerStructure).State_URI := Request.URI;
-    PServerStructure(State._InternalServerStructure).Request := Request;
-    ProcessRequest(State);
+    try
+      State.RequestMethod := Request.RequestMethod;
+      State.Flags := Request.Flags;
+      PServerStructure(State._InternalServerStructure).State_URI := TdwlHTTPHandler(Handler).RemoveLeadURI(URI);
+      PServerStructure(State._InternalServerStructure).Request := Request;
+      // all strings that are put in State as PWiderChar should backed by a Pascal String
+      // until State will be freed
+      // We arranged this by putting the strings that are referenced in the serverstructure
+      State.URI := PWideChar(PServerStructure(State._InternalServerStructure).State_URI);
+      State.SetHeaderValue(HTTP_FIELD_CACHE_CONTROL, 'no-cache');
+      State.StatusCode := HTTP_STATUS_OK;
+      if Handler.ProcessRequest(State) then
+      begin
+        Request.Flags := State.Flags;
+        Request.StatusCode := State.StatusCode;
+        Request.ResponseDataStream.WriteBuffer(PServerStructure(State._InternalServerStructure).ContentBuffer^, PServerStructure(State._InternalServerStructure).ContentLength);
+        if Assigned(TdwlHTTPHandler(Handler).WrapupProc) then
+          TdwlHTTPHandler(Handler).WrapupProc(State);
+      end
+      else
+        WriteNotFound;
+      if PServerStructure(State._InternalServerStructure).ContentOwned then
+        FreeMem(PServerStructure(State._InternalServerStructure).ContentBuffer);
+    finally
+      PServerStructure(State._InternalServerStructure).State_URI := ''; // dispose string
+      Freemem(State._InternalServerStructure);
+      FreeMem(State);
+    end;
   except
     on E: Exception do
     begin
-      TdwlLogger.Log('Exception while handling '+State.URI+': '+E.Message, lsError);
-      State.StatusCode := HTTP_STATUS_SERVER_ERROR;
-      State.SetContentText('<!DOCTYPE html><html lang=""><head><title>Internal server error</title></head><body>Internal server error</body></html>');
+      TdwlLogger.Log('Exception while handling '+Request.URI+': '+E.Message, lsError);
+      WriteServerError;
     end;
   end;
-  Request.Flags := State.Flags;
-  Request.StatusCode := State.StatusCode;
-  Request.ResponseDataStream.WriteBuffer(PServerStructure(State._InternalServerStructure).ContentBuffer^, PServerStructure(State._InternalServerStructure).ContentLength);
-  // freeing up resources
-  if  PServerStructure(State._InternalServerStructure).ContentOwned then
-    FreeMem(PServerStructure(State._InternalServerStructure).ContentBuffer);
-  if Assigned(PServerStructure(State._InternalServerStructure).FinalHandler) and
-    Assigned(PServerStructure(State._InternalServerStructure).FinalHandler.WrapupProc) then
-    PServerStructure(State._InternalServerStructure).FinalHandler.WrapupProc(State);
-  PServerStructure(State._InternalServerStructure).State_URI := ''; // dispose string
-  Freemem(State._InternalServerStructure);
-  FreeMem(State);
-  Result := true;
 end;
 
 procedure TDWLServer.InternalDeActivate;
@@ -236,59 +274,33 @@ begin
   inherited InternalDeActivate;
 end;
 
-procedure TDWLServer.ProcessRequest(const State: PdwlHTTPHandlingState);
+procedure TDWLServer.RegisterHandler(const URI: string; Handler: IdwlHTTPHandler);
 begin
-  State.StatusCode := HTTP_STATUS_OK;
-  var NewURI: string;
-  if (FURIAliases<>nil) and FURIAliases.TryGetValue(PServerStructure(State._InternalServerStructure).State_URI, NewURI) then
-    PServerStructure(State._InternalServerStructure).State_URI := NewURI;
-  // all strings that are put in State as PWiderChar should backed by a Pascal String
-  // until State will be freed
-  // We arranged this by putting the strings that are referenced in the serverstructure
-  State.URI := PWideChar(PServerStructure(State._InternalServerStructure).State_URI);
-  State.Flags := 0;
-  State.SetHeaderValue(HTTP_FIELD_CACHE_CONTROL, 'no-cache');
-  FRootHandlerAccess.BeginRead;
-  try
-    // RootHandler never needs Authentication Control
-    // So no need to check here, just process request
-    if (not FRootHandler.ProcessRequest(State)) then
-    begin
-      State.StatusCode := HTTP_STATUS_NOT_FOUND;
-      State.SetContentText('<!DOCTYPE html><html lang=""><head><title>Not Found</title></head><body>Not Found</body></html>');
-    end;
-  finally
-    FRootHandlerAccess.EndRead;
-  end;
-end;
-
-procedure TDWLServer.RegisterHandler(const URI: string; Handler: TdwlHTTPHandler);
-begin
-  FRootHandlerAccess.BeginWrite;
+  FHandlerAccess.BeginWrite;
   try
     TdwlHTTPHandler_PassThrough(FRootHandler).RegisterHandler(URI, Handler);
   finally
-    FRootHandlerAccess.EndWrite;
+    FHandlerAccess.EndWrite;
   end;
 end;
 
 procedure TDWLServer.ResumeHandling;
 begin
-  FRootHandlerAccess.EndWrite;
+  FHandlerAccess.EndWrite;
 end;
 
 procedure TDWLServer.SuspendHandling;
 begin
-  FRootHandlerAccess.BeginWrite;
+  FHandlerAccess.BeginWrite;
 end;
 
 function TDWLServer.UnRegisterHandler(const URI: string): boolean;
 begin
-  FRootHandlerAccess.BeginWrite;
+  FHandlerAccess.BeginWrite;
   try
     Result := TdwlHTTPHandler_PassThrough(FRootHandler).UnRegisterHandler(URI);
   finally
-    FRootHandlerAccess.EndWrite;
+    FHandlerAccess.EndWrite;
   end;
 end;
 
@@ -304,7 +316,7 @@ constructor TdwlHTTPHandler_PassThrough.Create(AServer: TDWLServer);
 begin
   inherited Create;
   FServer := AServer;
-  FHandlers := TObjectDictionary<string, TdwlHTTPHandler>.Create([doOwnsValues]);
+  FHandlers := TDictionary<string, IdwlHTTPHandler>.Create;
 end;
 
 destructor TdwlHTTPHandler_PassThrough.Destroy;
@@ -313,82 +325,45 @@ begin
   inherited Destroy;
 end;
 
-function TdwlHTTPHandler_PassThrough.FindHandler(const URI: string): TdwlHTTPHandler;
+function TdwlHTTPHandler_PassThrough.FindHandler(const EndpointURI: string): IdwlHTTPHandler;
 begin
-  Result := nil;
-  if Copy(URI, 1, 1)<>'/' then
+  if Copy(EndpointURI, 1, 1)<>'/' then
     Exit;
-  var S := Copy(URI, 2, MaxInt);
+  var S := Copy(EndpointURI, 2, MaxInt);
   var P := Pos('/', S);
   var URISegment: string;
   if P>1 then
     URISegment := Copy(S, 1, P-1)
   else
     URISegment := S;
-  var Handler: TdwlHTTPHandler;
-  if not FHandlers.TryGetValue(URISegment, Handler) then
-    Exit;
-  if P<1 then // we reached the end: found
-    Result := Handler
-  else
+  if not FHandlers.TryGetValue(URISegment, Result) then
+    Exit(nil);
+  if P>1 then
   begin
-    if (Handler is TdwlHTTPHandler_PassThrough) then
-      Result := TdwlHTTPHandler_PassThrough(Handler).FindHandler(Copy(S, P, MaxInt));
+    if (Result is TdwlHTTPHandler_PassThrough) then
+      Result := TdwlHTTPHandler_PassThrough(Result).FindHandler(Copy(S, P, MaxInt));
   end;
 end;
 
-function TdwlHTTPHandler_PassThrough.ProcessRequest(const State: PdwlHTTPHandlingState): boolean;
+procedure TdwlHTTPHandler_PassThrough.RegisterHandler(const EndpointURI: string; Handler: IdwlHTTPHandler);
 begin
-  Result := false;
-  var New_URI := PServerStructure(State._InternalServerStructure).State_URI;
-  if Copy(New_URI, 1, 1)<>'/' then
-    Exit;
-  var S := Copy(New_URI, 2, MaxInt);
-  var P := Pos('/', S);
-  var P2 := Pos('?' , S);
-  if (P2>0) and (P2<P) then
-    P := P2;
-  if P=0 then
-    P := MaxInt;
-  var Handler: TdwlHTTPHandler;
-  if FHandlers.TryGetValue(Copy(S, 1, P-1), Handler) then
-  begin
-    New_URI := Copy(S, P, MaxInt);
-    PServerStructure(State._InternalServerStructure).State_URI := New_URI;
-    State.URI := PWideChar(PServerStructure(State._InternalServerStructure).State_URI);
-    // Do a security check
-    // Before passing request to the found handler
-    PServerStructure(State._InternalServerStructure).FinalHandler := Handler;
-    if Handler.Authorize(State) then
-      Result := Handler.ProcessRequest(State)
-    else
-    begin
-      State.StatusCode := HTTP_STATUS_DENIED;
-      State.SetContentText('<html>Not found.</html>');
-      Result := true;
-    end;
-  end;
-end;
-
-procedure TdwlHTTPHandler_PassThrough.RegisterHandler(const URI: string; Handler: TdwlHTTPHandler);
-begin
-  if Copy(URI, 1, 1)<>'/' then
+  if Copy(EndpointURI, 1, 1)<>'/' then
     raise Exception.Create('URI does not start with a slash');
-  var S := Copy(URI, 2, MaxInt);
+  var S := Copy(EndpointURI, 2, MaxInt);
   var P := Pos('/', S);
   if P>1 then
   begin
     var URISegment := Copy(S, 1, P-1);
-    var PassThroughHandler: TdwlHTTPHandler;
+    var PassThroughHandler: IdwlHTTPHandler;
     if FHandlers.TryGetValue(URISegment, PassThroughHandler) then
     begin
       if not (PassThroughHandler is TdwlHTTPHandler_PassThrough) then
-        raise Exception.Create('URI '+URI+' is already associated with another handler');
+        raise Exception.Create('URI '+EndpointURI+' is already associated with another handler');
     end
     else
     begin
       PassThroughHandler := TdwlHTTPHandler_PassThrough.Create(FServer);
-      PassThroughHandler.FURI := FURI+URISegment;
+      TdwlHTTPHandler_PassThrough(PassThroughHandler).URI := URI+URISegment;
       FHandlers.Add(URISegment, PassThroughHandler);
     end;
     TdwlHTTPHandler_PassThrough(PassThroughHandler).RegisterHandler(Copy(S, P, MaxInt), Handler);
@@ -396,8 +371,8 @@ begin
   else
   begin
     FHandlers.Add(S, Handler);
-    Handler.FServer := FServer;
-    Handler.FURI := FURI+URI;
+    TdwlHTTPHandler(Handler).FServer := FServer;
+    TdwlHTTPHandler(Handler).URI := EndpointURI;
   end;
 end;
 
@@ -406,19 +381,19 @@ begin
   FHandlers.Clear;
 end;
 
-function TdwlHTTPHandler_PassThrough.UnRegisterHandler(const URI: string): boolean;
+function TdwlHTTPHandler_PassThrough.UnRegisterHandler(const EndpointURI: string): boolean;
 begin
   Result := false;
-  if Copy(URI, 1, 1)<>'/' then
+  if Copy(EndpointURI, 1, 1)<>'/' then
     Exit;
-  var S := Copy(URI, 2, MaxInt);
+  var S := Copy(EndpointURI, 2, MaxInt);
   var P := Pos('/', S);
   var URISegment: string;
   if P>1 then
     URISegment := Copy(S, 1, P-1)
   else
     URISegment := S;
-  var Handler: TdwlHTTPHandler;
+  var Handler: IdwlHTTPHandler;
   if not FHandlers.TryGetValue(URISegment, Handler) then
     Exit;
   if P<1 then
@@ -455,6 +430,22 @@ end;
 function TdwlHTTPHandler.LogDescription: string;
 begin
   Result := Classname;
+end;
+
+function TdwlHTTPHandler.ProcessRequest(const State: PdwlHTTPHandlingState): boolean;
+begin
+  Result := false;
+end;
+
+function TdwlHTTPHandler.RemoveLeadUri(const URI: string): string;
+begin
+  Result := Copy(Uri, FURICutIndex, MaxInt);
+end;
+
+procedure TdwlHTTPHandler.SetUri(Value: string);
+begin
+  FURI := Value;
+  FURICutIndex := Length(FUri)+1;
 end;
 
 procedure State_ArrangeContentBuffer(const State: PdwlHTTPHandlingState; var ContentBuffer: pointer; const ContentLength: cardinal); stdcall;
@@ -512,7 +503,7 @@ begin
     ValueFound := SameText(Key, SpecialRequestParam_Context_Issuer);
     if ValueFound then
     begin
-      FoundStr := PServerStructure(State._InternalServerStructure).FinalHandler.FServer.GlobalIssuer;
+      FoundStr := TdwlHTTPHandler(PServerStructure(State._InternalServerStructure).FinalHandler).FServer.GlobalIssuer;
       if FoundStr='' then
       begin
         var HostName := PServerStructure(State._InternalServerStructure).Request.Context_HostName;
