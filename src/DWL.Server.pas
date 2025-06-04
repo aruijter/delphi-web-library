@@ -135,14 +135,13 @@ type
   public
     constructor Create(AServer: TDWLServer);
     destructor Destroy; override;
-    function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
   end;
 
 type
   PServerStructure = ^TServerStructure;
   TServerStructure = record
     State_URI: string;
-    FinalHandler: IdwlHTTPHandler;
+    Handler: IdwlHTTPHandler;
     WebSocketsReceiveProc: TdwlHTTPWebSocket_OnData;
     ContentBuffer: pointer;
     ContentLength: cardinal;
@@ -234,6 +233,7 @@ begin
     try
       State.RequestMethod := Request.RequestMethod;
       State.Flags := Request.Flags;
+      PServerStructure(State._InternalServerStructure).Handler := Handler;
       PServerStructure(State._InternalServerStructure).State_URI := TdwlHTTPHandler(Handler).RemoveLeadURI(URI);
       PServerStructure(State._InternalServerStructure).Request := Request;
       // all strings that are put in State as PWiderChar should backed by a Pascal String
@@ -242,20 +242,27 @@ begin
       State.URI := PWideChar(PServerStructure(State._InternalServerStructure).State_URI);
       State.SetHeaderValue(HTTP_FIELD_CACHE_CONTROL, 'no-cache');
       State.StatusCode := HTTP_STATUS_OK;
-      if Handler.ProcessRequest(State) then
-      begin
-        Request.Flags := State.Flags;
-        Request.StatusCode := State.StatusCode;
-        Request.ResponseDataStream.WriteBuffer(PServerStructure(State._InternalServerStructure).ContentBuffer^, PServerStructure(State._InternalServerStructure).ContentLength);
-        if Assigned(TdwlHTTPHandler(Handler).WrapupProc) then
-          TdwlHTTPHandler(Handler).WrapupProc(State);
-      end
+      if not Handler.Authorize(State) then
+        State.StatusCode := HTTP_STATUS_DENIED
       else
-        WriteNotFound;
+      begin
+        if Handler.ProcessRequest(State) then
+        begin
+          Request.Flags := State.Flags;
+          Request.StatusCode := State.StatusCode;
+          Request.ResponseDataStream.WriteBuffer(PServerStructure(State._InternalServerStructure).ContentBuffer^, PServerStructure(State._InternalServerStructure).ContentLength);
+          if Assigned(TdwlHTTPHandler(Handler).WrapupProc) then
+            TdwlHTTPHandler(Handler).WrapupProc(State);
+        end
+        else
+          WriteNotFound;
+      end;
       if PServerStructure(State._InternalServerStructure).ContentOwned then
         FreeMem(PServerStructure(State._InternalServerStructure).ContentBuffer);
     finally
-      PServerStructure(State._InternalServerStructure).State_URI := ''; // dispose string
+      // dispose reference counted items
+      PServerStructure(State._InternalServerStructure).Handler := nil;
+      PServerStructure(State._InternalServerStructure).State_URI := '';
       Freemem(State._InternalServerStructure);
       FreeMem(State);
     end;
@@ -305,12 +312,6 @@ begin
 end;
 
 { TdwlHTTPHandler_PassThrough }
-
-function TdwlHTTPHandler_PassThrough.Authorize(const State: PdwlHTTPHandlingState): boolean;
-begin
-  // Authorization is always passed through, so for me its ok now!
-  Result := true;
-end;
 
 constructor TdwlHTTPHandler_PassThrough.Create(AServer: TDWLServer);
 begin
@@ -503,7 +504,7 @@ begin
     ValueFound := SameText(Key, SpecialRequestParam_Context_Issuer);
     if ValueFound then
     begin
-      FoundStr := TdwlHTTPHandler(PServerStructure(State._InternalServerStructure).FinalHandler).FServer.GlobalIssuer;
+      FoundStr := TdwlHTTPHandler(PServerStructure(State._InternalServerStructure).Handler).FServer.GlobalIssuer;
       if FoundStr='' then
       begin
         var HostName := PServerStructure(State._InternalServerStructure).Request.Context_HostName;
