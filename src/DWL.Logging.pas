@@ -364,6 +364,8 @@ end;
 
 class procedure TdwlLogger.EnableExceptionLogging;
 begin
+  if Assigned(FHookedRaiseExceptObjProc) then // Exception Logging is already activated, dont create recursive loop here!
+    Exit;
   FHookedRaiseExceptObjProc := RaiseExceptObjProc;
   RaiseExceptObjProc := @LoggedRaiseExceptObjProc;
 end;
