@@ -43,6 +43,7 @@ const
   FILE_EXT_TIFF = '.tiff';
   FILE_EXT_XLS = '.xls';
   FILE_EXT_XLSX = '.xlsx';
+  FILE_EXT_GZ = '.gz';
   FILE_EXT_TAR_GZ = '.tar.gz';
 
 type
@@ -54,6 +55,7 @@ type
     class procedure InitLookupLists;
   public
     class destructor Destroy;
+    class function GetMediaTypeByPath(const Path: string): string;
     class function GetMediaTypeByFileExtension(const FileExtension: string): string;
     class function GetFileExtensionByMediaType(const MediaType: string): string;
   end;
@@ -92,6 +94,15 @@ begin
     Ext := '.'+Ext;
   if not FFileExtension2MediaType.TryGetValue(Ext, Result) then
     Result := '';
+end;
+
+class function TMediaTypeHelper.GetMediaTypeByPath(const Path: string): string;
+begin
+  var Extension := ExtractFileExt(Path);
+  // handle special 'double extension'
+  if SameText(Extension, FILE_EXT_GZ) and Path.EndsWith(FILE_EXT_TAR_GZ, true) then
+    Extension := FILE_EXT_TAR_GZ;
+  Result := GetMediaTypeByFileExtension(Extension);
 end;
 
 class procedure TMediaTypeHelper.InitLookupLists;
