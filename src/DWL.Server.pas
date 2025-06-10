@@ -343,6 +343,13 @@ begin
   begin
     if (Result is TdwlHTTPHandler_PassThrough) then
       Result := TdwlHTTPHandler_PassThrough(Result).FindHandler(Copy(S, P, MaxInt));
+  end
+  else
+  begin
+    // don't return a passthrough handler
+    if Result is TdwlHTTPHandler_PassThrough then
+      Result := nil;
+
   end;
 end;
 
@@ -364,7 +371,7 @@ begin
     else
     begin
       PassThroughHandler := TdwlHTTPHandler_PassThrough.Create(FServer);
-      TdwlHTTPHandler_PassThrough(PassThroughHandler).URI := URI+URISegment;
+      TdwlHTTPHandler_PassThrough(PassThroughHandler).URI := URI+'/'+URISegment;
       FHandlers.Add(URISegment, PassThroughHandler);
     end;
     TdwlHTTPHandler_PassThrough(PassThroughHandler).RegisterHandler(Copy(S, P, MaxInt), Handler);
@@ -373,7 +380,7 @@ begin
   begin
     FHandlers.Add(S, Handler);
     TdwlHTTPHandler(Handler).FServer := FServer;
-    TdwlHTTPHandler(Handler).URI := EndpointURI;
+    TdwlHTTPHandler(Handler).URI := URI+EndpointURI;
   end;
 end;
 
