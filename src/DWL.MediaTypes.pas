@@ -8,6 +8,7 @@ uses
 const
   MEDIA_TYPE_7Z = 'application/x-7z-compressed';
   MEDIA_TYPE_CSV = 'text/csv';
+  MEDIA_TYPE_DDF = 'application/ddf';
   MEDIA_TYPE_HTML = 'text/html';
   MEDIA_TYPE_IMAGE_PNG = 'image/png';
   MEDIA_TYPE_JOSE_JSON = 'application/jose+json';
@@ -27,9 +28,10 @@ const
   MEDIA_TYPE_X_WWW_FORM_URLENCODED = 'application/x-www-form-urlencoded';
   MEDIA_TYPE_MULTIPART_MIXED='multipart/mixed';
   MEDIA_TYPE_MULTIPART_ALTERNATIVE='multipart/alternative';
-  MEDIATYPE_TAR_GZIP='application/tar+gzip';
+  MEDIA_TYPE_TAR_GZIP='application/tar+gzip';
 
   FILE_EXT_CSV = '.csv';
+  FILE_EXT_DDF = '.ddf';
   FILE_EXT_DOC = '.doc';
   FILE_EXT_DOCX = '.docx';
   FILE_EXT_HTM = '.htm';
@@ -77,7 +79,7 @@ end;
 class function TMediaTypeHelper.GetFileExtensionByMediaType(const MediaType: string): string;
 begin
   InitLookupLists;
-  if not FFileExtension2MediaType.TryGetValue(MediaType.ToLower, Result) then
+  if not FMediaType2FileExtension.TryGetValue(MediaType.ToLower, Result) then
     Result := '';
   if Sametext(MediaType, MEDIA_TYPE_TIFF) then
     Result := '.tif'
@@ -111,6 +113,7 @@ begin
     Exit;
   FFileExtension2MediaType := TDictionary<string, string>.Create;
   FFileExtension2MediaType.Add(FILE_EXT_CSV, MEDIA_TYPE_CSV);
+  FFileExtension2MediaType.Add(FILE_EXT_DDF, MEDIA_TYPE_DDF);
   FFileExtension2MediaType.Add(FILE_EXT_DOC, MEDIA_TYPE_MS_WORD);
   FFileExtension2MediaType.Add(FILE_EXT_DOCX, MEDIA_TYPE_OPENXML_DOCUMENT);
   FFileExtension2MediaType.Add(FILE_EXT_HTM, MEDIA_TYPE_HTML);
@@ -124,10 +127,11 @@ begin
   FFileExtension2MediaType.Add(FILE_EXT_TIFF, MEDIA_TYPE_TIFF);
   FFileExtension2MediaType.Add(FILE_EXT_XLS, MEDIA_TYPE_MS_EXCEL);
   FFileExtension2MediaType.Add(FILE_EXT_XLSX, MEDIA_TYPE_OPENXML_SPREADSHEET);
-  FFileExtension2MediaType.Add(FILE_EXT_TAR_GZ, MEDIATYPE_TAR_GZIP);
+  FFileExtension2MediaType.Add(FILE_EXT_TAR_GZ, MEDIA_TYPE_TAR_GZIP);
 
   FMediaType2FileExtension := TDictionary<string, string>.Create;
   FMediaType2FileExtension.Add(MEDIA_TYPE_CSV, FILE_EXT_CSV);
+  FMediaType2FileExtension.Add(MEDIA_TYPE_DDF, FILE_EXT_DDF);
   FMediaType2FileExtension.Add(MEDIA_TYPE_MS_WORD, FILE_EXT_DOC);
   FMediaType2FileExtension.Add(MEDIA_TYPE_OPENXML_DOCUMENT, FILE_EXT_DOCX);
   FMediaType2FileExtension.Add(MEDIA_TYPE_HTML, FILE_EXT_HTML);
@@ -138,7 +142,7 @@ begin
   FMediaType2FileExtension.Add(MEDIA_TYPE_TIFF, FILE_EXT_TIF);
   FMediaType2FileExtension.Add(MEDIA_TYPE_MS_EXCEL, FILE_EXT_XLS);
   FMediaType2FileExtension.Add(MEDIA_TYPE_OPENXML_SPREADSHEET, FILE_EXT_XLSX);
-  FMediaType2FileExtension.Add(MEDIATYPE_TAR_GZIP, FILE_EXT_TAR_GZ);
+  FMediaType2FileExtension.Add(MEDIA_TYPE_TAR_GZIP, FILE_EXT_TAR_GZ);
 end;
 
 end.
