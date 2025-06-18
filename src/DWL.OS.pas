@@ -110,7 +110,7 @@ implementation
 
 uses
   System.SysUtils, Winapi.ShellAPI, Winapi.ShLwApi,
-  Winapi.ActiveX, Winapi.PsAPI;
+  Winapi.ActiveX, Winapi.PsAPI, System.StrUtils;
 
 { TdwlOS }
 
@@ -167,6 +167,8 @@ begin
       end;
     end;
     var Exe := FindExecutableByExtension(Ext);
+    if ContainsText(Exe, 'explorer.exe') then
+      Exe := '';
     if Exe<>'' then
       CheckRes(ShellExecute(0, nil, PWideChar(Exe), PWideChar('"'+FileName+'"'), PWideChar(DefaultDir), ShowCmd))
     else
