@@ -123,7 +123,7 @@ type
       FFileName: string;
       FPersistedParams: TDictionary<string, TdwlPersistedParam>; // Dictionary that holds absolute offset from beginning of file
       FFileOptions: TdwlFileOptions;
-      FCursor: IdwlFileCursor_Write;
+      FCursor: IdwlCursor_Write;
     class procedure InitParamKinds;
 //    class procedure InitSerializeClasses;
     class procedure AddSerializeClass(RttiType: TRttiType; AClass: TClass; AIntfInfo: PTypeInfo);
@@ -187,9 +187,9 @@ begin
       Hook.InitParamKinds;
 //      Hook.InitSerializeClasses;
     end;
-    var Cursor := New_File(Hook.FFilename, Hook.FFileOptions).GetWriteCursor;
+    var Cursor := New_CursoredIO(Hook.FFilename, Hook.FFileOptions).GetWriteCursor;
     Hook.FCursor := Cursor;
-    if Cursor.FileSize=0 then
+    if Cursor.GetSize=0 then
     begin
       Cursor.WriteUInt32(MAGIC_CARDINAL);
       Cursor.WriteUInt32(CURRENT_FILE_VERSION_BYTE); // including 3 reserved bytes
@@ -202,9 +202,9 @@ begin
       if Cursor.ReadUInt32<>CURRENT_FILE_VERSION_BYTE {3 reserverd bytes should be zero, so read in one go} then
         raise Exception.Create('PersistedParams: Unknown File Verion!!');
       var StoredFileSize := Cursor.ReadUInt64;
-      // check the filesize and correct if needed
-      if StoredFileSize<>Cursor.FileSize then
-        Cursor.SetFileSize(StoredFileSize);
+      // set the right filesize and correct if needed
+      if StoredFileSize<>Cursor.GetSize then
+        Cursor.SetSize(StoredFileSize);
       var NextOffSet := Cursor.CursorOffset;
       while not Cursor.Eof do
       begin
@@ -283,7 +283,7 @@ begin
   end;
   var Param: TdwlPersistedParam;
   var DataSizeOffset: UInt64 := 0;;
-  var FallBackFileSize := FCursor.FileSize;
+  var FallBackFileSize := FCursor.GetSize;
   try
     FCursor.Seek(0, soEnd);
     FCursor.WriteUInt16(MAGIC_WORD);
@@ -372,7 +372,7 @@ begin
       end;
     end;
   except
-    FCursor.SetFileSize(FallBackFileSize);
+    FCursor.SetSize(FallBackFileSize);
   end;
   var DataSize := FCursor.CursorOffset-DataSizeOffSet+SizeOf(UInt16); {magic word}
   FCursor.Seek(DataSizeOffset, soBeginning);
@@ -537,8 +537,8 @@ procedure TdwlPersistedParams_Hook.Flush;
 begin
   // write current filesize for quality purposes
   FCursor.Seek(OFFSET_FILESIZE, soBeginning);
-  FCursor.WriteUInt64(FCursor.FileSize);
-  // flush the memory mapped file
+  FCursor.WriteUInt64(FCursor.GetSize);
+  // flush the written data
   FCursor.Flush;
 end;
 
