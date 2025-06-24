@@ -3,7 +3,7 @@ unit DWL.IO;
 interface
 
 uses
-  System.Classes, System.SysUtils, Winapi.Windows;
+  System.Classes, System.SysUtils, Winapi.Windows, DWL.Types;
 
 type
   TdwlFileOption = (pfoCreateIfNeeded, pfoCreateEmptyNew, pfoReadOnly);
@@ -11,7 +11,10 @@ type
 
   IdwlCursor_Read = interface
     function CRC32: UInt32;
+    function CursorOffset: UInt64;
+    function CursorPtr: PByte;
     function Eof: Boolean;
+    function GetSize: UInt64;
     procedure Read(var Buf; Count: UInt64);
     function ReadBoolean: boolean;
     function ReadBytes(const Size: UInt32): TBytes;
@@ -24,10 +27,9 @@ type
     function ReadUInt16: word;
     function ReadUInt32: cardinal;
     function ReadUInt64: UInt64;
+    procedure RegisterMemoryPointer(pMemoryPointer: PPByte);
     procedure Seek(Offset: Int64; Origin: TSeekOrigin);
-    function GetSize: UInt64;
-    function CursorOffset: UInt64;
-    function CursorPtr: PByte;
+    procedure UnRegisterMemoryPointer(pMemoryPointer: PPByte);
   end;
 
   IdwlCursor_Write = interface(IdwlCursor_Read)
@@ -69,6 +71,7 @@ type
     FCodePage: UINT;
     FMemory: PByte;
     FActuallyUsedMemorySize: ULARGE_INTEGER;
+    FMemoryPointers: TList<PPByte>;
     FAllocatedMemorySize: ULARGE_INTEGER;
     FSynchronizer: TLightweightMREW;
     procedure RegisterCursor(Cursor: TdwlCursor);
@@ -77,7 +80,7 @@ type
     function GetReadCursor: IdwlCursor_Read;
     function GetWriteCursor: IdwlCursor_Write;
   protected
-    function ExtendMemory(const NeededFileSize: UInt64): Int64; virtual; abstract;
+    function ExtendMemoryToAtLeastActuallyUsed: Int64; virtual; abstract;
     procedure Flush; virtual;
   public
     constructor Create(CodePage: UINT);
@@ -94,7 +97,7 @@ type
     procedure InternalClose;
     procedure InternalOpen(const FileName: string);
   protected
-    function ExtendMemory(const NeededFileSize: UInt64): Int64; override;
+    function ExtendMemoryToAtLeastActuallyUsed: Int64; override;
     procedure Flush; override;
   public
     constructor Create(const FileName: string; Options: TdwlFileOptions; CodePage: UINT; GrowSize: cardinal);
@@ -128,6 +131,7 @@ type
     function ReadUInt16: word;
     function ReadUInt32: cardinal;
     function ReadUInt64: UInt64;
+    procedure RegisterMemoryPointer(pMemoryPointer: PPByte);
     procedure Seek(Offset: Int64; Origin: TSeekOrigin);
     procedure SetSize(NewSize: UInt64);
     procedure Write(const Buf; const Count: UInt64);
@@ -141,7 +145,7 @@ type
     procedure WriteUInt16(Value: word);
     procedure WriteUInt32(Value: cardinal);
     procedure WriteUInt64(Value: UInt64);
-    procedure ReAllocationOccured(Offset: Int64);
+    procedure UnRegisterMemoryPointer(pMemoryPointer: PPByte);
   public
     constructor Create(ACursoredMemory: TdwlCursoredIO; Writable: boolean);
     destructor Destroy; override;
@@ -157,7 +161,7 @@ end;
 constructor TdwlCursoredFile.Create(const FileName: string; Options: TdwlFileOptions; CodePage: UINT; GrowSize: cardinal);
 begin
   inherited Create(CodePage);
-  FGrowSize := GrowSize;
+  FGrowSize := Min(1, GrowSize);
   FOptions := Options;
   InternalOpen(FileName);
 end;
@@ -168,11 +172,11 @@ begin
   inherited Destroy;
 end;
 
-function TdwlCursoredFile.ExtendMemory(const NeededFileSize: UInt64): Int64;
+function TdwlCursoredFile.ExtendMemoryToAtLeastActuallyUsed: Int64;
 begin
   // resize the file
   var OldMemory := FMemory;
-  FAllocatedMemorySize.QuadPart := ((FActuallyUsedMemorySize.QuadPart div FGrowSize)+1)*FGrowSize;
+  FAllocatedMemorySize.QuadPart := ((FActuallyUsedMemorySize.QuadPart div FGrowSize)+1)*FGrowSize-1;
   UnMapViewOfFile(FMemory);
   CloseHandle(FMapHandle);
   FMapHandle := CreateFileMapping(FFileHandle, nil, PAGE_READWRITE, FAllocatedMemorySize.HighPart, FAllocatedMemorySize.LowPart, nil);
@@ -283,7 +287,10 @@ begin
   FCursoredMemory._AddRef;
   FWritable := Writable;
   if Writable then
-    FCursoredMemory.FSynchronizer.BeginWrite
+  begin
+    FCursoredMemory.FSynchronizer.BeginWrite;
+    RegisterMemoryPointer(@FCursor);
+  end
   else
     FCursoredMemory.FSynchronizer.BeginRead;
 end;
@@ -300,6 +307,7 @@ end;
 
 destructor TdwlCursor.Destroy;
 begin
+  UnRegisterMemoryPointer(@FCursor);
   FCursoredMemory.UnRegisterCursor(Self);
   if FWritable then
     FCursoredMemory.FSynchronizer.EndWrite
@@ -406,9 +414,9 @@ begin
   inc(FCursor, SizeOf(UInt8));
 end;
 
-procedure TdwlCursor.ReAllocationOccured(Offset: Int64);
+procedure TdwlCursor.RegisterMemoryPointer(pMemoryPointer: PPByte);
 begin
-  inc(FCursor, Offset);
+  FCursoredMemory.FMemoryPointers.Add(pMemoryPointer);
 end;
 
 procedure TdwlCursor.Seek(Offset: Int64; Origin: TSeekOrigin);
@@ -424,6 +432,11 @@ procedure TdwlCursor.SetSize(NewSize: UInt64);
 begin
   AssureMemory(NewSize);
   FCursoredMemory.FActuallyUsedMemorySize.QuadPart := NewSize;
+end;
+
+procedure TdwlCursor.UnRegisterMemoryPointer(pMemoryPointer: PPByte);
+begin
+  FCursoredMemory.FMemoryPointers.Remove(pMemoryPointer);
 end;
 
 procedure TdwlCursor.Write(const Buf; const Count: UInt64);
@@ -509,9 +522,10 @@ begin
     FActuallyUsedMemorySize.QuadPart := RequestedSize;
     if RequestedSize>FAllocatedMemorySize.QuadPart then
     begin
-      var Offset := ExtendMemory(RequestedSize);
-      for var Cursor in FCursors do
-        Cursor.ReAllocationOccured(Offset);
+      var Offset := ExtendMemoryToAtLeastActuallyUsed;
+      if Offset<>0 then
+        for var Ptr in FMemoryPointers do
+          Ptr^ := Ptr^+Offset;
     end;
   end;
 end;
@@ -519,6 +533,7 @@ end;
 constructor TdwlCursoredIO.Create(CodePage: UINT);
 begin
   inherited Create;
+  FMemoryPointers := TList<PPByte>.Create;
   FCursors := TList<TdwlCursor>.Create;
   FCodePage := CodePage;
 end;
@@ -526,6 +541,7 @@ end;
 destructor TdwlCursoredIO.Destroy;
 begin
   FCursors.Free;
+  FMemoryPointers.Free;
   inherited Destroy;
 end;
 

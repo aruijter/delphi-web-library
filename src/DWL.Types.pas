@@ -176,6 +176,8 @@ type
      (B, G, R, A: byte);
   end;
 
+  PPbyte = ^PByte;
+
 const
   EmptyEpoch: TUnixEpoch = (FEpoch: Low(Int64));
   MinEpoch: TUnixEpoch = (FEpoch: Low(Int64)+1);
