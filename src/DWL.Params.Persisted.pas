@@ -189,7 +189,7 @@ begin
     end;
     var Cursor := New_CursoredIO(Hook.FFilename, Hook.FFileOptions).GetWriteCursor;
     Hook.FCursor := Cursor;
-    if Cursor.GetSize=0 then
+    if Cursor.Size=0 then
     begin
       Cursor.WriteUInt32(MAGIC_CARDINAL);
       Cursor.WriteUInt32(CURRENT_FILE_VERSION_BYTE); // including 3 reserved bytes
@@ -203,7 +203,7 @@ begin
         raise Exception.Create('PersistedParams: Unknown File Verion!!');
       var StoredFileSize := Cursor.ReadUInt64;
       // set the right filesize and correct if needed
-      if StoredFileSize<>Cursor.GetSize then
+      if StoredFileSize<>Cursor.Size then
         Cursor.SetSize(StoredFileSize);
       var NextOffSet := Cursor.CursorOffset;
       while not Cursor.Eof do
@@ -283,7 +283,7 @@ begin
   end;
   var Param: TdwlPersistedParam;
   var DataSizeOffset: UInt64 := 0;;
-  var FallBackFileSize := FCursor.GetSize;
+  var FallBackFileSize := FCursor.Size;
   try
     FCursor.Seek(0, soEnd);
     FCursor.WriteUInt16(MAGIC_WORD);
@@ -537,7 +537,7 @@ procedure TdwlPersistedParams_Hook.Flush;
 begin
   // write current filesize for quality purposes
   FCursor.Seek(OFFSET_FILESIZE, soBeginning);
-  FCursor.WriteUInt64(FCursor.GetSize);
+  FCursor.WriteUInt64(FCursor.Size);
   // flush the written data
   FCursor.Flush;
 end;

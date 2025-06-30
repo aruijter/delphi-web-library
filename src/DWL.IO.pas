@@ -22,20 +22,27 @@ type
     function ReadInt8: shortint;
     function ReadInt64: Int64;
     function ReadString_LenByte: string;
+    function ReadString_LenWord: string;
     function ReadString_LenCardinal: string;
     function ReadUInt8: byte;
     function ReadUInt16: word;
     function ReadUInt32: cardinal;
     function ReadUInt64: UInt64;
-    procedure RegisterMemoryPointer(pMemoryPointer: PPByte);
-    procedure Seek(Offset: Int64; Origin: TSeekOrigin);
-    procedure UnRegisterMemoryPointer(pMemoryPointer: PPByte);
+    procedure Seek(Offset: Int64; Origin: TSeekOrigin=soBeginning);
+    property Size: UInt64 read GetSize;
   end;
 
   IdwlCursor_Write = interface(IdwlCursor_Read)
     procedure Fill(Value: byte; Count: UInt64);
     procedure Flush;
+    /// <summary>
+    ///  Allocate a block (at the end).
+    ///  The cursor is placed at the beginning of the new block
+    /// </summary>
+    procedure AllocateBlock(Size: UInt64);
     procedure SetSize(NewSize: UInt64);
+    procedure RegisterMemoryPointer(pMemoryPointer: PPByte);
+    procedure UnRegisterMemoryPointer(pMemoryPointer: PPByte);
     procedure Write(const Buf; const Count: UInt64); overload;
     procedure WriteBoolean(Value: boolean);
     procedure WriteDouble(Value: double);
@@ -47,6 +54,7 @@ type
     procedure WriteUInt16(Value: word);
     procedure WriteUInt32(Value: cardinal);
     procedure WriteUInt64(Value: UInt64);
+    property Size: UInt64 read GetSize write SetSize;
   end;
 
   IdwlCursoredIO = interface
@@ -71,12 +79,11 @@ type
     FCodePage: UINT;
     FMemory: PByte;
     FActuallyUsedMemorySize: ULARGE_INTEGER;
-    FMemoryPointers: TList<PPByte>;
     FAllocatedMemorySize: ULARGE_INTEGER;
     FSynchronizer: TLightweightMREW;
     procedure RegisterCursor(Cursor: TdwlCursor);
     procedure UnRegisterCursor(Cursor: TdwlCursor);
-    procedure AssureMemory(const RequestedSize: UInt64);
+    procedure AssureFileSize(const RequestedSize: UInt64);
     function GetReadCursor: IdwlCursor_Read;
     function GetWriteCursor: IdwlCursor_Write;
   protected
@@ -107,11 +114,13 @@ type
   TdwlCursor = class(TInterfacedObject, IdwlCursor_Read, IdwlCursor_Write)
   strict private
     FWritable: boolean;
+    FMemoryPointers: TList<PPByte>;
     procedure AssureMemory(const RequestedSize: UInt64);
   private
     FCursoredMemory: TdwlCursoredIO;
     FCursor: PByte;
     FCodePage: UINT;
+    procedure AllocateBlock(Size: UInt64);
     function CRC32: UInt32;
     function CursorOffset: UInt64;
     function CursorPtr: PByte;
@@ -126,14 +135,16 @@ type
     function ReadInt8: shortint;
     function ReadInt64: Int64;
     function ReadString_LenByte: string;
+    function ReadString_LenWord: string;
     function ReadString_LenCardinal: string;
     function ReadUInt8: byte;
     function ReadUInt16: word;
     function ReadUInt32: cardinal;
     function ReadUInt64: UInt64;
     procedure RegisterMemoryPointer(pMemoryPointer: PPByte);
-    procedure Seek(Offset: Int64; Origin: TSeekOrigin);
+    procedure Seek(Offset: Int64; Origin: TSeekOrigin=soBeginning);
     procedure SetSize(NewSize: UInt64);
+    procedure TriggerMemoryPointers(Offset: Int64);
     procedure Write(const Buf; const Count: UInt64);
     procedure WriteBoolean(Value: boolean);
     procedure WriteDouble(Value: double);
@@ -161,7 +172,7 @@ end;
 constructor TdwlCursoredFile.Create(const FileName: string; Options: TdwlFileOptions; CodePage: UINT; GrowSize: cardinal);
 begin
   inherited Create(CodePage);
-  FGrowSize := Min(1, GrowSize);
+  FGrowSize := Max(1, GrowSize);
   FOptions := Options;
   InternalOpen(FileName);
 end;
@@ -264,9 +275,22 @@ begin
   Result := FCursoredMemory.FActuallyUsedMemorySize.QuadPart;
 end;
 
+procedure TdwlCursor.TriggerMemoryPointers(Offset: Int64);
+begin
+  FCursor := FCursor + Offset;
+  for var Ptr in FMemoryPointers do
+    Ptr^ := Ptr^+Offset;
+end;
+
+procedure TdwlCursor.AllocateBlock(Size: UInt64);
+begin
+  Seek(0, soEnd);
+  AssureMemory(Size);
+end;
+
 procedure TdwlCursor.AssureMemory(const RequestedSize: UInt64);
 begin
-  FCursoredMemory.AssureMemory(UInt64(FCursor-FCursoredMemory.FMemory)+RequestedSize)
+  FCursoredMemory.AssureFileSize(UInt64(FCursor-FCursoredMemory.FMemory)+RequestedSize);
 end;
 
 function TdwlCursor.CRC32: UInt32;
@@ -277,6 +301,7 @@ end;
 constructor TdwlCursor.Create(ACursoredMemory: TdwlCursoredIO; Writable: boolean);
 begin
   inherited Create;
+  FMemoryPointers := TList<PPByte>.Create;
   FCursoredMemory := ACursoredMemory;
   FCursoredMemory.RegisterCursor(Self);
   FCursor := FCursoredMemory.FMemory;
@@ -289,7 +314,6 @@ begin
   if Writable then
   begin
     FCursoredMemory.FSynchronizer.BeginWrite;
-    RegisterMemoryPointer(@FCursor);
   end
   else
     FCursoredMemory.FSynchronizer.BeginRead;
@@ -307,13 +331,13 @@ end;
 
 destructor TdwlCursor.Destroy;
 begin
-  UnRegisterMemoryPointer(@FCursor);
   FCursoredMemory.UnRegisterCursor(Self);
   if FWritable then
     FCursoredMemory.FSynchronizer.EndWrite
   else
     FCursoredMemory.FSynchronizer.EndRead;
   FCursoredMemory._Release;
+  FMemoryPointers.Free;
   inherited Destroy;
 end;
 
@@ -390,6 +414,17 @@ begin
   inc(FCursor, ByteLen);
 end;
 
+function TdwlCursor.ReadString_LenWord: string;
+begin
+  var ByteLen: integer := ReadUInt16;
+  if ByteLen=0 then
+    Exit('');
+  var StrLen := MultiByteToWideChar(FCodePage, 0, PAnsiChar(FCursor), ByteLen, nil, 0);
+  SetLength(Result, StrLen);
+  MultiByteToWideChar(FCodePage, 0, PAnsiChar(FCursor), ByteLen, PWideChar(Result), StrLen);
+  inc(FCursor, ByteLen);
+end;
+
 function TdwlCursor.ReadUInt16: word;
 begin
   Result := PWord(FCursor)^;
@@ -416,10 +451,10 @@ end;
 
 procedure TdwlCursor.RegisterMemoryPointer(pMemoryPointer: PPByte);
 begin
-  FCursoredMemory.FMemoryPointers.Add(pMemoryPointer);
+  FMemoryPointers.Add(pMemoryPointer);
 end;
 
-procedure TdwlCursor.Seek(Offset: Int64; Origin: TSeekOrigin);
+procedure TdwlCursor.Seek(Offset: Int64; Origin: TSeekOrigin=soBeginning);
 begin
   case Origin of
   soBeginning: FCursor := FCursoredMemory.FMemory + Offset;
@@ -436,7 +471,7 @@ end;
 
 procedure TdwlCursor.UnRegisterMemoryPointer(pMemoryPointer: PPByte);
 begin
-  FCursoredMemory.FMemoryPointers.Remove(pMemoryPointer);
+  FMemoryPointers.Remove(pMemoryPointer);
 end;
 
 procedure TdwlCursor.Write(const Buf; const Count: UInt64);
@@ -515,7 +550,7 @@ end;
 
 { TdwlCursoredIO }
 
-procedure TdwlCursoredIO.AssureMemory(const RequestedSize: UInt64);
+procedure TdwlCursoredIO.AssureFileSize(const RequestedSize: UInt64);
 begin
   if (RequestedSize>FActuallyUsedMemorySize.QuadPart) then
   begin
@@ -524,8 +559,8 @@ begin
     begin
       var Offset := ExtendMemoryToAtLeastActuallyUsed;
       if Offset<>0 then
-        for var Ptr in FMemoryPointers do
-          Ptr^ := Ptr^+Offset;
+        for var Cursor in FCursors do
+           Cursor.TriggerMemoryPointers(Offset);
     end;
   end;
 end;
@@ -533,7 +568,6 @@ end;
 constructor TdwlCursoredIO.Create(CodePage: UINT);
 begin
   inherited Create;
-  FMemoryPointers := TList<PPByte>.Create;
   FCursors := TList<TdwlCursor>.Create;
   FCodePage := CodePage;
 end;
@@ -541,7 +575,6 @@ end;
 destructor TdwlCursoredIO.Destroy;
 begin
   FCursors.Free;
-  FMemoryPointers.Free;
   inherited Destroy;
 end;
 
