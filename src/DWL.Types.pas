@@ -176,12 +176,22 @@ type
      (B, G, R, A: byte);
   end;
 
+  PdwlBounds = ^TdwlBounds;
+  TdwlBounds = packed record
+    XMin,
+    XMax,
+    YMin,
+    YMax: double;
+  end;
+
   PPbyte = ^PByte;
 
 const
   EmptyEpoch: TUnixEpoch = (FEpoch: Low(Int64));
   MinEpoch: TUnixEpoch = (FEpoch: Low(Int64)+1);
   MaxEpoch: TUnixEpoch = (FEpoch: High(Int64));
+
+  EmptyBounds: TdwlBounds=(XMin: 1e+100; XMax: -1e+100; YMin: 1e+100; YMax: -1e+100);
 
 implementation
 
