@@ -299,6 +299,7 @@ begin
   if Profile='' then
     Profile := 'localhost';
   {$ENDIF}
+  FConfigParams.WriteValue(Param_Profile, Profile);
   var Response := FApiSession.Request('phonehome?appname='+AppName.ToLower+IfThen(Profile<>'', '&profile='+Profile)).Execute;
   var Data: TJSONObject := nil;
   var FreeData := false;
