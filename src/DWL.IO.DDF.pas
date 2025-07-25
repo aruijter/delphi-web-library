@@ -3,7 +3,7 @@ unit DWL.IO.DDF;
 interface
 
 uses
-  DWL.IO, DWL.Types;
+  DWL.IO, DWL.Types, DWL.GridData;
 
 const
   // DataTypes
@@ -19,26 +19,38 @@ const
   ddfDouble = 129;
 
 type
-  IdwlDDFPage = interface
-    procedure PutData(TileCol, TileRow: cardinal; Data: PByte);
+  PddfDataDefintion = ^TddfDataDefinition;
+  TddfDataDefinition = packed record
+    DataType: UInt16;
+    Base10Component: Int8;
+    NoDataValueUsed: Int8;
+    NoDataValue: Int64;
+    Reserved4: UInt32;
+  end;
 
+  IdwlDDFPage = interface
+    function GetData(TileCol, TileRow: cardinal; Destination: PByte): boolean;
+    procedure PutData(TileCol, TileRow: cardinal; Source: PByte);
+    function DataDefinition: TddfDataDefinition;
     procedure SetMetaData(const Key, Value: string);
     function GetMetaData(const Key: string): string;
+    function GetDim: TdwlGridDim;
     property MetaData[const Key: string]: string read GetMetaData write SetMetaData;
   end;
 
   IdwlDDF = interface
-    procedure SetMetaData(const Key, Value: string);
     function GetBounds: TdwlBounds;
     function GetMetaData(const Key: string): string;
     procedure SetBounds(const Bounds: TdwlBounds);
-    function AddPage(TilePixelCountX, TilePixelCountY: cardinal; DataType: word=ddfDouble; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1; MaxUsedAsNoDataValue: boolean=false; Base10Exponent: shortint=0): IdwlDDFPage;
+    procedure SetMetaData(const Key, Value: string);
+    function AddPage(Bounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; DataType: word=ddfDouble; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1; MaxUsedAsNoDataValue: boolean=false; Base10Exponent: shortint=0): IdwlDDFPage;
     function Page(PageNumber: cardinal): IdwlDDFPage;
     property Bounds: TdwlBounds read GetBounds write SetBounds;
     property MetaData[const Key: string]: string read GetMetaData write SetMetaData;
   end;
 
-function New_DDF(CursoredIO: IdwlCursoredIO): IdwlDDF;
+function New_DDF(const FileName: string; Options: TdwlFileOptions=[]): IdwlDDF; overload;
+function New_DDF(CursoredIO: IdwlCursoredIO): IdwlDDF; overload;
 
 implementation
 
@@ -47,7 +59,8 @@ uses
   System.ZLib;
 
 const
-  CURRENT_FILEVERSION  = 3;
+  FILEVERSION_3  = 3;
+  FILEVERSION_4  = 4;
   DDF_SIGNATURE = $616c;
 
   // Compression
@@ -71,27 +84,49 @@ const
     4, 8);
 
 type
-  PDDFDataBlockHeader = ^TDDFDataBlockHeader;
-  TDDFDataBlockHeader = packed record
-    Size: cardinal; {including this header}
-    ContentType: word;  // PageHeader, Metadata, Array, ArrayWithDataStarts
-    Compression: byte; // for now only used with array or array with datastarts
-    Flags: byte;  // $1: Deleted
-    MasterID: cardinal; // unused
-    ClientID: cardinal; //unused
-    MetaDataOffSet: cardinal;
+  PDDFFileIdentifier3 = ^ TDDFFileIdentifier3;
+  TDDFFileIdentifier3 = packed record
+    Version: UInt8;
+    Signature: UInt16;
+    Reserved0: UInt8;
   end;
 
-  PDDFFileIdentifier = ^ TDDFFileIdentifier;
-  TDDFFileIdentifier = packed record
-    Version: byte;
-    Signature: word;
-    Reserved0: byte;
+  PDDFFileIdentifier4 = ^ TDDFFileIdentifier4;
+  TDDFFileIdentifier4 = packed record
+    Version: UInt8;
+    Signature: UInt16;
+    FirstDataBlockOffset: UInt8;
+    Reserved1: UInt32;
+    Reserved2: UInt64;
   end;
 
-  PDDFHeader = ^TDDFHeader;
-  TDDFHeader = packed record
-    DataBlockHeader: TDDFDataBlockHeader;
+  PDDFDataBlockHeader3 = ^TDDFDataBlockHeader3;
+  TDDFDataBlockHeader3 = packed record
+    Size: UInt32; {including this header}
+    ContentType: UInt16;
+    Compression: UInt8;
+    Reserved1: UInt8;
+    MasterID: UInt32;
+    ClientID: UInt32;
+    MetaDataOffSet: UInt32;
+  end;
+
+  PDDFDataBlockHeader4 = ^TDDFDataBlockHeader4;
+  TDDFDataBlockHeader4 = packed record
+    Size: UInt32; {including this header}
+    ContentType: UInt16;  // PageHeader, Metadata, Array, ArrayWithDataStarts
+    Compression: UInt8; // for now only used with array or array with datastarts
+    Reserved1: UInt8;  // $1: Deleted
+    MasterID: UInt32; // unused
+    ClientID: UInt32; //unused
+    MetaDataOffSet: UInt64;
+    Reserved2: UInt32;
+    Reserved3: UInt32;
+  end;
+
+  PDDFFileContentHeader3 = ^TDDFFileContentHeader3;
+  TDDFFileContentHeader3 = packed record
+    DataBlockHeader: TDDFDataBlockHeader3;
     FirstDataPageOffset: cardinal;
     PageCount: cardinal;
     CoordinateSystem: cardinal; // 4326 // EPGS coordinate system definition
@@ -100,13 +135,37 @@ type
     Reserved1: cardinal;
   end;
 
-  PDDFPageheader =^TDDFPageHeader;
-  TDDFPageHeader = packed record
-    DataBlockHeader: TDDFDataBlockHeader;
+  PDDFFileContentHeader4 = ^TDDFFileContentHeader4;
+  TDDFFileContentHeader4 = packed record
+    DataBlockHeader: TDDFDataBlockHeader3;
+    FirstDataPageOffset: cardinal;
+    PageCount: cardinal;
+    CoordinateSystem: cardinal; // 4326 // EPGS coordinate system definition
+    Bounds: TdwlBounds;
+    Reserved1: cardinal;
+  end;
 
+  PDDFPageheader3 =^TDDFPageHeader3;
+  TDDFPageHeader3 = packed record
+    DataBlockHeader: TDDFDataBlockHeader3;
     DataType: word;
     Base10Exponent: shortint;
     MaxUsedAsNoDataValue: byte;
+    FrameType: byte; // unused
+    TileColCount: cardinal;
+    TileRowCount: cardinal;
+    WidthInTiles: cardinal;
+    HeightinTiles: cardinal;
+    MetaDataOffset: cardinal;
+    NextDataPageOffset: cardinal;
+    // followed by ItemOffsets (4 bytes each: cardinal)
+  end;
+  
+  PDDFPageheader4 =^TDDFPageHeader4;
+  TDDFPageHeader4 = packed record
+    DataBlockHeader: TDDFDataBlockHeader3;
+
+    DataDefinition: TddfDataDefinition;
 
     FrameType: byte; // unused
 
@@ -118,75 +177,361 @@ type
     MetaDataOffset: cardinal;
     NextDataPageOffset: cardinal;
 
-    // followed by ItemOffsets
+    // followed by ItemOffsets (8 bytes each: UInt64)
   end;
+
 
 type
-  TDDF=class;
+  TDDF3=class;
+  TDDF4=class;
 
-  TDDFMetaDataDictionary = class
-    FChanged: boolean;
-    FPairs: TDictionary<string, string>;
+  TMetaDataObject = class(TInterfacedObject)
+  strict private
+    FMetaDataPairs: TDictionary<string, string>;
+    FMetaDataChanged: boolean;
+    procedure InitMetaData;
   private
-    procedure ReadMetaDataFromDataBlock(Cursor: IdwlCursor_Write; Block: PDDFDataBlockHeader);
     function GetMetaData(const Key: string): string;
     procedure SetMetaData(const Key, Value: string);
+  strict protected
+    function GetMetaDataReadCursor: IdwlCursor_Read; virtual; abstract;
   public
-    constructor Create;
     destructor Destroy; override;
   end;
 
-  TDDFPage = class(TInterfacedObject, IdwlDDFPage)
+  TDDFPage3 = class(TMetaDataObject, IdwlDDFPage)
   strict private
-    FDDF: TDDF;
-    FPageHeader: PDDFPageHeader;
-    FMetaData: TDDFMetaDataDictionary;
-    function PageItemPtr(TileCol, TileRow: cardinal): PCardinal;
-    function MetaData: TDDFMetaDataDictionary;
+    FDDF: IdwlDDF;
+    FPageHeader: PDDFPageHeader3;
+    function TileByteSize: cardinal;
+    function PageItemOffset(TileCol, TileRow: cardinal): UInt32;
   private
+    function GetData(TileCol, TileRow: cardinal; Destination: PByte): boolean;
+    function GetDim: TdwlGridDim;
+    function DataDefinition: TddfDataDefinition;
     procedure PutData(TileCol, TileRow: cardinal; Data: PByte);
-    function GetMetaData(const Key: string): string;
-    procedure SetMetaData(const Key, Value: string);
+  strict protected
+    function GetMetaDataReadCursor: IdwlCursor_Read; override;
   public
-    constructor Create(DDF: TDDF; PageOffset: cardinal);
+    constructor Create(DDF: IdwlDDF; PageOffset: cardinal);
+  end;
+
+  TDDFPage4 = class(TMetaDataObject, IdwlDDFPage)
+  strict private
+    FDDF: TDDF4;
+    FPageHeader: PDDFPageHeader4;
+    function PageItemPtr(TileCol, TileRow: cardinal): PUInt64;
+  strict protected
+    function GetMetaDataReadCursor: IdwlCursor_Read; override;
+  private
+    function DataDefinition: TddfDataDefinition;
+    function GetData(TileCol, TileRow: cardinal; Destination: PByte): boolean;
+    function GetDim: TdwlGridDim;
+    procedure PutData(TileCol, TileRow: cardinal; Data: PByte);
+  public
+    constructor Create(DDF: TDDF4; PageOffset: UInt64);
     destructor Destroy; override;
   end;
 
-  TDDF = class(TInterfacedObject, IdwlDDF)
+  TDDF3 = class(TMetaDataObject, IdwlDDF)
   strict private
-    FPageOffsets: TList<cardinal>;
-    FHeader: PDDFHeader;
-    FMetaData: TDDFMetaDataDictionary;
-    procedure Initialize;
-    function MetaData: TDDFMetaDataDictionary;
   private
     const
       CompressionLevel: TCompressionLevel = clMax;
     var
-      FCursor: IdwlCursor_Write;
-    function AddPage(TilePixelCountX, TilePixelCountY: cardinal; DataType: word=ddfDouble; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1; MaxUsedAsNoDataValue: boolean=false; Base10Exponent: shortint=0): IdwlDDFPage;
+      FCursor: IdwlCursor_Read;
+      FHeader: PDDFFileContentHeader3;
+    function AddPage(Bounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; DataType: word=ddfDouble; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1; MaxUsedAsNoDataValue: boolean=false; Base10Exponent: shortint=0): IdwlDDFPage;
     function GetBounds: TdwlBounds;
-    function GetNewDataBlock(const Size: UInt64; ContentType: word; Compression: byte): PDDFDataBlockHeader;
     function Page(PageNumber: cardinal): IdwlDDFPage;
-    function GetMetaData(const Key: string): string;
-    procedure SetMetaData(const Key, Value: string);
+    procedure RaiseWritingError;
     procedure SetBounds(const Bounds: TdwlBounds);
+  strict protected
+    function GetMetaDataReadCursor: IdwlCursor_Read; override;
   public
     constructor Create(CursoredIO: IdwlCursoredIO);
     destructor Destroy; override;
   end;
 
+  TDDF4 = class(TMetaDataObject, IdwlDDF)
+  strict private
+    FHeader: PDDFFileContentHeader4;
+    FPageOffsets: TList<UInt64>;
+  private
+    const
+      CompressionLevel: TCompressionLevel = clMax;
+    var
+      FCursor: IdwlCursor_Write;
+    function AddPage(Bounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; DataType: word=ddfDouble; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1; MaxUsedAsNoDataValue: boolean=false; Base10Exponent: shortint=0): IdwlDDFPage;
+    function GetBounds: TdwlBounds;
+    function GetNewDataBlock(const Size: cardinal; ContentType: word; Compression: byte): PDDFDataBlockHeader4;
+    function Page(PageNumber: cardinal): IdwlDDFPage;
+    procedure SetBounds(const Bounds: TdwlBounds);
+  strict protected
+    function GetMetaDataReadCursor: IdwlCursor_Read; override;
+  public
+    constructor Create(CursoredIO: IdwlCursoredIO);
+    destructor Destroy; override;
+  end;
+
+
 function New_DDF(CursoredIO: IdwlCursoredIO): IdwlDDF;
 begin
-  Result := TDDF.Create(CursoredIO);
+  var Cur := CursoredIO.GetReadCursor;
+  var FileVersion := FILEVERSION_4;
+  if not Cur.Eof then // new file is version 4
+    FileVersion := Cur.ReadUInt8;
+  Cur := nil;
+  if FileVersion=FILEVERSION_4 then
+    Result := TDDF4.Create(CursoredIO)
+  else
+  begin
+    if FileVersion=FILEVERSION_3 then
+      Result := TDDF3.Create(CursoredIO)
+    else
+      raise Exception.Create('File version '+FileVersion.ToString+' not supported');
+  end;
 end;
 
-{ TDDF }
-
-function TDDF.AddPage(TilePixelCountX, TilePixelCountY: cardinal; DataType: word=ddfDouble; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1; MaxUsedAsNoDataValue: boolean=false; Base10Exponent: shortint=0): IdwlDDFPage;
+function New_DDF(const FileName: string; Options: TdwlFileOptions=[]): IdwlDDF;
 begin
-  GetNewDataBlock(SizeOf(TDDFPageHeader)+(WidthInTiles*HeightInTiles)*SizeOf(cardinal), dbctPageHeader, COMPRESSION_NONE);
-  var PageHeader := PDDFPageheader(FCursor.CursorPtr);
+  Result := New_DDF(New_CursoredIO(FileName, Options));
+end;
+
+
+{ TDDF3 }
+
+function TDDF3.AddPage(Bounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; DataType: word=ddfDouble; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1; MaxUsedAsNoDataValue: boolean=false; Base10Exponent: shortint=0): IdwlDDFPage;
+begin
+  RaiseWritingError;
+end;
+
+constructor TDDF3.Create(CursoredIO: IdwlCursoredIO);
+begin
+  inherited Create;
+  FCursor := CursoredIO.GetReadCursor;
+  if PDDFFileIdentifier3(FCursor.CursorPtr).Signature<>DDF_SIGNATURE then
+    raise Exception.Create('Invalid signature');
+  FHeader := PDDFFileContentHeader3(FCursor.CursorPtr+SizeOf(TDDFFileIdentifier3));
+  if FHeader.CoordinateSystem<>ddfcrdEPSG4326 then
+    raise Exception.Create('Unknown CoordinateSystem');
+  if FHeader.PageCount<>1 then
+    raise Exception.Create('Version 3 reading only supports single page files');
+  FCursor.Seek(FHeader.FirstDataPageOffset);
+  if (PDDFPageHeader3(FCursor.CursorPtr).WidthInTiles<>1) or
+    (PDDFPageHeader3(FCursor.CursorPtr).WidthInTiles<>1) then
+    raise Exception.Create('Version 3 reading only supports single tile files');
+end;
+
+destructor TDDF3.Destroy;
+begin
+  inherited Destroy;
+end;
+
+function TDDF3.GetBounds: TdwlBounds;
+begin
+  Result := FHeader.ActualBounds;
+end;
+
+function TDDF3.GetMetaDataReadCursor: IdwlCursor_Read;
+begin
+  if FHeader.DataBlockHeader.MetaDataOffSet=0 then
+    Exit(nil);
+  Result := FCursor;
+  Result.Seek(FHeader.DataBlockHeader.MetaDataOffSet);
+  Result.Seek(SizeOf(TDDFDataBlockHeader3), soCurrent);
+end;
+
+function TDDF3.Page(PageNumber: cardinal): IdwlDDFPage;
+begin
+  if PageNumber<>0 then
+    raise Exception.Create('Version 3 reading only supports single page files');
+  Result := TDDFPage3.Create(Self, FHeader.FirstDataPageOffset);
+end;
+
+procedure TDDF3.RaiseWritingError;
+begin
+  raise Exception.Create('DDF writing is disabled for legacy versions');
+end;
+
+procedure TDDF3.SetBounds(const Bounds: TdwlBounds);
+begin
+  RaiseWritingError;
+end;
+
+{ TDDFPage3 }
+
+constructor TDDFPage3.Create(DDF: IdwlDDF; PageOffset: cardinal);
+begin
+  inherited Create;
+  FDDF := DDF;
+  TDDF3(FDDF).FCursor.Seek(PageOffset);
+  FPageHeader := PDDFPageHeader3(TDDF3(FDDF).FCursor.CursorPtr);
+end;
+
+function TDDFPage3.DataDefinition: TddfDataDefinition;
+begin
+  Result.DataType := FPageHeader.DataType;
+  Result.Base10Component := FPageHeader.Base10Exponent;
+  Result.NoDataValueUsed := FPageHeader.MaxUsedAsNoDataValue;
+  if Result.NoDataValueUsed<>0 then
+  begin
+    case Result.DataType of
+    ddfInt8: Result.NoDataValue := High(Int8);
+    ddfUInt8: Result.NoDataValue := High(UInt8);
+    ddfInt16: Result.NoDataValue := High(Int16);
+    ddfUInt16: Result.NoDataValue := High(UInt16);
+    ddfInt32: Result.NoDataValue := High(Int32);
+    ddfUInt32: Result.NoDataValue := High(UInt32);
+    ddfInt64: Result.NoDataValue := High(Int64);
+    end;
+  end;
+end;
+
+function TDDFPage3.GetData(TileCol, TileRow: cardinal; Destination: PByte): boolean;
+begin
+  var Offset := PageItemOffset(TileCol, TileRow);
+  if Offset=0 then
+    Exit(false);
+  TDDF3(FDDF).FCursor.Seek(Offset);
+  var DataBlock := PDDFDataBlockHeader3(TDDF3(FDDF).FCursor.CursorPtr);
+  if DataBlock.ContentType<>dbctArray then
+    raise Exception.Create('In version 3 only Array datablocks are allowed');
+  TDDF3(FDDF).FCursor.Seek(SizeOf(TDDFDataBlockHeader3), soCurrent);
+  var PayloadSize := TileByteSize;
+  case DataBlock.Compression of
+  COMPRESSION_ZLIB:
+    begin
+      var DecompBuf: Pointer;
+      var DecompSize: integer;
+      ZDecompress(PByte(DataBlock)+SizeOf(TDDFDataBlockHeader3), DataBlock.Size-SizeOf(TDDFDataBlockHeader3), DecompBuf, DecompSize);
+      try
+        if DecompSize<>integer(PayloadSize) then
+          raise Exception.Create('payload Size error while reading data');
+        Move(DecompBuf^, Destination^, PayloadSize);
+      finally
+        FreeMem(DecompBuf);
+      end;
+    end;
+  COMPRESSION_NONE:
+    Move(TDDF3(FDDF).FCursor.CursorPtr^, Destination^, PayloadSize);
+  else
+    raise Exception.Create('Unknow Compression');
+  end;
+  Result := true;
+end;
+
+function TDDFPage3.GetDim: TdwlGridDim;
+begin
+  Result.WidthInPixels := FPageHeader.TileColCount;
+  Result.HeightInPixels := FPageHeader.TileRowCount;
+  Result. ScaleGridToWorld := TDDF3(FDDF).FHeader.DefinedBounds.XExtent / (FPageHeader.TileColCount-1);
+  Result.LeftWorldX := TDDF3(FDDF).FHeader.DefinedBounds.XMin;
+  Result.TopWorldY := TDDF3(FDDF).FHeader.DefinedBounds.YMax;
+end;
+
+function TDDFPage3.GetMetaDataReadCursor: IdwlCursor_Read;
+begin
+  Result := nil; 
+  if FPageHeader.MetaDataOffset<>0 then
+  begin
+    Result := TDDF3(FDDF).FCursor;
+    Result.Seek(FPageHeader.MetaDataOffset);
+  end
+  else
+  begin
+    if FPageHeader.DataBlockHeader.MetaDataOffSet<>0 then
+    begin
+      Result := TDDF3(FDDF).FCursor;
+      Result.Seek(FPageHeader.DataBlockHeader.MetaDataOffSet);
+      Result.Seek(SizeOf(TDDFDataBlockHeader3), soCurrent);
+    end;
+  end;
+end;
+
+function TDDFPage3.PageItemOffset(TileCol, TileRow: cardinal): UInt32;
+begin
+  Result := PUInt32(PByte(FPageHeader)+SizeOf(TDDFPageHeader3)+(TileRow*FPageHeader.TileColCount+TileCol)*SizeOf(UInt64))^;
+end;
+
+procedure TDDFPage3.PutData(TileCol, TileRow: cardinal; Data: PByte);
+begin
+  TDDF3(FDDF).RaiseWritingError;
+end;
+
+function TDDFPage3.TileByteSize: cardinal;
+begin
+  Result := DataTypeByteSizes[FPageHeader.DataType] * FPageHeader.TileColCount * FPageHeader.TileRowCount;
+end;
+
+{ TMetaDataObject }
+
+destructor TMetaDataObject.Destroy;
+begin
+  FMetaDataPairs.Free;
+  inherited Destroy;
+end;
+
+function TMetaDataObject.GetMetaData(const Key: string): string;
+begin
+  InitMetaData;
+  if not FMetaDataPairs.TryGetValue(Key, Result) then
+    Result := '';
+end;
+
+procedure TMetaDataObject.InitMetaData;
+begin 
+  if FMetaDataPairs<>nil then
+    Exit;
+  FMetaDataPairs := TDictionary<string, string>.Create;
+  var Cursor := GetMetaDataReadCursor;
+  if Cursor= nil then
+    Exit;
+  while true do
+  begin
+    var Str := Cursor.ReadString_LenByte;
+    if Str='' then
+      Break;
+    FMetaDataPairs.Add(Str, Cursor.ReadString_LenWord);
+  end;
+end;
+
+procedure TMetaDataObject.SetMetaData(const Key, Value: string);
+begin
+  InitMetaData;
+  var CurrValue: string;
+  if FMetaDataPairs.TryGetValue(Key, CurrValue) then
+  begin
+    if Value='' then
+    begin
+      FMetaDataPairs.Remove(Key);
+      FMetaDataChanged := true;
+    end
+    else
+    begin
+      if Value<>CurrValue then
+      begin
+        FMetaDataPairs.AddOrSetValue(Key, Value);
+        FMetaDataChanged := true;
+      end;
+    end;
+  end
+  else
+  begin
+    if Value<>'' then
+    begin
+      FMetaDataPairs.Add(Key, Value);
+      FMetaDataChanged := true;
+    end;
+  end;
+end;
+
+{ TDDF4 }
+
+function TDDF4.AddPage(Bounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; DataType: word; WidthInTiles, HeightInTiles: cardinal; MaxUsedAsNoDataValue: boolean; Base10Exponent: shortint): IdwlDDFPage;
+begin
+  GetNewDataBlock(SizeOf(TDDFPageHeader3)+(WidthInTiles*HeightInTiles)*SizeOf(cardinal), dbctPageHeader, COMPRESSION_NONE);
+  var PageHeader := PDDFPageheader3(FCursor.CursorPtr);
 
   PageHeader.DataType := word(DataType);
   PageHeader.Base10Exponent := Base10Exponent;
@@ -195,7 +540,7 @@ begin
   PageHeader.TileRowCount := TilePixelCountY;
   PageHeader.WidthInTiles := WidthInTiles;
   PageHeader.HeightinTiles := HeightInTiles;
-  Result := TDDFPage.Create(Self, FCursor.CursorOffset);
+  Result := TDDFPage4.Create(Self, FCursor.CursorOffset);
 
   if FPageOffsets.Count=0 then
     FHeader.FirstDataPageOffset := FCursor.CursorOffset
@@ -203,254 +548,170 @@ begin
   begin
     var NewOffset := FCursor.CursorOffset;
     FCursor.Seek(FPageOffsets[FHeader.PageCount-1]);
-    PDDFPageheader(FCursor.CursorPtr).NextDataPageOffset := NewOffset;
+    PDDFPageheader3(FCursor.CursorPtr).NextDataPageOffset := NewOffset;
   end;
   inc(FHeader.PageCount);
 end;
 
-constructor TDDF.Create(CursoredIO: IdwlCursoredIO);
+constructor TDDF4.Create(CursoredIO: IdwlCursoredIO);
 begin
   inherited Create;
-  FPageOffsets := TList<cardinal>.Create;
+  FPageOffsets := TList<UInt64>.Create;
   FCursor := CursoredIO.GetWriteCursor;
-  Initialize;
-end;
-
-destructor TDDF.Destroy;
-begin
-  FMetaData.Free;
-  FPageOffsets.Free;
-  inherited Destroy;
-end;
-
-function TDDF.GetBounds: TdwlBounds;
-begin
-  Result := FHeader.ActualBounds;
-end;
-
-function TDDF.GetMetaData(const Key: string): string;
-begin
-  Result := MetaData.GetMetaData(Key);
-end;
-
-function TDDF.GetNewDataBlock(const Size: UInt64; ContentType: word; Compression: byte): PDDFDataBlockHeader;
-begin
-  FCursor.AllocateBlock(Size);
-  Result := PDDFDataBlockHeader(FCursor.CursorPtr);
-  FillChar(Result^, SizeOf(TDDFDataBlockHeader), 0);
-  Result.ContentType := ContentType;
-  Result.Compression := Compression;
-  Result.Size := Size;
-end;
-
-procedure TDDF.Initialize;
-begin
-  FCursor.Seek(0);
-  FHeader := PDDFHeader(FCursor.CursorPtr+SizeOf(TDDFFileIdentifier));
-  FCursor.RegisterMemoryPointer(@FHeader);
   // initialize header
   if FCursor.Size=0 {New File: initialize structure} then
   begin
-    FCursor.SetSize(SizeOf(TDDFFileIdentifier)+SizeOf(TDDFHeader));
-    var FileIdent := PDDFFileIdentifier(FCursor.CursorPtr);
-    FileIdent.Version := CURRENT_FILEVERSION;
+    FCursor.SetSize(SizeOf(TDDFFileIdentifier4)+SizeOf(TDDFFileContentHeader4));
+    var FileIdent := PDDFFileIdentifier3(FCursor.CursorPtr);
+    FileIdent.Version := FILEVERSION_4;
     FileIdent.Signature := DDF_SIGNATURE;
     FileIdent.Reserved0 := 0;
-    FHeader.DataBlockHeader.Size := SizeOf(TDDFHeader);
+    FHeader.DataBlockHeader.Size := SizeOf(TDDFFileContentHeader4);
     FHeader.DataBlockHeader.ContentType := dbctHeader;
     FHeader.DataBlockHeader.Compression := COMPRESSION_NONE;
-    FHeader.DataBlockHeader.Flags := 0;
+    FHeader.DataBlockHeader.Reserved1 := 0;
     FHeader.DataBlockHeader.MasterID := 0;
     FHeader.DataBlockHeader.ClientID := 0;
     FHeader.DataBlockHeader.MetaDataOffSet := 0;
     FHeader.FirstDataPageOffset := 0;
     FHeader.PageCount := 0;
     FHeader.CoordinateSystem := ddfcrdEPSG4326;
-    FHeader.DefinedBounds := EmptyBounds;
-    FHeader.ActualBounds := EmptyBounds;
+    FHeader.Bounds := EmptyBounds;
     FHeader.Reserved1 := 0;
   end
   else
   begin
-    var FileIdent := PDDFFileIdentifier(FCursor.CursorPtr);
-    if FileIdent.Version<>CURRENT_FILEVERSION then
+    var FileIdent := PDDFFileIdentifier3(FCursor.CursorPtr);
+    if FileIdent.Version<>FILEVERSION_4 then
       raise Exception.Create('FileVersion '+FileIdent.Version.ToString+' is not supported');
     if FileIdent.Signature<>DDF_SIGNATURE then
       raise Exception.Create('Invalid signature');
     if FHeader.CoordinateSystem<>ddfcrdEPSG4326 then
       raise Exception.Create('Unknown CoordinateSystem');
   end;
+  FHeader := PDDFFileContentHeader4(FCursor.CursorPtr+SizeOf(TDDFFileIdentifier4));
+  FCursor.RegisterMemoryPointer(@FHeader);
   // initialize pages
   var PageOffset := FHeader.FirstDataPageOffset;
   for var PageNo := 1 to FHeader.PageCount do
   begin
     FPageOffsets.Add(PageOffset);
     FCursor.Seek(PageOffset);
-    PageOffset := PDDFPageHeader(FCursor.CursorPtr).NextDataPageOffset;
+    PageOffset := PDDFPageHeader3(FCursor.CursorPtr).NextDataPageOffset;
   end;
 end;
 
-function TDDF.MetaData: TDDFMetaDataDictionary;
+destructor TDDF4.Destroy;
 begin
-  if FMetaData=nil then
-  begin
-    FMetaData := TDDFMetaDataDictionary.Create;
-    FMetaData.ReadMetaDataFromDataBlock(FCursor, PDDFDataBlockHeader(@FHeader.DataBlockHeader));
-  end;
-  Result := FMetaData;
+  FPageOffsets.Free;
+  inherited Destroy;
 end;
 
-function TDDF.Page(PageNumber: cardinal): IdwlDDFPage;
+function TDDF4.GetBounds: TdwlBounds;
 begin
-  Result := TDDFPage.Create(Self, FPageOffsets[PageNumber]);
+  Result := FHeader.Bounds;
 end;
 
-procedure TDDF.SetBounds(const Bounds: TdwlBounds);
+function TDDF4.GetMetaDataReadCursor: IdwlCursor_Read;
 begin
-  FHeader.ActualBounds := Bounds;
-  FHeader.DefinedBounds := Bounds;
+  if FHeader.DataBlockHeader.MetaDataOffSet=0 then
+    Exit(nil);
+  Result := FCursor;
+  Result.Seek(FHeader.DataBlockHeader.MetaDataOffSet);
 end;
 
-procedure TDDF.SetMetaData(const Key, Value: string);
+function TDDF4.GetNewDataBlock(const Size: cardinal; ContentType: word; Compression: byte): PDDFDataBlockHeader4;
 begin
-  MetaData.SetMetaData(Key, Value);
+  FCursor.AllocateBlock(Size);
+  Result := PDDFDataBlockHeader4(FCursor.CursorPtr);
+  FillChar(Result^, SizeOf(TDDFDataBlockHeader4), 0);
+  Result.ContentType := ContentType;
+  Result.Compression := Compression;
+  Result.Size := Size;
 end;
 
-{ TDDFPage }
+function TDDF4.Page(PageNumber: cardinal): IdwlDDFPage;
+begin
+  Result := TDDFPage4.Create(Self, FPageOffsets[PageNumber]);
+end;
 
-constructor TDDFPage.Create(DDF: TDDF; PageOffset: cardinal);
+procedure TDDF4.SetBounds(const Bounds: TdwlBounds);
+begin
+  FHeader.Bounds := Bounds;
+end;
+
+{ TDDFPage4 }
+
+constructor TDDFPage4.Create(DDF: TDDF4; PageOffset: UInt64);
 begin
   inherited Create;
-  FDDF := DDF;
-  // we keep the DDF here as a object, not as an interface
-  // to be able to use 'internal functions'
-  // So do manual reference counting
-  FDDF._AddRef;
-  FDDF.FCursor.Seek(PageOffset);
-  FPageHeader := PDDFPageHeader(FDDF.FCursor.CursorPtr);
+  FPageHeader := PDDFPageHeader4(FDDF.FCursor.CursorPtr);
   FDDF.FCursor.RegisterMemoryPointer(@FPageHeader);
 end;
 
-destructor TDDFPage.Destroy;
+function TDDFPage4.DataDefinition: TddfDataDefinition;
+begin
+
+end;
+
+destructor TDDFPage4.Destroy;
 begin
   FDDF.FCursor.UnRegisterMemoryPointer(@FPageHeader);
   // because we did a manual AddRef, Release it on destroy
   FDDF._Release;
-  FMetaData.Free;
   inherited Destroy;
 end;
 
-function TDDFPage.GetMetaData(const Key: string): string;
+function TDDFPage4.GetData(TileCol, TileRow: cardinal; Destination: PByte): boolean;
 begin
-  Result := MetaData.GetMetaData(Key);
+  Result := false;
 end;
 
-function TDDFPage.MetaData: TDDFMetaDataDictionary;
+function TDDFPage4.GetDim: TdwlGridDim;
 begin
-  if FMetaData=nil then
+
+end;
+
+function TDDFPage4.GetMetaDataReadCursor: IdwlCursor_Read;
+begin
+  Result := nil; 
+  if FPageHeader.MetaDataOffset<>0 then
   begin
-    FMetaData := TDDFMetaDataDictionary.Create;
-    FMetadata.ReadMetaDataFromDataBlock(FDDF.FCursor, @(FPageHeader.DataBlockHeader));
+    Result := FDDF.FCursor;
+    Result.Seek(FPageHeader.MetaDataOffset);
+  end
+  else
+  begin
+    if FPageHeader.DataBlockHeader.MetaDataOffSet<>0 then
+    begin
+      Result := FDDF.FCursor;
+      Result.Seek(FPageHeader.DataBlockHeader.MetaDataOffSet);
+    end;
   end;
-  Result := FMetaData;
 end;
 
-function TDDFPage.PageItemPtr(TileCol, TileRow: cardinal): PCardinal;
+function TDDFPage4.PageItemPtr(TileCol, TileRow: cardinal): PUInt64;
 begin
-  Result := PCardinal(PByte(FPageHeader)+SizeOf(TDDFPageHeader)+(TileRow*FPageHeader.TileColCount*TileRow+TileCol)*SizeOf(cardinal));
+  Result := PUInt64(PByte(FPageHeader)+SizeOf(TDDFPageHeader4)+(TileRow*FPageHeader.TileColCount*TileRow+TileCol)*SizeOf(UInt64));
 end;
 
-procedure TDDFPage.PutData(TileCol, TileRow: cardinal; Data: PByte);
+procedure TDDFPage4.PutData(TileCol, TileRow: cardinal; Data: PByte);
 begin
-  var DataSize :=  DataTypeByteSizes[FPageHeader.DataType]*FPageHeader.TileColCount*FPageHeader.TileRowCount;
+  var DataSize :=  DataTypeByteSizes[FPageHeader.DataDefinition.DataType]*FPageHeader.TileColCount*FPageHeader.TileRowCount;
   var CompBuf: pointer;
   var CompSize: integer;
   ZCompress(Data, DataSize, CompBuf, CompSize, FDDF.CompressionLevel);
   try
-    FDDF.GetNewDataBlock(SizeOf(TDDFDataBlockHeader)+CompSize, dbctArray, COMPRESSION_ZLIB);
+    FDDF.GetNewDataBlock(SizeOf(TDDFDataBlockHeader3)+CompSize, dbctArray, COMPRESSION_ZLIB);
     // put offset of this new block in Pageheader
     PageItemPtr(TileCol, TileRow)^ := FDDF.FCursor.CursorOffset;
     // put compressed data in file
-    FDDF.FCursor.Seek(SizeOf(TDDFDataBlockHeader), soCurrent);
+    FDDF.FCursor.Seek(SizeOf(TDDFDataBlockHeader3), soCurrent);
     Move(CompBuf^, FDDF.FCursor.CursorPtr^, CompSize);
   finally
     FreeMem(CompBuf);
   end;
-end;
 
-procedure TDDFPage.SetMetaData(const Key, Value: string);
-begin
-  MetaData.SetMetaData(key, Value);
-end;
-
-{ TDDFMetaDataDictionary }
-
-constructor TDDFMetaDataDictionary.Create;
-begin
-  inherited Create;
-  FPairs := TDictionary<string, string>.Create;
-end;
-
-destructor TDDFMetaDataDictionary.Destroy;
-begin
-  FPairs.Free;
-  inherited Destroy;
-end;
-
-function TDDFMetaDataDictionary.GetMetaData(const Key: string): string;
-begin
-  if not FPairs.TryGetValue(Key, Result) then
-    Result := '';
-end;
-
-procedure TDDFMetaDataDictionary.ReadMetaDataFromDataBlock(Cursor: IdwlCursor_Write; Block: PDDFDataBlockHeader);
-begin
-  FChanged := false;
-  FPairs.Clear;
-  if Block.MetaDataOffSet=0 then
-    Exit;
-  Cursor.Seek(Block.MetaDataOffSet);
-  if PDDFDataBlockHeader(Cursor.CursorPtr).ContentType<>dbctMetaData then
-    raise Exception.Create('Metadata block read error');
-  if PDDFDataBlockHeader(Cursor.CursorPtr).Compression<>COMPRESSION_NONE then
-    raise Exception.Create('Unknown compression while reading Metadata block');
-  Cursor.Seek(SizeOf(TDDFDataBlockHeader), soCurrent);
-  while true do
-  begin
-    var Str := Cursor.ReadString_LenByte;
-    if Str='' then
-      Break;
-    FPairs.Add(Str, Cursor.ReadString_LenWord);
-  end;
-end;
-
-procedure TDDFMetaDataDictionary.SetMetaData(const Key, Value: string);
-begin
-  var CurrValue: string;
-  if FPairs.TryGetValue(Key, CurrValue) then
-  begin
-    if Value='' then
-    begin
-      FPairs.Remove(Key);
-      FChanged := true;
-    end
-    else
-    begin
-      if Value<>CurrValue then
-      begin
-        FPairs.AddOrSetValue(Key, Value);
-        FChanged := true;
-      end;
-    end;
-  end
-  else
-  begin
-    if Value<>'' then
-    begin
-      FPairs.Add(Key, Value);
-      FChanged := true;
-    end;
-  end;
 end;
 
 end.

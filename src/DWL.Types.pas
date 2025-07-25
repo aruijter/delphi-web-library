@@ -182,6 +182,7 @@ type
     XMax,
     YMin,
     YMax: double;
+    function XExtent: double;
   end;
 
   PPbyte = ^PByte;
@@ -616,6 +617,13 @@ begin
   R := Color and $0000FF;
   G := (Color and $00FF00) shr 8;
   B := (Color and $FF0000) shr 16;
+end;
+
+{ TdwlBounds }
+
+function TdwlBounds.XExtent: double;
+begin
+  Result := XMax-XMin;
 end;
 
 end.
