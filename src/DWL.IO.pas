@@ -6,7 +6,7 @@ uses
   System.Classes, System.SysUtils, Winapi.Windows, DWL.Types;
 
 type
-  TdwlFileOption = (pfoCreateIfNeeded, pfoCreateEmptyNew, pfoReadOnly);
+  TdwlFileOption = (foCreateIfNeeded, foCreateEmptyNew, foReadOnly);
   TdwlFileOptions = set of TdwlFileOption;
 
   IdwlCursor_Read = interface
@@ -218,9 +218,9 @@ end;
 
 procedure TdwlCursoredFile.InternalOpen(const FileName: string);
 begin
-  FIsReadOnly := pfoReadOnly in FOptions;
-  var MakeNewFile := (not FileExists(FileName)) or (pfoCreateEmptyNew in FOptions);
-  if MakeNewFile and ([pfoCreateIfNeeded, pfoCreateEmptyNew]*FOptions=[]) then
+  FIsReadOnly := foReadOnly in FOptions;
+  var MakeNewFile := (not FileExists(FileName)) or (foCreateEmptyNew in FOptions);
+  if MakeNewFile and ([foCreateIfNeeded, foCreateEmptyNew]*FOptions=[]) then
     raise Exception.Create('File does not exist: ' + Filename);
   System.SetLastError(0);
   if MakeNewFile then

@@ -469,7 +469,7 @@ begin
   CheckInitReady;
   FPersistedParams.Clear;
   FCursor := nil;
-  FFileOptions := [pfoCreateEmptyNew];
+  FFileOptions := [foCreateEmptyNew];
   FInitNotReady := true;
   ResetEvent(FInitEvent);
   TInitThread.Create(Self);
@@ -509,7 +509,7 @@ begin
   FFileName := FileName;
   FInitEvent := CreateEvent(nil, false, false, nil);
   FInitNotReady := true;
-  FFileOptions := [pfoCreateIfNeeded];
+  FFileOptions := [foCreateIfNeeded];
   FOverwriteChangedParams := true; // default optimized
 end;
 
