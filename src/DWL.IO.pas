@@ -10,6 +10,7 @@ type
   TdwlFileOptions = set of TdwlFileOption;
 
   IdwlCursor_Read = interface
+    function CodePage: UINT;
     function CRC32: UInt32;
     function CursorOffset: UInt64;
     function CursorPtr: PByte;
@@ -28,7 +29,8 @@ type
     function ReadUInt16: word;
     function ReadUInt32: cardinal;
     function ReadUInt64: UInt64;
-    procedure Seek(Offset: Int64; Origin: TSeekOrigin=soBeginning);
+    procedure Seek(Offset: Int64; Origin: TSeekOrigin=soBeginning); overload;
+    procedure Seek(Ptr: PByte); overload;
     property Size: UInt64 read GetSize;
   end;
 
@@ -121,6 +123,7 @@ type
     FCursor: PByte;
     FCodePage: UINT;
     procedure AllocateBlock(Size: UInt64);
+    function CodePage: UINT;
     function CRC32: UInt32;
     function CursorOffset: UInt64;
     function CursorPtr: PByte;
@@ -142,7 +145,8 @@ type
     function ReadUInt32: cardinal;
     function ReadUInt64: UInt64;
     procedure RegisterMemoryPointer(pMemoryPointer: PPByte);
-    procedure Seek(Offset: Int64; Origin: TSeekOrigin=soBeginning);
+    procedure Seek(Offset: Int64; Origin: TSeekOrigin=soBeginning); overload;
+    procedure Seek(Ptr: PByte); overload;
     procedure SetSize(NewSize: UInt64);
     procedure TriggerMemoryPointers(Offset: Int64);
     procedure Write(const Buf; const Count: UInt64);
@@ -291,6 +295,11 @@ end;
 procedure TdwlCursor.AssureMemory(const RequestedSize: UInt64);
 begin
   FCursoredMemory.AssureFileSize(UInt64(FCursor-FCursoredMemory.FMemory)+RequestedSize);
+end;
+
+function TdwlCursor.CodePage: UINT;
+begin
+  Result := FCodePage;
 end;
 
 function TdwlCursor.CRC32: UInt32;
@@ -461,6 +470,11 @@ begin
   soCurrent: Inc(FCursor, Offset);
   soEnd: FCursor := FCursoredMemory.FMemory+FCursoredMemory.FActuallyUsedMemorySize.QuadPart-Offset;
   end;
+end;
+
+procedure TdwlCursor.Seek(Ptr: PByte);
+begin
+  FCursor := Ptr;
 end;
 
 procedure TdwlCursor.SetSize(NewSize: UInt64);

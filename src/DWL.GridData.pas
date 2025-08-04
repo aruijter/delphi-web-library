@@ -3,7 +3,7 @@ unit DWL.GridData;
 interface
 
 type
-  TdwlGridDim = packed record
+  TdwlGridDim = packed record // do not change this, is f.e. used in DDF version 4 Files
     WidthInPixels: word;
     HeightInPixels: word;
     LeftWorldX: double;

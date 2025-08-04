@@ -182,7 +182,10 @@ type
     XMax,
     YMin,
     YMax: double;
+    function IsEmpty: boolean;
     function XExtent: double;
+    function YExtent: double;
+    procedure Update(BoundsToInclude: TdwlBounds);
   end;
 
   PPbyte = ^PByte;
@@ -621,9 +624,36 @@ end;
 
 { TdwlBounds }
 
+function TdwlBounds.IsEmpty: boolean;
+begin
+  Result := (XMin>XMax) or (YMin>YMax);
+end;
+
+procedure TdwlBounds.Update(BoundsToInclude: TdwlBounds);
+begin
+  if IsEmpty then
+    Self := BoundsToInclude
+  else
+  begin
+    if BoundsToInclude.XMin < XMin then
+      XMin := BoundsToInclude.XMin;
+    if BoundsToInclude.XMax > XMax then
+      XMax := BoundsToInclude.XMax;
+    if BoundsToInclude.YMin < YMin then
+      YMin := BoundsToInclude.YMin;
+    if BoundsToInclude.YMax > YMax then
+      YMax := BoundsToInclude.YMax;
+  end;
+end;
+
 function TdwlBounds.XExtent: double;
 begin
   Result := XMax-XMin;
+end;
+
+function TdwlBounds.YExtent: double;
+begin
+  Result := YMax-YMin;
 end;
 
 end.

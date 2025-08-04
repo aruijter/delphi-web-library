@@ -18,11 +18,11 @@ All datablocks are having the following header
 |Datatype|Contents|Description|
 |-|-|-
 |UInt32||Total Size  of the datablock
-|UInt16|$0011: File Content Header|Identification of the content of the datablock
-||$0012: Page Header
-||$0013: Data Array
-||$0015: MetaData
-||$FFFF: Deleted
+|UInt16|$0401: File Content Header|Identification of the content of the datablock
+||$0402: Page Header
+||$0403: GridData
+||$0405: MetaData
+||$04FF: Deleted
 |UInt8|$00: None|Compression kind of the data
 ||$08: ZLib
 |UInt8|$00|Reserved1
@@ -38,7 +38,7 @@ The first Datablock of a DDF file is always a File Content Header block and has 
 |Datatype|Contents|Description|
 |-|-|-
 |UInt32|$0000003A|Total Size  of the datablock
-|UInt16|$0011|Identification File Content Header
+|UInt16|$0401|Identification File Content Header
 |UInt8|$00|No Compression
 |UInt8|$00|Reserved1
 |UInt32|$00000000|MasterID
@@ -59,7 +59,7 @@ The first Datablock of a DDF file is always a File Content Header block and has 
 |Datatype|Contents|Description|
 |-|-|-
 |UInt32||Total Size  of the datablock
-|UInt16|$0002|Identifiction Page Header
+|UInt16|$0402|Identifiction Page Header
 |UInt8|$00|No Compression
 |UInt8|$00|Reserved1
 |UInt32|$00000001|MasterID
@@ -95,7 +95,7 @@ The first Datablock of a DDF file is always a File Content Header block and has 
 |Datatype|Contents|Description|
 |-|-|-
 |UInt32||Total Size  of the datablock
-|UInt16|$0005|Identifiction Page Header
+|UInt16|$0405|Identifiction Page Header
 |UInt8|$05|ZLib Compression
 |UInt8|$00|Reserved1
 |UInt32||MasterID
