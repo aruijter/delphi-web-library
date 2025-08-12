@@ -244,7 +244,7 @@ begin
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Method, RequestMethodStr);
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_StatusCode, LogRequest.StatusCode);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_IP_Remote, LogRequest.Ip_Remote);
-    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, LogRequest.Uri);
+    Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Uri, Copy(LogRequest.Uri, 1, 250));
     Cmd.Parameters.SetIntegerDataBinding(InsertRequest_Idx_ProcessingTime, Min(High(word), LogRequest.Duration));
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Header, LogRequest.Headers);
     Cmd.Parameters.SetTextDataBinding(InsertRequest_Idx_Params, LogRequest.Params);
