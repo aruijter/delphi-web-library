@@ -221,9 +221,9 @@ type
   PPbyte = ^PByte;
 
 const
-  EmptyEpoch: TUnixEpoch = (FEpoch: Low(Int64));
-  MinEpoch: TUnixEpoch = (FEpoch: Low(Int64)+1);
-  MaxEpoch: TUnixEpoch = (FEpoch: High(Int64));
+  UnixEpoch_Empty: TUnixEpoch = (FEpoch: Low(Int64));
+  UnixEpoch_Min: TUnixEpoch = (FEpoch: Low(Int64)+1);
+  UnixEpoch_Max: TUnixEpoch = (FEpoch: High(Int64));
 
 const
   // DataTypes
@@ -238,7 +238,8 @@ const
   dwlSingle = 128;
   dwlDouble = 129;
 
-  EmptyBounds: TdwlBounds=(XMin: 1e+100; XMax: -1e+100; YMin: 1e+100; YMax: -1e+100);
+const
+  Bounds_Empty: TdwlBounds=(XMin: 1e+100; XMax: -1e+100; YMin: 1e+100; YMax: -1e+100);
 
 implementation
 
@@ -295,7 +296,7 @@ end;
 
 function TUnixEpoch.IsEmpty: boolean;
 begin
-  Result := FEpoch=EmptyEpoch;
+  Result := FEpoch=UnixEpoch_Empty;
 end;
 
 class operator TUnixEpoch.LessThan(EpochA, EpochB: TUnixEpoch): boolean;

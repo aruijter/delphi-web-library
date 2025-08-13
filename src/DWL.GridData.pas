@@ -9,7 +9,7 @@ type
   IdwlGridCursor = interface
     function Dim: TdwlGridDim;
     function GridDataType: TdwlGridDataType;
-    procedure GetDataRef(var Data: PByte; var DataSize: UInt64);
+    procedure GetDataRef(var Data: PByte; var DataSize: UInt32);
     function GetValue(Left, Top: word): double;
     function ReadValue: double;
   end;
@@ -45,7 +45,7 @@ type
       FDouble_Read: TDouble_Read;
       FGridData: IdwlGridData;
       FData: PByte;
-      FDataSize: NativeInt;
+      FDataSize: cardinal;
       FDim: TdwlGridDim;
       FGridDataType: TdwlGridDataType;
       FBytesperElement: byte;
@@ -57,7 +57,7 @@ type
     function Dim: TdwlGridDim;
     procedure Fill(Value: double); overload;
     function GridDataType: TdwlGridDataType;
-    procedure GetDataRef(var Data: PByte; var DataSize: UInt64);
+    procedure GetDataRef(var Data: PByte; var DataSize: UInt32);
     function GetValue(Left, Top: word): double;
     function ReadValue: double;
     procedure Seek(Offset: Int64; Origin: TSeekOrigin=soBeginning); overload;
@@ -157,7 +157,7 @@ begin
   Move(FData^, (PByte(FData)+BytesDone)^, FDataSize-BytesDone);
 end;
 
-procedure TdwlGridCursor.GetDataRef(var Data: PByte; var DataSize: UInt64);
+procedure TdwlGridCursor.GetDataRef(var Data: PByte; var DataSize: UInt32);
 begin
   Data := FData;
   DataSize := FDataSize;
