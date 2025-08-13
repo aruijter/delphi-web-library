@@ -188,12 +188,55 @@ type
     procedure Update(BoundsToInclude: TdwlBounds);
   end;
 
+  PdwlGridDataType = ^TdwlGridDataType;
+  TdwlGridDataType = packed record // do not change this, is f.e. used in DDF version 4 Files
+  const
+    Sizes: array[0..129] of byte = (1, 1, 2, 2, 4, 4, 8, 8,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      4, 8);
+    var
+      DataType: word;
+      Base10Exponent: shortint;
+      NoDataValueUsed: ByteBool;
+      NoDataValue: Int64;
+      Reserved4: cardinal;
+    class function Create(ADataType: word; ABase10Exponent: shortint=0; ANoDataValueUsed: boolean=false; ANoDataValue: Int64=0): TdwlGridDataType; static;
+    function HighestValue: Int64;
+    function Size: byte;
+  end;
+
+  TdwlGridDim = packed record // do not change this, is f.e. used in DDF version 4 Files
+    WidthInPixels: word;
+    HeightInPixels: word;
+    LeftWorldX: double;
+    TopWorldY: double;
+    ScaleGridToWorld: double;
+    function Grid2WorldX(X: double): double;
+    function Grid2WorldY(Y: double): double;
+    function World2GridX(X: double): double;
+    function World2GridY(Y: double): double;
+    function OuterWorldBounds: TdwlBounds;
+  end;
+
   PPbyte = ^PByte;
 
 const
   EmptyEpoch: TUnixEpoch = (FEpoch: Low(Int64));
   MinEpoch: TUnixEpoch = (FEpoch: Low(Int64)+1);
   MaxEpoch: TUnixEpoch = (FEpoch: High(Int64));
+
+const
+  // DataTypes
+  dwlInt8 = 0;
+  dwlUInt8 = 1;
+  dwlInt16 = 2;
+  dwlUInt16 = 3;
+  dwlInt32 = 4;
+  dwlUInt32 = 5;
+  dwlInt64 = 6;
+  dwlUInt64 = 7;
+  dwlSingle = 128;
+  dwlDouble = 129;
 
   EmptyBounds: TdwlBounds=(XMin: 1e+100; XMax: -1e+100; YMin: 1e+100; YMax: -1e+100);
 
@@ -654,6 +697,66 @@ end;
 function TdwlBounds.YExtent: double;
 begin
   Result := YMax-YMin;
+end;
+
+{ TdwlGridDataType }
+
+function TdwlGridDataType.Size: byte;
+begin
+  Result := Sizes[DataType];
+end;
+
+class function TdwlGridDataType.Create(ADataType: word; ABase10Exponent: shortint; ANoDataValueUsed: boolean; ANoDataValue: Int64): TdwlGridDataType;
+begin
+  Result.DataType := ADataType;
+  Result.Base10Exponent := ABase10Exponent;
+  Result.NoDataValueUsed := ANoDataValueUsed;
+  Result.NoDataValue := ANoDataValue;
+  Result.Reserved4 := 0;
+end;
+
+function TdwlGridDataType.HighestValue: Int64;
+begin
+  case DataType of
+    dwlInt8: Result := High(Int8);
+    dwlUInt8: Result := High(UInt8);
+    dwlInt16: Result := High(Int16);
+    dwlUInt16: Result := High(UInt16);
+    dwlInt32: Result := High(Int32);
+    dwlUInt32: Result := High(UInt32);
+  else
+    Result := High(Int64);
+  end;
+end;
+
+{ TdwlGridDim }
+
+function TdwlGridDim.Grid2WorldX(X: double): double;
+begin
+  Result := LeftWorldX+X*ScaleGridToWorld;
+end;
+
+function TdwlGridDim.Grid2WorldY(Y: double): double;
+begin
+  Result := TopWorldY-Y*ScaleGridToWorld;
+end;
+
+function TdwlGridDim.OuterWorldBounds: TdwlBounds;
+begin
+  Result.XMin := Grid2WorldX(-0.5);
+  Result.XMax := Grid2WorldX(WidthInPixels-0.5);
+  Result.YMin := Grid2WorldY(HeightInPixels-0.5);
+  Result.YMax := Grid2WorldY(-0.5);
+end;
+
+function TdwlGridDim.World2GridX(X: double): double;
+begin
+  Result := (X-LeftWorldX)/ScaleGridToWorld;
+end;
+
+function TdwlGridDim.World2GridY(Y: double): double;
+begin
+  Result := (TopWorldY-Y)/ScaleGridToWorld;
 end;
 
 end.

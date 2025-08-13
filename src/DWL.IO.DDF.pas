@@ -5,43 +5,20 @@ interface
 uses
   DWL.IO, DWL.Types, DWL.GridData, DWL.Params;
 
-const
-  // DataTypes
-  ddfInt8 = 0;
-  ddfUInt8 = 1;
-  ddfInt16 = 2;
-  ddfUInt16 = 3;
-  ddfInt32 = 4;
-  ddfUInt32 = 5;
-  ddfInt64 = 6;
-  ddfUInt64 = 7;
-  ddfSingle = 128;
-  ddfDouble = 129;
-
 type
-  PddfDataDefintion = ^TddfDataDefinition;
-  TddfDataDefinition = packed record
-    DataType: word;
-    Base10Component: shortint;
-    NoDataValueUsed: ByteBool;
-    NoDataValue: Int64;
-    Reserved4: cardinal;
-    class function Create(ADataType: word; ABase10Component: shortint=0; ANoDataValueUsed: boolean=false; ANoDataValue: Int64=0): TddfDataDefinition; static;
-  end;
-
   IdwlMetaDataObject = interface
     function MetaData: IdwlParams;
   end;
 
   IdwlDDFPage = interface(IdwlMetaDataObject)
-    function GetData(TileCol, TileRow: cardinal; Destination: PByte): boolean;
-    procedure PutGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; SourceSize: cardinal; SourcePtr: PByte);
-    function DataDefinition: TddfDataDefinition;
+    function GridDataType: TdwlGridDataType;
     function GetDim(TileCol, TileRow: cardinal): TdwlGridDim;
+    function GetGridData(TileCol, TileRow: cardinal): IdwlGridData;
+    procedure SetGridData(TileCol, TileRow: cardinal; GridCur: IdwlGridCursor);
   end;
 
   IdwlDDF = interface(IdwlMetaDataObject)
-    function AddPage(DataDefinition: TddfDataDefinition; OuterBounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1): IdwlDDFPage;
+    function AddPage(const GridDataType: TdwlGridDataType; const OuterBounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1): IdwlDDFPage;
     function Page(PageNumber: cardinal): IdwlDDFPage;
   end;
 
@@ -77,11 +54,6 @@ const
   dbctDeleted4 = $04ff;
 
   ddfcrdEPSG4326=4326;
-
-const
-  DataTypeByteSizes: array[0..129] of byte = (1, 1, 2, 2, 4, 4, 8, 8,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    4, 8);
 
 type
   PDDFFileIdentifier3 = ^ TDDFFileIdentifier3;
@@ -175,7 +147,7 @@ type
   PDDFPageHeader4 =^TDDFPageHeader4;
   TDDFPageHeader4 = packed record
     DataBlockHeader: TDDFDataBlockHeader4;
-    DataDefinition: TddfDataDefinition;
+    GridDataType: TdwlGridDataType;
     TileWidthX: cardinal;
     TileHeightY: cardinal;
     WidthInTiles: cardinal;
@@ -224,11 +196,10 @@ type
     function DDF: TDDF3;
     function TileByteSize: cardinal;
   private
-    function GetData(TileCol, TileRow: cardinal; Destination: PByte): boolean;
     function GetDim(TileCol, TileRow: cardinal): TdwlGridDim;
-    function DataDefinition: TddfDataDefinition;
-    procedure PutGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; SourceSize: cardinal; SourcePtr: PByte);
-  strict protected
+    function GridDataType: TdwlGridDataType;
+    function GetGridData(TileCol, TileRow: cardinal): IdwlGridData;
+    procedure SetGridData(TileCol, TileRow: cardinal; GridCur: IdwlGridCursor);
   public
     constructor Create(ADDF: IdwlDDF);
   end;
@@ -239,13 +210,13 @@ type
     FPageHeader: PDDFPageHeader4;
     function PageItemPtr(TileCol, TileRow: cardinal): PUInt64;
     function DDF: TDDF4;
-  strict protected
     function TileByteSize: cardinal;
   private
-    function DataDefinition: TddfDataDefinition;
-    function GetData(TileCol, TileRow: cardinal; Destination: PByte): boolean;
+    function GridDataType: TdwlGridDataType;
     function GetDim(TileCol, TileRow: cardinal): TdwlGridDim;
+    function GetGridData(TileCol, TileRow: cardinal): IdwlGridData;
     procedure PutGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; SourceSize: cardinal; SourcePtr: PByte);
+    procedure SetGridData(TileCol, TileRow: cardinal; GridCur: IdwlGridCursor);
   public
     constructor Create(ADDF: IdwlDDF);
     destructor Destroy; override;
@@ -258,7 +229,7 @@ type
       CompressionLevel: TCompressionLevel = clMax;
     var
       FHeader: PDDFFileContentHeader3;
-    function AddPage(DataDefinition: TddfDataDefinition; OuterBounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1): IdwlDDFPage;
+    function AddPage(const GridDataType: TdwlGridDataType; const OuterBounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1): IdwlDDFPage;
     function Page(PageNumber: cardinal): IdwlDDFPage;
     procedure RaiseWritingError;
   public
@@ -273,7 +244,7 @@ type
       CompressionLevel: TCompressionLevel = clMax;
     var
       FHeader: PDDFFileContentHeader4;
-    function AddPage(DataDefinition: TddfDataDefinition; OuterBounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1): IdwlDDFPage;
+    function AddPage(const GridDataType: TdwlGridDataType; const OuterBounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1): IdwlDDFPage;
     procedure DeleteDataBlock;
     function GetNewDataBlock(const Size: cardinal; ContentType: word; Compression: byte; MasterID: cardinal): PDDFDataBlockHeader4;
     function Page(PageNumber: cardinal): IdwlDDFPage;
@@ -281,7 +252,6 @@ type
     constructor Create(Cursor: IdwlCursor_Write);
     destructor Destroy; override;
   end;
-
 
 function New_DDF(CursoredIO: IdwlCursoredIO): IdwlDDF;
 begin
@@ -306,10 +276,9 @@ begin
   Result := New_DDF(New_CursoredIO(FileName, Options));
 end;
 
-
 { TDDF3 }
 
-function TDDF3.AddPage(DataDefinition: TddfDataDefinition; OuterBounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1): IdwlDDFPage;
+function TDDF3.AddPage(const GridDataType: TdwlGridDataType; const OuterBounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1): IdwlDDFPage;
 begin
   RaiseWritingError;
 end;
@@ -352,60 +321,17 @@ begin
   inherited Create(DDF.FCursor, PDDFDataBlockHeaderStart(FPageHeader), nil)
 end;
 
-function TDDFPage3.DataDefinition: TddfDataDefinition;
+function TDDFPage3.GridDataType: TdwlGridDataType;
 begin
   Result.DataType := FPageHeader.DataType;
-  Result.Base10Component := FPageHeader.Base10Exponent;
+  Result.Base10Exponent := FPageHeader.Base10Exponent;
   Result.NoDataValueUsed := FPageHeader.MaxUsedAsNoDataValue;
-  if Result.NoDataValueUsed then
-  begin
-    case Result.DataType of
-    ddfInt8: Result.NoDataValue := High(Int8);
-    ddfUInt8: Result.NoDataValue := High(UInt8);
-    ddfInt16: Result.NoDataValue := High(Int16);
-    ddfUInt16: Result.NoDataValue := High(UInt16);
-    ddfInt32: Result.NoDataValue := High(Int32);
-    ddfUInt32: Result.NoDataValue := High(UInt32);
-    ddfInt64: Result.NoDataValue := High(Int64);
-    end;
-  end;
+  Result.NoDataValue := Result.HighestValue;
 end;
 
 function TDDFPage3.DDF: TDDF3;
 begin
   Result := TDDF3(FDDF);
-end;
-
-function TDDFPage3.GetData(TileCol, TileRow: cardinal; Destination: PByte): boolean;
-begin
-  FCursor.Seek(PByte(FPageHeader));
-  FCursor.Seek(SizeOf(TDDFPageHeader3), soCurrent);
-  FCursor.Seek(PCardinal(FCursor.CursorPtr)^);
-  var DataBlock := PDDFDataBlockHeader3(FCursor.CursorPtr);
-  if DataBlock.ContentType<>dbctArray3 then
-    raise Exception.Create('In version 3 only Array datablocks are allowed');
-  FCursor.Seek(SizeOf(TDDFDataBlockHeader3), soCurrent);
-  var PayloadSize := TileByteSize;
-  case DataBlock.Compression of
-  COMPRESSION_ZLIB:
-    begin
-      var DecompBuf: Pointer;
-      var DecompSize: integer;
-      ZDecompress(PByte(DataBlock)+SizeOf(TDDFDataBlockHeader3), DataBlock.Size-SizeOf(TDDFDataBlockHeader3), DecompBuf, DecompSize);
-      try
-        if DecompSize<>integer(PayloadSize) then
-          raise Exception.Create('payload Size error while reading data');
-        Move(DecompBuf^, Destination^, PayloadSize);
-      finally
-        FreeMem(DecompBuf);
-      end;
-    end;
-  COMPRESSION_NONE:
-    Move(FCursor.CursorPtr^, Destination^, PayloadSize);
-  else
-    raise Exception.Create('Unknow Compression');
-  end;
-  Result := true;
 end;
 
 function TDDFPage3.GetDim(TileCol, TileRow: cardinal): TdwlGridDim;
@@ -417,20 +343,63 @@ begin
   Result.TopWorldY := DDF.FHeader.DefinedBounds.YMax;
 end;
 
-procedure TDDFPage3.PutGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; SourceSize: cardinal; SourcePtr: PByte);
+function TDDFPage3.GetGridData(TileCol, TileRow: cardinal): IdwlGridData;
+begin
+  FCursor.Seek(PByte(FPageHeader));
+  FCursor.Seek(SizeOf(TDDFPageHeader3), soCurrent);
 
+  var BlockOffset:= PCardinal(FCursor.CursorPtr)^;
+  if BLockOffset=0 then
+    Exit(nil);
+
+  FCursor.Seek(BlockOffset);
+  var DataBlock := PDDFDataBlockHeader3(FCursor.CursorPtr);
+  if DataBlock.ContentType<>dbctArray3 then
+    raise Exception.Create('In version 3 only Array datablocks are allowed');
+  FCursor.Seek(SizeOf(TDDFDataBlockHeader3), soCurrent);
+  var PayloadSize := TileByteSize;
+
+  var Data: PByte;
+  GetMem(Data, TileByteSize);
+  try
+    case DataBlock.Compression of
+    COMPRESSION_ZLIB:
+      begin
+        var DecompBuf: Pointer;
+        var DecompSize: integer;
+        ZDecompress(PByte(DataBlock)+SizeOf(TDDFDataBlockHeader3), DataBlock.Size-SizeOf(TDDFDataBlockHeader3), DecompBuf, DecompSize);
+        try
+          if DecompSize<>integer(PayloadSize) then
+            raise Exception.Create('payload Size error while reading data');
+          Move(DecompBuf^, Data^, PayloadSize);
+        finally
+          FreeMem(DecompBuf);
+        end;
+      end;
+    COMPRESSION_NONE:
+      Move(FCursor.CursorPtr^, Data^, PayloadSize);
+    else
+      raise Exception.Create('Unknow Compression');
+    end;
+    Result := New_GridData(GetDim(TileCol, TileRow), GridDataType, Data);
+  except
+    FreeMem(Data);
+  end;
+end;
+
+procedure TDDFPage3.SetGridData(TileCol, TileRow: cardinal; GridCur: IdwlGridCursor);
 begin
   DDF.RaiseWritingError;
 end;
 
 function TDDFPage3.TileByteSize: cardinal;
 begin
-  Result := DataTypeByteSizes[FPageHeader.DataType] * FPageHeader.TileWidthX * FPageHeader.TileHeightY;
+  Result :=  TdwlGridDataType.Sizes[FPageHeader.DataType] * FPageHeader.TileWidthX * FPageHeader.TileHeightY;
 end;
 
 { TDDF4 }
 
-function TDDF4.AddPage(DataDefinition: TddfDataDefinition; OuterBounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1): IdwlDDFPage;
+function TDDF4.AddPage(const GridDataType: TdwlGridDataType; const OuterBounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1): IdwlDDFPage;
 begin
   var GlobalBounds := FHeader.OuterBounds;
   GlobalBounds.Update(OuterBounds);
@@ -438,7 +407,7 @@ begin
   GetNewDataBlock(SizeOf(TDDFPageHeader4)+(WidthInTiles*HeightInTiles)*SizeOf(UInt64), dbctPageHeader4, COMPRESSION_NONE, FHeader.DataBlockHeader.ClientID);
   var PageHeader := PDDFPageheader4(FCursor.CursorPtr);
   PageHeader.OuterBounds := OuterBounds;
-  PageHeader.DataDefinition := DataDefinition;
+  PageHeader.GridDataType := GridDataType;
   PageHeader.TileWidthX := TilePixelCountX;
   PageHeader.TileHeightY := TilePixelCountY;
   PageHeader.WidthInTiles := WidthInTiles;
@@ -550,9 +519,9 @@ begin
   inherited Create(DDF.FCursor, PDDFDataBlockHeaderStart(FPageHeader), DDF);
 end;
 
-function TDDFPage4.DataDefinition: TddfDataDefinition;
+function TDDFPage4.GridDataType: TdwlGridDataType;
 begin
-  Result := FPageHeader.DataDefinition;
+  Result := FPageHeader.GridDataType;
 end;
 
 function TDDFPage4.DDF: TDDF4;
@@ -566,45 +535,56 @@ begin
   inherited Destroy;
 end;
 
-function TDDFPage4.GetData(TileCol, TileRow: cardinal; Destination: PByte): boolean;
-begin
-  FCursor.Seek(PageItemPtr(TileCol, TileRow)^);
-  var GridDataHeader := PDDFGridDataHeader(FCursor.CursorPtr);
-  if GridDataHeader.DataBlockHeader.ContentType<>dbctGridData then
-    raise Exception.Create('Expected GridData Block');
-  FCursor.Seek(SizeOf(TDDFGridDataHeader), soCurrent);
-  var PayloadSize := TileByteSize;
-  var SizeInBlock := GridDataHeader.DataBlockHeader.Size-SizeOf(TDDFGridDataHeader);
-  case GridDataHeader.DataBlockHeader.Compression of
-  COMPRESSION_ZLIB:
-    begin
-      var DecompBuf: Pointer;
-      var DecompSize: integer;
-      ZDecompress(PByte(FCursor.CursorPtr),  SizeInBlock, DecompBuf, DecompSize);
-      try
-        if DecompSize<>integer(PayloadSize) then
-          raise Exception.Create('payload Size error while reading data');
-        Move(DecompBuf^, Destination^, PayloadSize);
-      finally
-        FreeMem(DecompBuf);
-      end;
-    end;
-  COMPRESSION_NONE:
-    begin
-      if SizeInBlock<>PayloadSize then
-        raise Exception.Create('payload Size error while reading data');
-      Move(FCursor.CursorPtr^, Destination^, PayloadSize);
-    end
-  else
-    raise Exception.Create('Unknow Compression');
-  end;
-  Result := true;
-end;
-
 function TDDFPage4.GetDim(TileCol, TileRow: cardinal): TdwlGridDim;
 begin
   FCursor.Seek(PageItemPtr(TileCol, TileRow)^);
   Result := PDDFGridDataHeader(FCursor.CursorPtr).Dim;
+end;
+
+function TDDFPage4.GetGridData(TileCol, TileRow: cardinal): IdwlGridData;
+begin
+  var Data: PByte;
+  var Dim := GetDim(TileCol, TileRow);
+  var ItemOffset := PageItemPtr(TileCol, TileRow)^;
+  if ItemOffset=0 then
+    Exit(nil);
+  FCursor.Seek(ItemOffset);
+  var GridDataHeader := PDDFGridDataHeader(FCursor.CursorPtr);
+  if GridDataHeader.DataBlockHeader.ContentType<>dbctGridData then
+    raise Exception.Create('Expected GridData Block');
+  FCursor.Seek(SizeOf(TDDFGridDataHeader), soCurrent);
+
+  var PayloadSize := TileByteSize;
+  var SizeInBlock := GridDataHeader.DataBlockHeader.Size-SizeOf(TDDFGridDataHeader);
+  GetMem(Data, Dim.WidthInPixels*Dim.HeightInPixels*GridDataType.Size);
+  try
+    case GridDataHeader.DataBlockHeader.Compression of
+    COMPRESSION_ZLIB:
+      begin
+        var DecompBuf: Pointer;
+        var DecompSize: integer;
+        ZDecompress(PByte(FCursor.CursorPtr),  SizeInBlock, DecompBuf, DecompSize);
+        try
+          if DecompSize<>integer(PayloadSize) then
+            raise Exception.Create('payload Size error while reading data');
+          Move(DecompBuf^, Data^, PayloadSize);
+        finally
+          FreeMem(DecompBuf);
+        end;
+      end;
+    COMPRESSION_NONE:
+      begin
+        if SizeInBlock<>PayloadSize then
+          raise Exception.Create('payload Size error while reading data');
+        Move(FCursor.CursorPtr^, Data^, PayloadSize);
+      end
+    else
+      raise Exception.Create('Unknow Compression');
+    end;
+    Result := New_GridData(GetDim(TileCol, TileRow), GridDataType, Data);
+  except
+    FreeMem(Data);
+  end;
 end;
 
 function TDDFPage4.PageItemPtr(TileCol, TileRow: cardinal): PUInt64;
@@ -614,7 +594,7 @@ end;
 
 procedure TDDFPage4.PutGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; SourceSize: cardinal; SourcePtr: PByte);
 begin
-  if DataTypeByteSizes[FPageHeader.DataDefinition.DataType]*FPageHeader.TileWidthX*FPageHeader.TileHeightY<>SourceSize then
+  if FPageHeader.GridDataType.Size*FPageHeader.TileWidthX*FPageHeader.TileHeightY<>SourceSize then
     raise Exception.Create('Inconstistent Source Data Size in PutGridData');
   var CompBuf: pointer;
   var CompSize: integer;
@@ -632,9 +612,17 @@ begin
   end;
 end;
 
+procedure TDDFPage4.SetGridData(TileCol, TileRow: cardinal; GridCur: IdwlGridCursor);
+begin
+  var Data: PByte;
+  var DataSize: UInt64;
+  GridCur.GetDataRef(Data, DataSize);
+  PutGridData(TileCol, TileRow, GridCur.Dim, DataSize, Data);
+end;
+
 function TDDFPage4.TileByteSize: cardinal;
 begin
-  Result := DataTypeByteSizes[FPageHeader.DataDefinition.DataType] * FPageHeader.TileWidthX * FPageHeader.TileHeightY;
+  Result := FPageHeader.GridDataType.Size*FPageHeader.TileWidthX * FPageHeader.TileHeightY;
 end;
 
 { TMetaDataObject }
@@ -813,17 +801,6 @@ end;
 procedure TMetaDataObject.MetaDataChanged(Sender: IdwlParams; const Key: string; const Value: TValue);
 begin
   FMetaDataChanged := true;
-end;
-
-{ TddfDataDefinition }
-
-class function TddfDataDefinition.Create(ADataType: word; ABase10Component: shortint; ANoDataValueUsed: boolean; ANoDataValue: Int64): TddfDataDefinition;
-begin
-  Result.DataType := ADataType;
-  Result.Base10Component := ABase10Component;
-  Result.NoDataValueUsed := ANoDataValueUsed;
-  Result.NoDataValue := ANoDataValue;
-  Result.Reserved4 := 0;
 end;
 
 end.

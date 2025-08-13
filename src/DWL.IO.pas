@@ -119,7 +119,7 @@ type
     FMemoryPointers: TList<PPByte>;
     procedure AssureMemory(const RequestedSize: UInt64);
   private
-    FCursoredMemory: TdwlCursoredIO;
+    FCursoredIO: IdwlCursoredIO;
     FCursor: PByte;
     FCodePage: UINT;
     procedure AllocateBlock(Size: UInt64);
@@ -162,7 +162,7 @@ type
     procedure WriteUInt64(Value: UInt64);
     procedure UnRegisterMemoryPointer(pMemoryPointer: PPByte);
   public
-    constructor Create(ACursoredMemory: TdwlCursoredIO; Writable: boolean);
+    constructor Create(ACursoredIO: IdwlCursoredIO; Writable: boolean);
     destructor Destroy; override;
   end;
 
@@ -276,7 +276,7 @@ end;
 
 function TdwlCursor.GetSize: UInt64;
 begin
-  Result := FCursoredMemory.FActuallyUsedMemorySize.QuadPart;
+  Result := TdwlCursoredIO(FCursoredIO).FActuallyUsedMemorySize.QuadPart;
 end;
 
 procedure TdwlCursor.TriggerMemoryPointers(Offset: Int64);
@@ -294,7 +294,7 @@ end;
 
 procedure TdwlCursor.AssureMemory(const RequestedSize: UInt64);
 begin
-  FCursoredMemory.AssureFileSize(UInt64(FCursor-FCursoredMemory.FMemory)+RequestedSize);
+  TdwlCursoredIO(FCursoredIO).AssureFileSize(UInt64(FCursor-TdwlCursoredIO(FCursoredIO).FMemory)+RequestedSize);
 end;
 
 function TdwlCursor.CodePage: UINT;
@@ -304,33 +304,27 @@ end;
 
 function TdwlCursor.CRC32: UInt32;
 begin
-  Result := TdwlCrypt.CRC32(FCursoredMemory.FMemory, FCursoredMemory.FActuallyUsedMemorySize.QuadPart);
+  Result := TdwlCrypt.CRC32(TdwlCursoredIO(FCursoredIO).FMemory, TdwlCursoredIO(FCursoredIO).FActuallyUsedMemorySize.QuadPart);
 end;
 
-constructor TdwlCursor.Create(ACursoredMemory: TdwlCursoredIO; Writable: boolean);
+constructor TdwlCursor.Create(ACursoredIO: IdwlCursoredIO; Writable: boolean);
 begin
   inherited Create;
   FMemoryPointers := TList<PPByte>.Create;
-  FCursoredMemory := ACursoredMemory;
-  FCursoredMemory.RegisterCursor(Self);
-  FCursor := FCursoredMemory.FMemory;
-  FCodePage := FCursoredMemory.FCodePage;
-  // we keep the memorymapped file here as a object, not as an interface
-  // to be able to use 'internal functions'
-  // So do manual reference counting
-  FCursoredMemory._AddRef;
+  FCursoredIO := ACursoredIO;
+  TdwlCursoredIO(FCursoredIO).RegisterCursor(Self);
+  FCursor := TdwlCursoredIO(FCursoredIO).FMemory;
+  FCodePage := TdwlCursoredIO(FCursoredIO).FCodePage;
   FWritable := Writable;
   if Writable then
-  begin
-    FCursoredMemory.FSynchronizer.BeginWrite;
-  end
+    TdwlCursoredIO(FCursoredIO).FSynchronizer.BeginWrite
   else
-    FCursoredMemory.FSynchronizer.BeginRead;
+    TdwlCursoredIO(FCursoredIO).FSynchronizer.BeginRead;
 end;
 
 function TdwlCursor.CursorOffset: UInt64;
 begin
-  Result := FCursor-FCursoredMemory.FMemory;
+  Result := FCursor-TdwlCursoredIO(FCursoredIO).FMemory;
 end;
 
 function TdwlCursor.CursorPtr: PByte;
@@ -340,19 +334,18 @@ end;
 
 destructor TdwlCursor.Destroy;
 begin
-  FCursoredMemory.UnRegisterCursor(Self);
+  TdwlCursoredIO(FCursoredIO).UnRegisterCursor(Self);
   if FWritable then
-    FCursoredMemory.FSynchronizer.EndWrite
+    TdwlCursoredIO(FCursoredIO).FSynchronizer.EndWrite
   else
-    FCursoredMemory.FSynchronizer.EndRead;
-  FCursoredMemory._Release;
+    TdwlCursoredIO(FCursoredIO).FSynchronizer.EndRead;
   FMemoryPointers.Free;
   inherited Destroy;
 end;
 
 function TdwlCursor.Eof: Boolean;
 begin
-  Result := FCursor >= FCursoredMemory.FMemory+FCursoredMemory.FActuallyUsedMemorySize.QuadPart;
+  Result := FCursor >= TdwlCursoredIO(FCursoredIO).FMemory+TdwlCursoredIO(FCursoredIO).FActuallyUsedMemorySize.QuadPart;
 end;
 
 procedure TdwlCursor.Fill(Value: byte; Count: UInt64);
@@ -363,7 +356,7 @@ end;
 
 procedure TdwlCursor.Flush;
 begin
-  FCursoredMemory.Flush;
+  TdwlCursoredIO(FCursoredIO).Flush;
 end;
 
 procedure TdwlCursor.Read(var Buf; Count: UInt64);
@@ -466,9 +459,9 @@ end;
 procedure TdwlCursor.Seek(Offset: Int64; Origin: TSeekOrigin=soBeginning);
 begin
   case Origin of
-  soBeginning: FCursor := FCursoredMemory.FMemory + Offset;
+  soBeginning: FCursor := TdwlCursoredIO(FCursoredIO).FMemory + Offset;
   soCurrent: Inc(FCursor, Offset);
-  soEnd: FCursor := FCursoredMemory.FMemory+FCursoredMemory.FActuallyUsedMemorySize.QuadPart-Offset;
+  soEnd: FCursor := TdwlCursoredIO(FCursoredIO).FMemory+TdwlCursoredIO(FCursoredIO).FActuallyUsedMemorySize.QuadPart-Offset;
   end;
 end;
 
@@ -480,7 +473,7 @@ end;
 procedure TdwlCursor.SetSize(NewSize: UInt64);
 begin
   AssureMemory(NewSize);
-  FCursoredMemory.FActuallyUsedMemorySize.QuadPart := NewSize;
+  TdwlCursoredIO(FCursoredIO).FActuallyUsedMemorySize.QuadPart := NewSize;
 end;
 
 procedure TdwlCursor.UnRegisterMemoryPointer(pMemoryPointer: PPByte);
