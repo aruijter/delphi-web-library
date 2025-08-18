@@ -3,107 +3,111 @@ This is the definition of the DDF-format
 
 ## Header
 The file always starts with the following header
-|Datatype|Contents|Description|
-|-|-|-
-|UInt8|$03|FileVersion
-|UInt16|$616C|Signature
-|UInt8|$10|First Datablock offset
-|UInt32|$00000000|Reserved1
-|UInt64|$00000000|Reserved2
+||Datatype|Contents|Description|
+|-|-|-|-
+|0|UInt8|$03|FileVersion
+|1|UInt16|$616C|Signature
+|3|UInt8|$10|First Datablock offset
+|4|UInt32|$00000000|Reserved1
+|8|UInt64|$00000000|Reserved2
 
 ## Datablocks
 Directly After the header, the file contains only datablocks. The datablocks are preferably aligned on a 16 byte pattern.
 All datablocks are having the following header
 
 |Datatype|Contents|Description|
-|-|-|-
-|UInt32||Total Size  of the datablock
-|UInt16|$0401: File Content Header|Identification of the content of the datablock
-||$0402: Page Header
-||$0403: GridData
-||$0405: MetaData
-||$04FF: Deleted
-|UInt8|$00: None|Compression kind of the data
-||$08: ZLib
-|UInt8|$00|Reserved1
-|UInt32||MasterID, the MasterID of the block, blocks must be linked to other blocks
-|UInt32||ClientID, the ClientID of the block. My own ID
-|UInt64||MetadataOffset, offset of the datablock containing metadata for this datablock
-|UInt32|$00000000|Reserved2
-|UInt32|$00000000|Reserved3
+|-|-|-|-
+|0|UInt32||Total Size  of the datablock
+|4|UInt16|$0401: File Content Header|Identification of the content of the datablock
+|||$0402: Page Header
+|||$0403: GridData
+|||$0405: MetaData
+|||$04FF: Deleted
+|6|UInt8|$00: None|Compression kind of the data
+|||$08: ZLib
+|7|UInt8|$00|Reserved1
+|8|UInt32||MasterID, the MasterID of the block, blocks must be linked to other blocks
+|12|UInt32||ClientID, the ClientID of the block. My own ID
+|16|UInt64||MetadataOffset, offset of the datablock containing metadata for this datablock
+|24|UInt32|$00000000|Reserved2
+|28|UInt32|$00000000|Reserved3
 
 ### File Content Header
 The first Datablock of a DDF file is always a File Content Header block and has the following layout
 
-|Datatype|Contents|Description|
-|-|-|-
-|UInt32|$0000003A|Total Size  of the datablock
-|UInt16|$0401|Identification File Content Header
-|UInt8|$00|No Compression
-|UInt8|$00|Reserved1
-|UInt32|$00000000|MasterID
-|UInt32|$00000001|ClientID
-|UInt64||MetadataOffset
-|UInt32|$00000000|Reserved2
-|UInt32|$00000000|Reserved3
-|UInt64||First Data Page Offset
-|UInt32||Total Pagecount
-|UInt32|$000010E6|Coordinate system, for now EPGS-4326
-|bounds||The Outer Bounds of the content of all pages. Rectangular area including area's of all full pixels, not the gummiband around the datapoints
-|UInt32|$00000000|Reserved4
-|UInt32|$00000000|Reserved5
-|UInt32|$00000000|Reserved6
-|UInt32|$00000000|Reserved7
+||Datatype|Contents|Description|
+|-|-|-|-
+|0|UInt32|$0000003A|Total Size  of the datablock
+|4|UInt16|$0401|Identification File Content Header
+|6|UInt8|$00|No Compression
+|7|UInt8|$00|Reserved1
+|8|UInt32|$00000000|MasterID
+|12|UInt32|$00000001|ClientID
+|16|UInt64||MetadataOffset
+|24|UInt32|$00000000|Reserved2
+|28|UInt32|$00000000|Reserved3
+|32|UInt64||First Data Page Offset
+|40|UInt32||Total Pagecount
+|44|UInt32|$000010E6|Coordinate system, for now EPGS-4326
+|48|Bounds||The Outer Bounds of the content of all pages. Rectangular area including area's of all full pixels, not the gummiband around the datapoints
+|80|UInt32|$00000000|Reserved4
+|84|UInt32|$00000000|Reserved5
+|88|UInt32|$00000000|Reserved6
+|92|UInt32|$00000000|Reserved7
 
 ### Data Page
-|Datatype|Contents|Description|
-|-|-|-
-|UInt32||Total Size  of the datablock
-|UInt16|$0402|Identifiction Page Header
-|UInt8|$00|No Compression
-|UInt8|$00|Reserved1
-|UInt32|$00000001|MasterID
-|UInt32||ClientID
-|UInt64||MetadataOffset
-|UInt32|$00000000|Reserved2
-|UInt32|$00000000|Reserved3
-|UInt16|$0000: Int8|DataType
-||$0001: UInt8
-||$0002: Int16
-||$0003: UIInt16
-||$0004: Int32
-||$0005: UInt32
-||$0006: Int64
-||$0007: UInt64
-||$0080: Single
-||$0081: Double
-|Int8||Base 10 Exponent
-|Bool||NoDataValueUsed
-|Int64||NoDataValue
-|Int32||Reserved4
-|UInt32||TileColCount
-|UInt32||TileRowCount
-|UInt32||WidthInTiles
-|UInt32||HeightInTiles
-|UInt64||NextDataPageOffset
-|UInt32|$00000000|Reserved5
-|UInt32|$00000000|Reserved6
-|bounds||The Outer Bounds of the page content. Rectangular area including area's of all full pixels, not the gummiband around the datapoints
-|UInt64*N||TileDataBlockOffsets, row by row. N=TileColCount*TileRowCount.
+||Datatype|Contents|Description|
+|-|-|-|-
+|0|UInt32||Total Size  of the datablock
+|4|UInt16|$0402|Identifiction Page Header
+|6|UInt8|$00|No Compression
+|7|UInt8|$00|Reserved1
+|8|UInt32|$00000001|MasterID
+|12|UInt32||ClientID
+|16|UInt64||MetadataOffset
+|24|UInt32|$00000000|Reserved2
+|28|UInt32|$00000000|Reserved3
+|32|UInt16|$0000: Int8|DataType
+|||$0001: UInt8
+|||$0002: Int16
+|||$0003: UIInt16
+|||$0004: Int32
+|||$0005: UInt32
+|||$0006: Int64
+|||$0007: UInt64
+|||$0080: Single
+|||$0081: Double
+|34|Int64||NoDataValue
+|42|Double||ValueScale
+|50|Double||ValueOffset
+|58|UInt8|$01: NoDataValueUsed|DataTypeFlags
+|||$02: ValueScalingUsed
+|||$04: ValueOffsetUsed
+|59|Int8||Reserved5
+|60|Int32||Reserved6
+|64|UInt32||TileColCount
+|68|UInt32||TileRowCount
+|72|UInt32||WidthInTiles
+|76|UInt32||HeightInTiles
+|80|UInt64||NextDataPageOffset
+|88|UInt32|$00000000|Reserved7
+|92|UInt32|$00000000|Reserved8
+|96|bounds||The Outer Bounds of the page content. Rectangular area including area's of all full pixels, not the 'gummiband' around the datapoints
+|128|UInt64*N||TileDataBlockOffsets, row by row. N=TileColCount*TileRowCount.
 
 ### MetaData
-|Datatype|Contents|Description|
+||Datatype|Contents|Description|
 |-|-|-
-|UInt32||Total Size  of the datablock
-|UInt16|$0405|Identifiction Page Header
-|UInt8|$05|ZLib Compression
-|UInt8|$00|Reserved1
-|UInt32||MasterID
-|UInt32||ClientID
-|UInt64||MetadataOffset
-|UInt32|$00000000|Reserved2
-|UInt32|$00000000|Reserved3
-|Metadata*N|The Actual Metadata pairs terminated by one 0
+|0|UInt32||Total Size  of the datablock
+|4|UInt16|$0405|Identifiction Page Header
+|6|UInt8|$05|ZLib Compression
+|7|UInt8|$00|Reserved1
+|8|UInt32||MasterID
+|12|UInt32||ClientID
+|16|UInt64||MetadataOffset
+|24|UInt32|$00000000|Reserved2
+|28|UInt32|$00000000|Reserved3
+||Metadata*N|The Actual Metadata pairs terminated by one 0
 
 ## Datatypes
 |Char|bytecount|description

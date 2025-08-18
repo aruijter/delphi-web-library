@@ -196,11 +196,11 @@ type
       4, 8);
     var
       DataType: word;
-      Base10Exponent: shortint;
-      NoDataValueUsed: ByteBool;
       NoDataValue: Int64;
-      Reserved4: cardinal;
-    class function Create(ADataType: word; ABase10Exponent: shortint=0; ANoDataValueUsed: boolean=false; ANoDataValue: Int64=0): TdwlGridDataType; static;
+      ValueScale: double;
+      ValueOffset: double;
+      DataTypeFlags: byte;
+    class function Create(DataType: word; Flags: byte; NoDataValue: Int64=0; ValueScale: double=1; ValueOffset: double=0): TdwlGridDataType; static;
     function HighestValue: Int64;
     function Size: byte;
   end;
@@ -237,6 +237,11 @@ const
   dwlUInt64 = 7;
   dwlSingle = 128;
   dwlDouble = 129;
+
+const
+  flagNoDataValueUsed = 1;
+  flagValueScalingUsed = 2;
+  flagValueOffsetUsed = 4;
 
 const
   Bounds_Empty: TdwlBounds=(XMin: 1e+100; XMax: -1e+100; YMin: 1e+100; YMax: -1e+100);
@@ -707,13 +712,13 @@ begin
   Result := Sizes[DataType];
 end;
 
-class function TdwlGridDataType.Create(ADataType: word; ABase10Exponent: shortint; ANoDataValueUsed: boolean; ANoDataValue: Int64): TdwlGridDataType;
+class function TdwlGridDataType.Create(DataType: word; Flags: byte; NoDataValue: Int64=0; ValueScale: double=1; ValueOffset: double=0): TdwlGridDataType;
 begin
-  Result.DataType := ADataType;
-  Result.Base10Exponent := ABase10Exponent;
-  Result.NoDataValueUsed := ANoDataValueUsed;
-  Result.NoDataValue := ANoDataValue;
-  Result.Reserved4 := 0;
+  Result.DataType := DataType;
+  Result.NoDataValue := NoDataValue;
+  Result.ValueScale := ValueScale;
+  Result.ValueOffset := ValueOffset;
+  Result.DataTypeFlags := Flags;
 end;
 
 function TdwlGridDataType.HighestValue: Int64;

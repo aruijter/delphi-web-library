@@ -150,13 +150,15 @@ type
   TDDFPageHeader4 = packed record
     DataBlockHeader: TDDFDataBlockHeader4;
     GridDataType: TdwlGridDataType;
+    Reserved5: byte;
+    Reserved6: cardinal;
     TileWidthX: cardinal;
     TileHeightY: cardinal;
     WidthInTiles: cardinal;
     HeightinTiles: cardinal;
     NextDataPageOffset: UInt64;
-    Reserved5: UInt32;
-    Reserved6: UInt32;
+    Reserved7: UInt32;
+    Reserved8: UInt32;
     OuterBounds: TdwlBounds;
     // followed by ItemOffsets (8 bytes each: UInt64)
   end;
@@ -329,9 +331,21 @@ end;
 function TDDFPage3.GridDataType: TdwlGridDataType;
 begin
   Result.DataType := FPageHeader.DataType;
-  Result.Base10Exponent := FPageHeader.Base10Exponent;
-  Result.NoDataValueUsed := FPageHeader.MaxUsedAsNoDataValue;
-  Result.NoDataValue := Result.HighestValue;
+  var Flags := 0;
+  if FPageHeader.MaxUsedAsNoDataValue then
+  begin
+    Flags := Flags + flagNoDataValueUsed;
+    Result.NoDataValue := Result.HighestValue;
+  end
+  else
+    Result.NoDataValue := 0;
+  if FPageHeader.Base10Exponent<>0 then
+  begin
+    Flags := Flags + flagValueScalingUsed;
+    Result.ValueScale := Power10(1, FPageHeader.Base10Exponent);
+  end
+  else
+    Result.ValueScale := 0;
 end;
 
 procedure TDDFPage3.SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: cardinal; CopyFromThisSourcePtr: PByte);

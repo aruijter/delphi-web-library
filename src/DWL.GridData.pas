@@ -51,7 +51,6 @@ type
       FBytesperElement: byte;
       FCursor: PByte;
       FWritable: boolean;
-      FBase10Factor: double;
     procedure InitializeDataVarsAndFunctions;
   private
     function Dim: TdwlGridDim;
@@ -185,192 +184,382 @@ begin
 
   if FGridDataType.DataType<=dwlUInt64 then
   begin
-    if FGridDataType.NoDataValueUsed then
+    if (FGridDataType.DataTypeFlags and flagNoDataValueUsed)>0 then
     begin
-      if FGridDataType.Base10Exponent=0 then
+      if (FGridDataType.DataTypeFlags and flagValueScalingUsed)>0 then
       begin
-        case FGridDataType.DataType of
-        dwlInt8:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PShortInt(P)^=PShortInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PShortInt(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PShortInt(P)^ := FGridDataType.NoDataValue else PShortInt(P)^:= Round(Value); end;
+        if (FGridDataType.DataTypeFlags and flagValueOffsetUsed)>0 then
+        begin
+          case FGridDataType.DataType of
+          dwlInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PShortInt(P)^=PShortInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PShortInt(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PShortInt(P)^ := FGridDataType.NoDataValue else PShortInt(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (P^=PByte(@FGridDataType.NoDataValue)^) then Value := NaN else Value := P^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then P^ := FGridDataType.NoDataValue else P^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PSmallInt(P)^=PSmallInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PSmallInt(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PSmallInt(P)^ := FGridDataType.NoDataValue else PSmallInt(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PWord(P)^=PWord(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PWord(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PWord(P)^ := FGridDataType.NoDataValue else PWord(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInteger(P)^=PInteger(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInteger(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInteger(P)^ := FGridDataType.NoDataValue else PInteger(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PCardinal(P)^=PCardinal(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PCardinal(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PCardinal(P)^ := FGridDataType.NoDataValue else PCardinal(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInt64(P)^=PInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInt64(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInt64(P)^ := FGridDataType.NoDataValue else PInt64(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PUInt64(P)^=PUInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PUInt64(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PUInt64(P)^ := FGridDataType.NoDataValue else PUInt64(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
           end;
-        dwlUInt8:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (P^=PByte(@FGridDataType.NoDataValue)^) then Value := NaN else Value := P^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then P^ := FGridDataType.NoDataValue else P^:= Round(Value); end;
-          end;
-        dwlInt16:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PSmallInt(P)^=PSmallInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PSmallInt(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PSmallInt(P)^ := FGridDataType.NoDataValue else PSmallInt(P)^:= Round(Value); end;
-          end;
-        dwlUInt16:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PWord(P)^=PWord(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PWord(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PWord(P)^ := FGridDataType.NoDataValue else PWord(P)^:= Round(Value); end;
-          end;
-        dwlInt32:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInteger(P)^=PInteger(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInteger(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInteger(P)^ := FGridDataType.NoDataValue else PInteger(P)^:= Round(Value); end;
-          end;
-        dwlUInt32:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PCardinal(P)^=PCardinal(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PCardinal(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PCardinal(P)^ := FGridDataType.NoDataValue else PCardinal(P)^:= Round(Value); end;
-          end;
-        dwlInt64:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInt64(P)^=PInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInt64(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInt64(P)^ := FGridDataType.NoDataValue else PInt64(P)^:= Round(Value); end;
-          end;
-        dwlUInt64:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PUInt64(P)^=PUInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PUInt64(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PUInt64(P)^ := FGridDataType.NoDataValue else PUInt64(P)^:= Round(Value); end;
+        end
+        else
+        begin
+          case FGridDataType.DataType of
+          dwlInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PShortInt(P)^=PShortInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PShortInt(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PShortInt(P)^ := FGridDataType.NoDataValue else PShortInt(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (P^=PByte(@FGridDataType.NoDataValue)^) then Value := NaN else Value := P^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then P^ := FGridDataType.NoDataValue else P^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PSmallInt(P)^=PSmallInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PSmallInt(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PSmallInt(P)^ := FGridDataType.NoDataValue else PSmallInt(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PWord(P)^=PWord(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PWord(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PWord(P)^ := FGridDataType.NoDataValue else PWord(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInteger(P)^=PInteger(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInteger(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInteger(P)^ := FGridDataType.NoDataValue else PInteger(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PCardinal(P)^=PCardinal(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PCardinal(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PCardinal(P)^ := FGridDataType.NoDataValue else PCardinal(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInt64(P)^=PInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInt64(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInt64(P)^ := FGridDataType.NoDataValue else PInt64(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PUInt64(P)^=PUInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PUInt64(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PUInt64(P)^ := FGridDataType.NoDataValue else PUInt64(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
           end;
         end;
       end
       else
       begin
-        FBase10Factor := Power10(1, FGridDataType.Base10Exponent);
-        case FGridDataType.DataType of
-        dwlInt8:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PShortInt(P)^=PShortInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PShortInt(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PShortInt(P)^ := FGridDataType.NoDataValue else PShortInt(P)^:= Round(Value/FBase10Factor); end;
+        if (FGridDataType.DataTypeFlags and flagValueOffsetUsed)>0 then
+        begin
+          case FGridDataType.DataType of
+          dwlInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PShortInt(P)^=PShortInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PShortInt(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PShortInt(P)^ := FGridDataType.NoDataValue else PShortInt(P)^:= Round(Value-FGridDataType.ValueOffset)end;
+            end;
+          dwlUInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (P^=PByte(@FGridDataType.NoDataValue)^) then Value := NaN else Value := P^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then P^ := FGridDataType.NoDataValue else P^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PSmallInt(P)^=PSmallInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PSmallInt(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PSmallInt(P)^ := FGridDataType.NoDataValue else PSmallInt(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlUInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PWord(P)^=PWord(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PWord(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PWord(P)^ := FGridDataType.NoDataValue else PWord(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInteger(P)^=PInteger(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInteger(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInteger(P)^ := FGridDataType.NoDataValue else PInteger(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlUInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PCardinal(P)^=PCardinal(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PCardinal(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PCardinal(P)^ := FGridDataType.NoDataValue else PCardinal(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInt64(P)^=PInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInt64(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInt64(P)^ := FGridDataType.NoDataValue else PInt64(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlUInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PUInt64(P)^=PUInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PUInt64(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PUInt64(P)^ := FGridDataType.NoDataValue else PUInt64(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
           end;
-        dwlUInt8:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (P^=PByte(@FGridDataType.NoDataValue)^) then Value := NaN else Value := P^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then P^ := FGridDataType.NoDataValue else P^:= Round(Value/FBase10Factor); end;
+        end
+        else
+        begin
+          case FGridDataType.DataType of
+          dwlInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PShortInt(P)^=PShortInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PShortInt(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PShortInt(P)^ := FGridDataType.NoDataValue else PShortInt(P)^:= Round(Value); end;
+            end;
+          dwlUInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (P^=PByte(@FGridDataType.NoDataValue)^) then Value := NaN else Value := P^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then P^ := FGridDataType.NoDataValue else P^:= Round(Value); end;
+            end;
+          dwlInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PSmallInt(P)^=PSmallInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PSmallInt(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PSmallInt(P)^ := FGridDataType.NoDataValue else PSmallInt(P)^:= Round(Value); end;
+            end;
+          dwlUInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PWord(P)^=PWord(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PWord(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PWord(P)^ := FGridDataType.NoDataValue else PWord(P)^:= Round(Value); end;
+            end;
+          dwlInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInteger(P)^=PInteger(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInteger(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInteger(P)^ := FGridDataType.NoDataValue else PInteger(P)^:= Round(Value); end;
+            end;
+          dwlUInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PCardinal(P)^=PCardinal(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PCardinal(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PCardinal(P)^ := FGridDataType.NoDataValue else PCardinal(P)^:= Round(Value); end;
+            end;
+          dwlInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInt64(P)^=PInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInt64(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInt64(P)^ := FGridDataType.NoDataValue else PInt64(P)^:= Round(Value); end;
+            end;
+          dwlUInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin if (PUInt64(P)^=PUInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PUInt64(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PUInt64(P)^ := FGridDataType.NoDataValue else PUInt64(P)^:= Round(Value); end;
+            end;
           end;
-        dwlInt16:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PSmallInt(P)^=PSmallInt(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PSmallInt(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PSmallInt(P)^ := FGridDataType.NoDataValue else PSmallInt(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        dwlUInt16:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PWord(P)^=PWord(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PWord(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PWord(P)^ := FGridDataType.NoDataValue else PWord(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        dwlInt32:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInteger(P)^=PInteger(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInteger(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInteger(P)^ := FGridDataType.NoDataValue else PInteger(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        dwlUInt32:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PCardinal(P)^=PCardinal(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PCardinal(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PCardinal(P)^ := FGridDataType.NoDataValue else PCardinal(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        dwlInt64:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PInt64(P)^=PInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PInt64(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PInt64(P)^ := FGridDataType.NoDataValue else PInt64(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        dwlUInt64:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin if (PUInt64(P)^=PUInt64(@FGridDataType.NoDataValue)^) then Value := NaN else Value := PUInt64(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin if IsNan(Value) then PUInt64(P)^ := FGridDataType.NoDataValue else PUInt64(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        end;
+        end
       end;
     end
     else
     begin
-      if FGridDataType.Base10Exponent=0 then
+      if (FGridDataType.DataTypeFlags and flagValueScalingUsed)>0 then
       begin
-        case FGridDataType.DataType of
-        dwlInt8:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PShortInt(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PShortInt(P)^:= Round(Value); end;
+        if (FGridDataType.DataTypeFlags and flagValueOffsetUsed)>0 then
+        begin
+          case FGridDataType.DataType of
+          dwlInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PShortInt(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PShortInt(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := P^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin P^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PSmallInt(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PSmallInt(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PWord(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PWord(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInteger(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PINteger(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PCardinal(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PCardinal(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInt64(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PInt64(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PUInt64(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PUInt64(P)^:= Round((Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale); end;
+            end;
           end;
-        dwlUInt8:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := P^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin P^:= Round(Value); end;
+        end
+        else
+        begin
+          case FGridDataType.DataType of
+          dwlInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PShortInt(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PShortInt(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := P^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin P^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PSmallInt(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PSmallInt(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PWord(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PWord(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInteger(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PINteger(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PCardinal(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PCardinal(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInt64(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PInt64(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
+          dwlUInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PUInt64(P)^*FGridDataType.ValueScale; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PUInt64(P)^:= Round(Value/FGridDataType.ValueScale); end;
+            end;
           end;
-        dwlInt16:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PSmallInt(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PSmallInt(P)^:= Round(Value); end;
-          end;
-        dwlUInt16:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PWord(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PWord(P)^:= Round(Value); end;
-          end;
-        dwlInt32:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInteger(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PINteger(P)^:= Round(Value); end;
-          end;
-        dwlUInt32:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PCardinal(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PCardinal(P)^:= Round(Value); end;
-          end;
-        dwlInt64:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInt64(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PInt64(P)^:= Round(Value); end;
-          end;
-        dwlUInt64:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PUInt64(P)^; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PUInt64(P)^:= Round(Value); end;
-          end;
-        end;
+        end
       end
       else
       begin
-        FBase10Factor := Power10(1, FGridDataType.Base10Exponent);
-        case FGridDataType.DataType of
-        dwlInt8:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PShortInt(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PShortInt(P)^:= Round(Value/FBase10Factor); end;
+        if (FGridDataType.DataTypeFlags and flagValueOffsetUsed)>0 then
+        begin
+          case FGridDataType.DataType of
+          dwlInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PShortInt(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PShortInt(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlUInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := P^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin P^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PSmallInt(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PSmallInt(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlUInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PWord(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PWord(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInteger(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PINteger(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlUInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PCardinal(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PCardinal(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInt64(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PInt64(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
+          dwlUInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PUInt64(P)^+FGridDataType.ValueOffset; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PUInt64(P)^:= Round(Value-FGridDataType.ValueOffset); end;
+            end;
           end;
-        dwlUInt8:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := P^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin P^:= Round(Value/FBase10Factor); end;
+        end
+        else
+        begin
+          case FGridDataType.DataType of
+          dwlInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PShortInt(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PShortInt(P)^:= Round(Value); end;
+            end;
+          dwlUInt8:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := P^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin P^:= Round(Value); end;
+            end;
+          dwlInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PSmallInt(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PSmallInt(P)^:= Round(Value); end;
+            end;
+          dwlUInt16:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PWord(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PWord(P)^:= Round(Value); end;
+            end;
+          dwlInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInteger(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PINteger(P)^:= Round(Value); end;
+            end;
+          dwlUInt32:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PCardinal(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PCardinal(P)^:= Round(Value); end;
+            end;
+          dwlInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInt64(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PInt64(P)^:= Round(Value); end;
+            end;
+          dwlUInt64:
+            begin
+              FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PUInt64(P)^; end;
+              FDouble_Write := procedure(P: PByte; const Value: double) begin PUInt64(P)^:= Round(Value); end;
+            end;
           end;
-        dwlInt16:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PSmallInt(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PSmallInt(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        dwlUInt16:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PWord(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PWord(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        dwlInt32:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInteger(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PINteger(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        dwlUInt32:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PCardinal(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PCardinal(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        dwlInt64:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PInt64(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PInt64(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        dwlUInt64:
-          begin
-            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PUInt64(P)^*FBase10Factor; end;
-            FDouble_Write := procedure(P: PByte; const Value: double) begin PUInt64(P)^:= Round(Value/FBase10Factor); end;
-          end;
-        end;
+        end
       end;
     end;
   end
@@ -379,13 +568,61 @@ begin
     case FGridDataType.DataType of
     dwlSingle:
       begin
-        FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PSingle(P)^; end;
-        FDouble_Write := procedure(P: PByte; const Value: double) begin PSingle(P)^:= Value; end;
+        if (FGridDataType.DataTypeFlags and flagValueScalingUsed)>0 then
+        begin
+          if (FGridDataType.DataTypeFlags and flagValueOffsetUsed)>0 then
+          begin
+            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PSingle(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+            FDouble_Write := procedure(P: PByte; const Value: double) begin PSingle(P)^:= (Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale; end;
+          end
+          else
+          begin
+            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PSingle(P)^*FGridDataType.ValueScale; end;
+            FDouble_Write := procedure(P: PByte; const Value: double) begin PSingle(P)^:= Value/FGridDataType.ValueScale; end;
+          end;
+        end
+        else
+        begin
+          if (FGridDataType.DataTypeFlags and flagValueOffsetUsed)>0 then
+          begin
+            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PSingle(P)^+FGridDataType.ValueOffset; end;
+            FDouble_Write := procedure(P: PByte; const Value: double) begin PSingle(P)^:= Value-FGridDataType.ValueOffset; end;
+          end
+          else
+          begin
+            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PSingle(P)^; end;
+            FDouble_Write := procedure(P: PByte; const Value: double) begin PSingle(P)^:= Value; end;
+          end;
+        end;
       end;
     dwlDouble:
       begin
-        FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PDouble(P)^; end;
-        FDouble_Write := procedure(P: PByte; const Value: double) begin PDouble(P)^:= Value; end;
+        if (FGridDataType.DataTypeFlags and flagValueScalingUsed)>0 then
+        begin
+          if (FGridDataType.DataTypeFlags and flagValueOffsetUsed)>0 then
+          begin
+            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PDouble(P)^*FGridDataType.ValueScale+FGridDataType.ValueOffset; end;
+            FDouble_Write := procedure(P: PByte; const Value: double) begin PDouble(P)^:= (Value-FGridDataType.ValueOffset)/FGridDataType.ValueScale; end;
+          end
+          else
+          begin
+            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PDouble(P)^*FGridDataType.ValueScale; end;
+            FDouble_Write := procedure(P: PByte; const Value: double) begin PDouble(P)^:= Value/FGridDataType.ValueScale; end;
+          end;
+        end
+        else
+        begin
+          if (FGridDataType.DataTypeFlags and flagValueOffsetUsed)>0 then
+          begin
+            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PDouble(P)^+FGridDataType.ValueOffset; end;
+            FDouble_Write := procedure(P: PByte; const Value: double) begin PDouble(P)^:= Value-FGridDataType.ValueOffset; end;
+          end
+          else
+          begin
+            FDouble_Read := procedure(P: PByte; var Value: double) begin Value := PDouble(P)^; end;
+            FDouble_Write := procedure(P: PByte; const Value: double) begin PDouble(P)^:= Value; end;
+          end;
+        end
       end;
     end;
   end;
