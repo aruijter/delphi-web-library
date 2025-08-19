@@ -200,7 +200,7 @@ type
       ValueScale: double;
       ValueOffset: double;
       DataTypeFlags: byte;
-    class function Create(DataType: word; Flags: byte; NoDataValue: Int64=0; ValueScale: double=1; ValueOffset: double=0): TdwlGridDataType; static;
+    class function Create(DataType: word; Flags: byte=0; NoDataValue: Int64=0; ValueScale: double=1; ValueOffset: double=0): TdwlGridDataType; static;
     function HighestValue: Int64;
     function Size: byte;
   end;
@@ -216,6 +216,7 @@ type
     function World2GridX(X: double): double;
     function World2GridY(Y: double): double;
     function OuterWorldBounds: TdwlBounds;
+    class function Create(AWidthInPixels, AHeightInPixels: word; ALeftWorldX, ATopWorldY, AScaleGridToWorld: double): TdwlGridDim; static;
   end;
 
   PPbyte = ^PByte;
@@ -712,7 +713,7 @@ begin
   Result := Sizes[DataType];
 end;
 
-class function TdwlGridDataType.Create(DataType: word; Flags: byte; NoDataValue: Int64=0; ValueScale: double=1; ValueOffset: double=0): TdwlGridDataType;
+class function TdwlGridDataType.Create(DataType: word; Flags: byte=0; NoDataValue: Int64=0; ValueScale: double=1; ValueOffset: double=0): TdwlGridDataType;
 begin
   Result.DataType := DataType;
   Result.NoDataValue := NoDataValue;
@@ -736,6 +737,15 @@ begin
 end;
 
 { TdwlGridDim }
+
+class function TdwlGridDim.Create(AWidthInPixels, AHeightInPixels: word; ALeftWorldX, ATopWorldY, AScaleGridToWorld: double): TdwlGridDim;
+begin
+  Result.WidthInPixels := AWidthInPixels;
+  Result.HeightInPixels := AHeightInPixels;
+  Result.LeftWorldX := ALeftWorldX;
+  Result.TopWorldY := ATopWorldY;
+  Result.ScaleGridToWorld := AScaleGridToWorld;
+end;
 
 function TdwlGridDim.Grid2WorldX(X: double): double;
 begin

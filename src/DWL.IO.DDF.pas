@@ -346,6 +346,7 @@ begin
   end
   else
     Result.ValueScale := 0;
+  Result.DataTypeFlags := Flags;
 end;
 
 procedure TDDFPage3.SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: cardinal; CopyFromThisSourcePtr: PByte);
