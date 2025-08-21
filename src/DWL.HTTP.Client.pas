@@ -60,6 +60,7 @@ type
   ///   Response interface will be the answer
   /// </summary>
   IdwlHTTPRequest = interface
+    function AsString(Encoding: TEncoding=nil): string;
     function GetHeader(const HeaderKey: string): string;
     function GetMethod: string;
     function GetPassword: string;
@@ -162,6 +163,7 @@ type
     FHeaderValues: TStringList;
     constructor Create;
     destructor Destroy; override;
+    function AsString(Encoding: TEncoding=nil): string;
     function GetHeader(const HeaderKey: string): string;
     function GetMethod: string;
     function GetOnProgress: TdwlHTTPProgressEvent;
@@ -235,6 +237,17 @@ begin
 end;
 
 { TdwlHTTPRequest }
+
+function TdwlHTTPRequest.AsString(Encoding: TEncoding): string;
+begin
+  var Bytes: TBytes;
+  SetLength(Bytes, FPostStream.Size);
+  FPostStream.Seek(0, soBeginning);
+  FPostStream.Read(Bytes, 0, FPostStream.Size);
+  if Encoding=nil then
+    Encoding := TEncoding.Default;
+  Result := Encoding.GetString(Bytes);
+end;
 
 constructor TdwlHTTPRequest.Create;
 begin
