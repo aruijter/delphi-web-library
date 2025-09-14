@@ -706,9 +706,9 @@ begin
 procedure TdwlACMEClient.LogCertificateStatus;
 begin
   case CertificateStatus of
-  certstatUnknown: Log('Certificate status for domain '+Domain+' unknown', lsError);
-  certstatNotFound: Log('No certificate found for domain '+Domain, lsError);
-  certstatExpired: Log('Current certificate for domain '+Domain+' is expired.', lsError);
+  certstatUnknown: Log('Certificate status for domain '+Domain+' unknown', lsNotice);
+  certstatNotFound: Log('No certificate found for domain '+Domain, lsNotice);
+  certstatExpired: Log('Current certificate for domain '+Domain+' is expired.', lsNotice);
   certstatAboutToExpire: Log('Current certificate for domain '+Domain+' is about to expire: '+DaysLeft.ToString+' days left.', lsNotice);
   certstatOk: Log('Current certificate found for domain '+Domain+', still valid for '+DaysLeft.ToString+' days.', lsTrace);
   end;
