@@ -4,45 +4,48 @@ interface
 
 uses
   DWL.OpenSSL.Api, System.SyncObjs, System.Generics.Collections, DWL.TCP,
-  System.Classes;
+  System.Classes, DWL.HTTP.Consts;
 
 type
   TdwlSslEnvironment=class;
 
-  TdwlSslContext = class
+  IdwlSslContext = interface
+    function Environment: TdwlSslEnvironment;
+    function HostName: string;
+    function opSSL_CTX: pSSL_CTX;
+    function ProtocolAccepted: string;
+  end;
+
+  TdwlSslContext = class(TInterfacedObject, IdwlSslContext)
   strict private
     FHostName: string;
     FEnvironment: TdwlSslEnvironment;
     FopSSL_CTX: pSSL_CTX;
   private
-    FProtocolsAccepted: TStringList;
-    FBindingIP: string;
+    FProtocolAccepted: string;
+    function Environment: TdwlSslEnvironment;
+    function HostName: string;
+    function opSSL_CTX: pSSL_CTX;
+    function ProtocolAccepted: string;
   public
-    property Environment: TdwlSslEnvironment read FEnvironment;
-    property HostName: string read FHostName;
-    property opSSL_CTX: pSSL_CTX read FopSSL_CTX;
-    constructor Create(AEnvironment: TdwlSslEnvironment; const AHostName, Cert, Key: string; const ABindingIP: string; ProtocolsAccepted: TArray<string>);
+    constructor Create(AEnvironment: TdwlSslEnvironment; const AHostName, Cert, Key, ProtocolAccepted: string);
     destructor Destroy; override;
   end;
 
   TdwlSslEnvironment = class
   strict private
-    FMainContext: TdwlSslContext;
+    FMainContext: IdwlSslContext;
     FMREW: TLightweightMREW;
-    FContexts: TDictionary<string, TdwlSslContext>;
-    FDeprecatedContexts: TObjectList<TdwlSslContext>;
-    function GetMainContext: TdwlSslContext;
-    procedure CheckMainContext;
-  private
-    FEmptyContext: TdwlSslContext;
+    FContexts: TList<IdwlSslContext>;
+    function InternalGetContext(const HostName, ProtocolAccepted: string): IdwlSslContext;
   public
-    property MainContext: TdwlSslContext read GetMainContext;
+    property MainContext: IdwlSslContext read FMainContext;
     constructor Create;
     destructor Destroy; override;
-    procedure AddContext(const HostName, Cert, Key: string; ProtocolsAccepted: TArray<string>=[]);
+    procedure AddContext(const HostName, Cert, Key, ProtocolAccepted: string);
     function ContextCount: cardinal;
-    function GetContext(const HostName: string; const BindingIP: string=''): TdwlSslContext;
-    procedure RemoveContext(const HostName: string);
+    function GetContext(const HostName, ProtocolAccepted: string): IdwlSslContext;
+    procedure RemoveContext(const HostName, ProtocolAccepted: string);
   end;
 
   IdwlSslIoHandler = interface
@@ -83,9 +86,11 @@ type
     bioSend: pBIO;
     SendBuf: PdwlTransmitBuffer;
     ReadBuf: PdwlHandlingBuffer;
-    Context: TdwlSslContext;
+    _Context: TdwlSslContext;
     opSSL: pSSL;
-end;
+    function Context: IdwlSslContext;
+    procedure SetContext(AContext: IdwlSslContext; Propogate: boolean=true);
+  end;
 
 function client_hello(opSSL: pSSL; al: PInteger; arg: pointer): integer; cdecl;
 begin
@@ -93,12 +98,12 @@ begin
   Result := SSL_CLIENT_HELLO_ERROR;
   var SocketVars := PsslSocketVars(SSL_get_ex_data(opSSL, SSL_EX_DATA_SELF_INDEX));
   // context initialisation
-  var Context2Use := SocketVars.Context;
-  if SocketVars.Context = SocketVars.Context.Environment.FEmptyContext then
+  var Context2Use: IdwlSslContext := SocketVars.Context;
+  if Context2Use.HostName='' then
   begin
-    if SocketVars.Context.Environment.ContextCount=0 then // still no valid context defined, cannot continue
-      Exit;
     Context2Use := SocketVars.Context.Environment.MainContext;
+    if Context2Use.HostName='' then // still no valid context defined, cannot continue
+      Exit;
   end;
   // from now on we can proceed with success
   Result := SSL_CLIENT_HELLO_SUCCESS;
@@ -117,19 +122,14 @@ begin
         Move(ExtData[5], AnsiHostName[1], Len);
         var HostName := string(AnsiHostName);
         // eventually switch context
-        var NewContext := SocketVars.Context.Environment.GetContext(HostName);
+        var NewContext := SocketVars.Context.Environment.GetContext(HostName, Context2Use.ProtocolAccepted);
         if (NewContext<>nil) then
-          Context2Use := NewContext
+          Context2Use := NewContext;
       end;
     end;
   end;
-  // if needed change to the new context
-  if SocketVars.Context<>Context2Use then
-  begin
-    SSL_set_SSL_CTX(opSSL, Context2Use.opSSL_CTX);
-    SocketVars.Context := Context2Use;
-    SocketVars.SendBuf.Socket.Context_HostName := Context2Use.HostName;
-  end;
+  // change to the new context
+  SocketVars.SetContext(Context2Use)
 end;
 
 function alpn_select(opSSL: pSSL; var _out: pointer; var outlen: integer; input: pointer; inlen: cardinal; arg: pointer): integer; cdecl;
@@ -149,8 +149,10 @@ begin
     inc(Ptr);
     SetLength(Protocol, Len);
     Move(Ptr^, Protocol[1], Len);
-    if SocketVars.Context.FProtocolsAccepted.IndexOf(string(Protocol))>=0 then
+    var NewContext := SocketVars.Context.Environment.GetContext(SocketVars.Context.HostName, string(Protocol));
+    if (NewContext<>nil) then
     begin
+      SocketVars.SetContext(NewContext);
       _out := Ptr;
       outlen := len;
       Result := SSL_TLSEXT_ERR_OK;
@@ -162,18 +164,15 @@ end;
 
 { TdwlSslContext }
 
-constructor TdwlSslContext.Create(AEnvironment: TdwlSslEnvironment; const AHostName, Cert, Key: string; const ABindingIP: string; ProtocolsAccepted: TArray<string>);
+constructor TdwlSslContext.Create(AEnvironment: TdwlSslEnvironment; const AHostName, Cert, Key, ProtocolAccepted: string);
 const
   HDR_BEGIN = '-----BEGIN ';
   HDR_END = '-----END ';
 begin
   inherited Create;
-  FBindingIP := ABindingIP;
   FEnvironment := AEnvironment;
   FHostName := AHostName;
-  FProtocolsAccepted := TStringList.Create;
-  for var Protocol in ProtocolsAccepted do
-    FProtocolsAccepted.Add(Protocol);
+  FProtocolAccepted := ProtocolAccepted;
   FopSSL_CTX := SSL_CTX_new(TLS_method);
   if Cert<>'' then
   begin
@@ -220,39 +219,44 @@ end;
 destructor TdwlSslContext.Destroy;
 begin
   SSL_CTX_free(FopSSL_CTX);
-  FProtocolsAccepted.Free;
   inherited Destroy
+end;
+
+function TdwlSslContext.Environment: TdwlSslEnvironment;
+begin
+  Result := FEnvironment;
+end;
+
+function TdwlSslContext.HostName: string;
+begin
+  Result := FHostName;
+end;
+
+function TdwlSslContext.opSSL_CTX: pSSL_CTX;
+begin
+  Result := FopSSL_CTX;
+end;
+
+function TdwlSslContext.ProtocolAccepted: string;
+begin
+  Result := FProtocolAccepted;
 end;
 
 { TdwlSSLEnvironment }
 
-procedure TdwlSslEnvironment.AddContext(const HostName, Cert, Key: string; ProtocolsAccepted: TArray<string>=[]);
+procedure TdwlSslEnvironment.AddContext(const HostName, Cert, Key, ProtocolAccepted: string);
 begin
   FMREW.BeginWrite;
   try
-    var NewCtx := TdwlSslContext.Create(Self, HostName, Cert, Key, '', ProtocolsAccepted);
-    var DeprCtx: TdwlSslContext;
-    if not FContexts.TryGetValue(HostName.ToLower, DeprCtx) then
-      DeprCtx := nil;
-    if FMainContext=DeprCtx then // initially nil=nil ;-)
+    var NewCtx: IdwlSslContext := TdwlSslContext.Create(Self, HostName, Cert, Key, ProtocolAccepted);
+    var DeprCtx := InternalGetContext(HostName, ProtocolAccepted);
+    if DeprCtx<>nil then
+      FContexts.Remove(DeprCtx);
+    FContexts.Add(NewCtx);
+    if FContexts.Count=1 then
       FMainContext := NewCtx;
-    if DeprCtx<>nil then
-      FContexts.Remove(HostName.ToLower);
-    FContexts.Add(HostName, NewCtx);
-    if DeprCtx<>nil then
-      FDeprecatedContexts.Add(DeprCtx); // keep for now (current connections), will be disposed in destroy of environment
-    CheckMainContext;
   finally
     FMREW.EndWrite;
-  end;
-end;
-
-procedure TdwlSslEnvironment.CheckMainContext;
-begin
-  if (FMainContext=nil) and (FContexts.Count>0) then
-  begin
-    var ContextValues := FContexts.Values.ToArray;
-    FMainContext := ContextValues[0];
   end;
 end;
 
@@ -269,64 +273,57 @@ end;
 constructor TdwlSslEnvironment.Create;
 begin
   inherited Create;
-  FContexts := TDictionary<string, TdwlSslContext>.Create;
-  FDeprecatedContexts := TObjectList<TdwlSslContext>.Create;
+  FContexts := TList<IdwlSslContext>.Create;
+  FMainContext := TdwlSslContext.Create(Self, '', '', '', ALPN_HTTP_1_1);
 end;
 
 destructor TdwlSslEnvironment.Destroy;
 begin
-  var ENum := FContexts.GetEnumerator;
-  try
-    while ENum.MoveNext do
-      ENum.Current.Value.Free;
-  finally
-    ENum.Free;
-  end;
   FContexts.Free;
-  FDeprecatedContexts.Free;
-  FEmptyContext.Free;
   inherited Destroy;
 end;
 
-function TdwlSslEnvironment.GetContext(const HostName: string; const BindingIP: string=''): TdwlSslContext;
+function TdwlSslEnvironment.GetContext(const HostName, ProtocolAccepted: string): IdwlSslContext;
 begin
   FMREW.BeginRead;
   try
-    if not FContexts.TryGetValue(HostName.ToLower, Result) then
-      Result := nil;
+    Result := InternalGetContext(HostName, ProtocolAccepted);
   finally
     FMREW.EndRead;
   end;
-  // check if only specific binding is allowed
-  if (BindingIP<>'') and (Result<>nil) and (Result.FBindingIP<>'') and (Result.FBindingIP<>BindingIP) then
-    Result := nil;
 end;
 
-function TdwlSslEnvironment.GetMainContext: TdwlSslContext;
+function TdwlSslEnvironment.InternalGetContext(const HostName, ProtocolAccepted: string): IdwlSslContext;
 begin
-  if FMainContext=nil then
+  Result := nil;
+ for var Context in FContexts do
   begin
-    if FEmptyContext=nil then
-      FEmptyContext := TdwlSslContext.Create(Self, '', '', '', '', []);
-    Result := FEmptyContext;
-  end
-  else
-    Result := FMainContext;
+    if (Context.HostName=HostName) and (Context.ProtocolAccepted=ProtocolAccepted) then
+    begin
+      Result := Context;
+      Exit;
+    end;
+  end;
 end;
 
-procedure TdwlSslEnvironment.RemoveContext(const HostName: string);
+procedure TdwlSslEnvironment.RemoveContext(const HostName, ProtocolAccepted: string);
 begin
   FMREW.BeginWrite;
   try
-    var CtxToRemove: TdwlSslContext;
-    if not FContexts.TryGetValue(HostName.ToLower, CtxToRemove) then
-      Exit;
-    FContexts.Remove(HostName.ToLower);
-    FDeprecatedContexts.Add(CtxToRemove);
-    if FMainContext=CtxToRemove then
+    for var Context in FContexts do
     begin
-      FMainContext := nil;
-      CheckMainContext;
+      if (Context.HostName=HostName) and (Context.ProtocolAccepted=ProtocolAccepted) then
+      begin
+        FContexts.Remove(Context);
+        if FMainContext=Context then
+        begin
+          if FContexts.Count>0 then
+            FMainContext := FContexts[0]
+          else
+            FMainContext := TdwlSslContext.Create(Self, '', '', '', ALPN_HTTP_1_1);
+        end;
+        Exit;
+      end;
     end;
   finally
     FMREW.EndWrite;
@@ -391,8 +388,14 @@ end;
 
 procedure TdwlSslIoHandler.SocketAfterConstruction(Socket: TdwlSocket);
 begin
-  PsslSocketVars(Socket.SocketVars).Context := FEnvironment.MainContext;
-  Socket.Context_HostName := FEnvironment.MainContext.HostName; // in case client_hello is not executed
+  PsslSocketVars(Socket.SocketVars).SendBuf := Socket.Service.AcquireTransmitBuffer(Socket, COMPLETIONINDICATOR_WRITE);
+  PsslSocketVars(Socket.SocketVars).ReadBuf := Socket.Service.AcquireHandlingBuffer(Socket);
+  // We need to best guess a context to bind to this socket,
+  // That's why we link the MainContext.\
+  // Depending on client_hello and alpn protocol
+  // the context will be changed in a later stage
+  PsslSocketVars(Socket.SocketVars)._Context := nil;
+  PsslSocketVars(Socket.SocketVars).SetContext(FEnvironment.MainContext, false);
   PsslSocketVars(Socket.SocketVars).opSSL := SSL_new(PsslSocketVars(Socket.SocketVars).Context.opSSL_CTX);
   if PsslSocketVars(Socket.SocketVars).opSSL=nil then
     raise Exception.Create('Error creating OpenSSL Object');
@@ -403,14 +406,13 @@ begin
   PsslSocketVars(Socket.SocketVars).bioRecv := BIO_new(BIO_s_mem());
   PsslSocketVars(Socket.SocketVars).bioSend := BIO_new(BIO_s_mem());
   SSL_set_bio(PsslSocketVars(Socket.SocketVars).opSSL, PsslSocketVars(Socket.SocketVars).bioRecv, PsslSocketVars(Socket.SocketVars).bioSend);
-  PsslSocketVars(Socket.SocketVars).SendBuf := Socket.Service.AcquireTransmitBuffer(Socket, COMPLETIONINDICATOR_WRITE);
-  PsslSocketVars(Socket.SocketVars).ReadBuf := Socket.Service.AcquireHandlingBuffer(Socket);
 end;
 
 procedure TdwlSslIoHandler.SocketBeforeDestruction(Socket: TdwlSocket);
 begin
   Socket.Service.ReleaseTransmitBuffer(PsslSocketVars(Socket.SocketVars).SendBuf);
   Socket.Service.ReleaseHandlingBuffer(PsslSocketVars(Socket.SocketVars).ReadBuf);
+  PsslSocketVars(Socket.SocketVars).SetContext(nil, false);
   SSL_free(PsslSocketVars(Socket.SocketVars).opSSL);
 end;
 
@@ -447,6 +449,29 @@ end;
 function TdwlSslIoHandler.SslOnError_ShouldRetry(SslError: integer): boolean;
 begin
   Result := SslError in [SSL_ERROR_WANT_READ, SSL_ERROR_WANT_WRITE, SSL_ERROR_WANT_CONNECT, SSL_ERROR_WANT_ACCEPT];
+end;
+
+{ TsslSocketVars }
+
+function TsslSocketVars.Context: IdwlSslContext;
+begin
+  Result := _Context;
+end;
+
+procedure TsslSocketVars.SetContext(AContext: IdwlSslContext; Propogate: boolean=true);
+begin
+  if _Context=TdwlSslContext(AContext) then
+    Exit;
+  if Propogate and (AContext<>nil) then
+    SSL_set_SSL_CTX(opSSL, AContext.opSSL_CTX);
+  if _Context<>nil then
+    _Context._Release;
+  if AContext<>nil then
+  begin
+    _Context := TdwlSslContext(AContext);
+    AContext._AddRef;
+    SendBuf.Socket.Context_HostName := AContext.HostName;
+  end;
 end;
 
 end.

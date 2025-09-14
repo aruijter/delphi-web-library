@@ -109,9 +109,9 @@ end;
 class procedure TDWLServerSection.CheckACMEConfiguration(IOHandler: IdwlSslIoHandler; ConfigParams: IdwlParams);
 const
   SQL_GetHostNames =
-    'SELECT HostName, Cert, PrivateKey, CountryCode, State, City, BindingIp, Id FROM dwl_hostnames';
+    'SELECT HostName, Cert, PrivateKey, CountryCode, State, City, Id FROM dwl_hostnames';
   GetHostNames_Idx_HostName=0; GetHostNames_Idx_Cert=1; GetHostNames_Idx_PrivateKey=2;
-  GetHostNames_Idx_CountyCode=3; GetHostNames_Idx_State=4; GetHostNames_Idx_City=5; GetHostNames_Idx_BindingIp=6; GetHostNames_Idx_Id=7;
+  GetHostNames_Idx_CountyCode=3; GetHostNames_Idx_State=4; GetHostNames_Idx_City=5; GetHostNames_Idx_Id=6;
   SQL_Update_Cert =
     'UPDATE dwl_hostnames SET Cert=?, PrivateKey=? WHERE Id=?';
   Update_Cert_Idx_Cert=0; Update_Cert_Idx_PrivateKey=1; Update_Cert_Idx_Id=2;
@@ -130,7 +130,6 @@ begin
     begin
       var HostName := Cmd.Reader.GetString(GetHostNames_Idx_HostName);
       ACMECLient.Domain := HostName;
-      ACMECLient.ChallengeIP := Cmd.Reader.GetString(GetHostNames_Idx_BindingIp, true);
       // First Check ACME Certificate
       var Certificate := Cmd.Reader.GetString(GetHostNames_Idx_Cert, true);
       var PrivateKey := Cmd.Reader.GetString(GetHostNames_Idx_PrivateKey, true);
@@ -176,11 +175,11 @@ begin
         if HostNames<>'' then
           Hostnames := HostNames+',';
         HostNames := Hostnames+HostName;
-        var IsNotPresent := IoHandler.Environment.GetContext(ACMECLient.Domain)=nil;
+        var IsNotPresent := IoHandler.Environment.GetContext(ACMECLient.Domain, ALPN_HTTP_1_1)=nil;
         if CertIsNew or IsNotPresent then
         begin
           TdwlLogger.Log(ifThen(IsNotPresent, 'Added', 'Renewed')+' SSL context for hostname '+Hostname, lsNotice);
-          IoHandler.Environment.AddContext(ACMECLient.Domain, Certificate, PrivateKey, [ALPN_HTTP_1_1]);
+          IoHandler.Environment.AddContext(ACMECLient.Domain, Certificate, PrivateKey, ALPN_HTTP_1_1);
         end;
       end;
     end;
@@ -445,7 +444,7 @@ const
     'CREATE TABLE IF NOT EXISTS dwl_parameters (Id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT, `Key` VARCHAR(50) NOT NULL, `Value` TEXT, PRIMARY KEY(Id), UNIQUE INDEX KeyIndex (`Key`))';
   SQL_CheckTable_HostNames =
     'CREATE TABLE IF NOT EXISTS dwl_hostnames (Id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT, HostName VARCHAR(50) NOT NULL, CountryCode CHAR(2) NOT NULL, State VARCHAR(50) NOT NULL, '+
-    'City VARCHAR(50) NOT NULL, BindingIp VARCHAR(39), Cert TEXT, PrivateKey TEXT, PRIMARY KEY(Id), UNIQUE INDEX HostName (HostName))';
+    'City VARCHAR(50) NOT NULL, Cert TEXT, PrivateKey TEXT, PRIMARY KEY(Id), UNIQUE INDEX HostName (HostName))';
   SQL_CheckTable_Log_Requests =
     'CREATE TABLE IF NOT EXISTS dwl_log_requests (Id INT UNSIGNED NOT NULL AUTO_INCREMENT, TimeStamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, Method CHAR(7) NOT NULL, StatusCode SMALLINT UNSIGNED NOT NULL, IP_Remote CHAR(15) NOT NULL,'+
     'Uri VARCHAR(250) NOT NULL, ProcessingTime SMALLINT UNSIGNED NOT NULL, RequestHeader TEXT NOT NULL, RequestParams TEXT NOT NULL, PRIMARY KEY (Id))';
@@ -566,9 +565,9 @@ end;
 procedure TACMEChecker.AlpnChallengeCallback(ChallengeActive: boolean; const HostName, Cert, Key: string);
 begin
   if ChallengeActive then
-    FEnvironment.AddContext(HostName, Cert, Key, [ALPN_ACME_TLS_1])
+    FEnvironment.AddContext(HostName, Cert, Key, ALPN_ACME_TLS_1)
   else
-    FEnvironment.RemoveContext(HostName);
+    FEnvironment.RemoveContext(HostName, ALPN_ACME_TLS_1);
 end;
 
 constructor TACMEChecker.Create(Environment: TdwlSslEnvironment);
