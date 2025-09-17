@@ -59,6 +59,7 @@ type
     function StatusCode: cardinal;
     function Success: boolean;
     function Errors: TJSONArray;
+    function ErrorStr: string;
   end;
 
   IdwlAPIRequest = interface
@@ -146,6 +147,7 @@ type
     function JSON_Data: TJSONObject;
     function JSON_Data_Array(const APath: string=''): IdwlAPIJSONArray;
     function Errors: TJSONArray;
+    function ErrorStr: string;
     function HTTPResponse: IdwlHTTPResponse;
     function StatusCode: cardinal;
     function Success: boolean;
@@ -245,6 +247,14 @@ begin
   if FErrors=nil then
     FJSON.TryGetValue<TJSONArray>('errors', FErrors);
   Result := FErrors;
+end;
+
+function TdwlAPIResponse.ErrorStr: string;
+begin
+  if Errors=nil then
+    Result := 'Status '+StatusCode.ToString
+  else
+    Result := Errors.ToString;
 end;
 
 function TdwlAPIResponse.HTTPResponse: IdwlHTTPResponse;

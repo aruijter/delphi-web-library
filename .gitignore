@@ -13,6 +13,7 @@ versioninfo.res
 *.dsk
 *.map
 *.~dsk
+*.dxsettings
 app/dll/HelloWorld/HelloWorld.res
 *.skincfg
 app/dll/HelloWorld/Win64/
