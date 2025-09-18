@@ -10,6 +10,7 @@ type
     class function Delete(const FileName: string): boolean; static;
     class function ExtractBareName(const Path: string=''): string; static;
     class procedure SetReadOnlyFlag(const FileName: string; ReadOnly: boolean); static;
+    class function TempFileName(const Ext: string = '.tmp'): string; static;
   end;
 
   TdwlIOEnumOption = (ioRecurse, ioIncludeFiles, ioIncludeDirectories, ioIncludeHidden, ioRemoveReadOnly, ioOverwrite);
@@ -80,7 +81,7 @@ type
 implementation
 
 uses
-  System.SysUtils, System.StrUtils;
+  System.SysUtils, System.StrUtils, DWL.Types;
 
 type
   TdwlDirectoryEnumerator = class(TInterfacedObject, IdwlDirectoryEnumerator)
@@ -122,6 +123,11 @@ begin
     if ((Att and FILE_ATTRIBUTE_READONLY)=0) and ReadOnly then
       SetFileAttributes(PChar(Filename), Att+FILE_ATTRIBUTE_READONLY)
   end;
+end;
+
+class function TdwlFile.TempFileName(const Ext: string = '.tmp'): string;
+begin
+  Result := TdwlDirectory.Application_TempDir+'\'+TdwlUUID.CreateNew.AsString+Ext;
 end;
 
 { TdwlFileVersionInfo }
