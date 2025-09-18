@@ -47,6 +47,7 @@ type
 
   IdwlAPIJSONArray = interface
     function Errors: TJSONArray;
+    function ErrorStr: string;
     function JSON: TJSONArray;
     function Success: boolean;
   end;
@@ -161,6 +162,7 @@ type
     FResponse: IdwlAPIResponse;
   private
     function Errors: TJSONArray;
+    function ErrorStr: string;
     function JSON: TJSONArray;
     function Success: boolean;
   protected
@@ -480,6 +482,11 @@ end;
 function TdwlAPIJSONArray.Errors: TJSONArray;
 begin
   Result := FResponse.Errors;
+end;
+
+function TdwlAPIJSONArray.ErrorStr: string;
+begin
+  Result := FResponse.ErrorStr;
 end;
 
 function TdwlAPIJSONArray.JSON: TJSONArray;
