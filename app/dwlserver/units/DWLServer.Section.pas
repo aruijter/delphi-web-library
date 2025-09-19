@@ -387,7 +387,7 @@ begin
       TdwlMailQueue.Configure(ConfigParams, true);
       Start_Enable_Logging(ConfigParams);
       Start_Create_PingHandler;
-      TdwlLogger.Log('DWL Server starting', lsTrace, TOPIC_BOOTSTRAP);
+      TdwlLogger.Log('DWL Server starting', lsNotice, TOPIC_BOOTSTRAP);
       DWL.Server.AssignServerProcs;
       FServer.OnlyLocalConnections := ConfigParams.BoolValue(Param_TestMode);
       Start_ProcessBindings(ConfigParams);
@@ -510,7 +510,7 @@ begin
     IOHandler := FSSLIoHandler as IdwlTCPIoHandler;
   end;
   FServer.Bindings.Add(BindingIP, BindingPort, IOHandler);
-  TdwlLogger.Log('Bound to '+IfThen(BindingIP='', '*', BindingIP)+':'+BindingPort.ToString+IfThen(FServer.OnlyLocalConnections, ' (NON-SSL!!)'), lsNotice, TOPIC_BOOTSTRAP);
+  TdwlLogger.Log('Bound to '+IfThen(BindingIP='', '*', BindingIP)+':'+BindingPort.ToString+IfThen(FServer.OnlyLocalConnections, ' (NON-SSL!!)'), lsTrace, TOPIC_BOOTSTRAP);
 end;
 
 procedure TDWLServerSection.StopServer;
