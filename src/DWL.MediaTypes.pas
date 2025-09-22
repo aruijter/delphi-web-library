@@ -29,6 +29,7 @@ const
   MEDIA_TYPE_MULTIPART_MIXED='multipart/mixed';
   MEDIA_TYPE_MULTIPART_ALTERNATIVE='multipart/alternative';
   MEDIA_TYPE_TAR_GZIP='application/tar+gzip';
+  MEDIA_TYPE_TIFF_GZIP='application/tiff+gzip';
 
   FILE_EXT_CSV = '.csv';
   FILE_EXT_DDF = '.ddf';
@@ -47,6 +48,7 @@ const
   FILE_EXT_XLSX = '.xlsx';
   FILE_EXT_GZ = '.gz';
   FILE_EXT_TAR_GZ = '.tar.gz';
+  FILE_EXT_TIF_GZ = '.tif.gz';
 
 type
   TMediaTypeHelper = class abstract
@@ -81,11 +83,6 @@ begin
   InitLookupLists;
   if not FMediaType2FileExtension.TryGetValue(MediaType.ToLower, Result) then
     Result := '';
-  if Sametext(MediaType, MEDIA_TYPE_TIFF) then
-    Result := '.tif'
-  else
-  if Sametext(MediaType, 'application/tar+gzip') then
-    Result := '.tar.gz'
 end;
 
 class function TMediaTypeHelper.GetMediaTypeByFileExtension(const FileExtension: string): string;
@@ -104,6 +101,8 @@ begin
   // handle special 'double extension'
   if SameText(Extension, FILE_EXT_GZ) and Path.EndsWith(FILE_EXT_TAR_GZ, true) then
     Extension := FILE_EXT_TAR_GZ;
+  if SameText(Extension, FILE_EXT_GZ) and Path.EndsWith(FILE_EXT_TIF_GZ, true) then
+    Extension := FILE_EXT_TIF_GZ;
   Result := GetMediaTypeByFileExtension(Extension);
 end;
 
@@ -128,6 +127,7 @@ begin
   FFileExtension2MediaType.Add(FILE_EXT_XLS, MEDIA_TYPE_MS_EXCEL);
   FFileExtension2MediaType.Add(FILE_EXT_XLSX, MEDIA_TYPE_OPENXML_SPREADSHEET);
   FFileExtension2MediaType.Add(FILE_EXT_TAR_GZ, MEDIA_TYPE_TAR_GZIP);
+  FFileExtension2MediaType.Add(FILE_EXT_TIF_GZ, MEDIA_TYPE_TIFF_GZIP);
 
   FMediaType2FileExtension := TDictionary<string, string>.Create;
   FMediaType2FileExtension.Add(MEDIA_TYPE_CSV, FILE_EXT_CSV);
@@ -143,6 +143,7 @@ begin
   FMediaType2FileExtension.Add(MEDIA_TYPE_MS_EXCEL, FILE_EXT_XLS);
   FMediaType2FileExtension.Add(MEDIA_TYPE_OPENXML_SPREADSHEET, FILE_EXT_XLSX);
   FMediaType2FileExtension.Add(MEDIA_TYPE_TAR_GZIP, FILE_EXT_TAR_GZ);
+  FMediaType2FileExtension.Add(MEDIA_TYPE_TIFF_GZIP, FILE_EXT_TIF_GZ);
 end;
 
 end.
