@@ -87,7 +87,10 @@ type
     ///   the Julian year component of the Unix Time, This is UTC!
     /// </summary>
     function Year: word;
+    function Month: byte;
+    function Day: byte;
     procedure AddPeriod(APeriodicity: TPeriodicity; Amount: integer=1);
+    procedure Resolve(var Str:string);
   end;
 
   TPeriodicity_Implementation = class abstract
@@ -95,6 +98,9 @@ type
     class function AddPeriod(Epoch: TUnixEpoch; Amount: integer): TUnixEpoch; virtual; abstract;
     class function EndOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; virtual; abstract;
     class function StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; virtual; abstract;
+    class function Name: string; virtual; abstract;
+    class function GetPeriodicityByName(const Str: string): TPeriodicity;
+    class procedure Resolve(Epoch: TUnixEpoch; var Str: string); virtual;
   end;
 
   TPeriodicity_Daily = class abstract(TPeriodicity_Implementation)
@@ -102,6 +108,17 @@ type
     class function AddPeriod(Epoch: TUnixEpoch; Amount: integer): TUnixEpoch; override;
     class function EndOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; override;
     class function StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; override;
+    class function Name: string; override;
+    class procedure Resolve(Epoch: TUnixEpoch; var Str: string); override;
+  end;
+
+  TPeriodicity_Pentadal = class abstract(TPeriodicity_Implementation)
+  public
+    class function AddPeriod(Epoch: TUnixEpoch; Amount: integer=1): TUnixEpoch; override;
+    class function EndOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; override;
+    class function StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; override;
+    class function Name: string; override;
+    class procedure Resolve(Epoch: TUnixEpoch; var Str: string); override;
   end;
 
   TPeriodicity_Dekadal = class abstract(TPeriodicity_Implementation)
@@ -109,6 +126,8 @@ type
     class function AddPeriod(Epoch: TUnixEpoch; Amount: integer=1): TUnixEpoch; override;
     class function EndOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; override;
     class function StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch; override;
+    class function Name: string; override;
+    class procedure Resolve(Epoch: TUnixEpoch; var Str: string); override;
   end;
 
   /// <summary>
@@ -253,6 +272,9 @@ uses
   System.DateUtils, System.SysUtils, Winapi.Windows, System.UIConsts,
   System.Math;
 
+const
+  AllPeriodicities: array[0..2] of TPeriodicity = (TPeriodicity_Daily, TPeriodicity_Pentadal, TPeriodicity_Dekadal);
+
 { TUnixEpoch }
 
 class operator TUnixEpoch.Add(Epoch: TUnixEpoch; Amount: Int64): TUnixEpoch;
@@ -268,6 +290,11 @@ end;
 constructor TUnixEpoch.Create(ADateTime: TDateTime; IsUTC: boolean=true);
 begin
   FEpoch := DateTimeToUnix(ADateTime, IsUTC);
+end;
+
+function TUnixEpoch.Day: byte;
+begin
+  Result := DayOf(UnixToDateTime(FEpoch));
 end;
 
 class operator TUnixEpoch.Equal(EpochA, EpochB: TUnixEpoch): boolean;
@@ -315,6 +342,11 @@ begin
   Result := EpochA.FEpoch<=EpochB.FEpoch;
 end;
 
+function TUnixEpoch.Month: byte;
+begin
+  Result := MonthOf(UnixToDateTime(FEpoch));
+end;
+
 class operator TUnixEpoch.NotEqual(EpochA, EpochB: TUnixEpoch): boolean;
 begin
   Result := EpochA.FEpoch<>EpochB.FEpoch;
@@ -328,6 +360,12 @@ begin
     Result := DateTimeToUnix(EncodeDateTime(SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay, 0, 0, 0, 0))
   else
     Result := DateTimeToUnix(EncodeDateTime(SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay, SystemTime.wHour, SystemTime.wMinute, SystemTime.wSecond, 0));
+end;
+
+procedure TUnixEpoch.Resolve(var Str: string);
+begin
+  for var i := Low(AllPeriodicities) to High(AllPeriodicities) do
+    AllPeriodicities[i].Resolve(Self, Str);
 end;
 
 class operator TUnixEpoch.Subtract(EpochA, EpochB: TUnixEpoch): integer;
@@ -554,6 +592,21 @@ begin
   Result := StartOfThePeriod(Epoch)+86399;
 end;
 
+class function TPeriodicity_Daily.Name: string;
+begin
+  Result := 'daily';
+end;
+
+class procedure TPeriodicity_Daily.Resolve(Epoch: TUnixEpoch; var Str: string);
+begin
+  Str := Str.Replace('$(yyyy)', Epoch.Year.ToString, [rfReplaceAll, rfIgnoreCase]);
+  Str := Str.Replace('$(yy)', (Epoch.Year mod 100).ToString.PadLeft(2, '0'), [rfReplaceAll, rfIgnoreCase]);
+  Str := Str.Replace('$(m)', Epoch.Month.ToString, [rfReplaceAll, rfIgnoreCase]);
+  Str := Str.Replace('$(mm)', Epoch.Month.ToString.PadLeft(2, '0'), [rfReplaceAll, rfIgnoreCase]);
+  Str := Str.Replace('$(d)', Epoch.Day.ToString, [rfReplaceAll, rfIgnoreCase]);
+  Str := Str.Replace('$(dd)', Epoch.Day.ToString.PadLeft(2, '0'), [rfReplaceAll, rfIgnoreCase]);
+end;
+
 class function TPeriodicity_Daily.StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch;
 begin
   // simply return the start of the day
@@ -614,6 +667,17 @@ begin
   Result := TUnixEpoch.Create(EncodeDate(y, m, d));
   // and report back the second before the start of the next dekad
   Result := Result-1;
+end;
+
+class function TPeriodicity_Dekadal.Name: string;
+begin
+  Result :=  'dekadal';
+end;
+
+class procedure TPeriodicity_Dekadal.Resolve(Epoch: TUnixEpoch; var Str: string);
+begin
+  var DekadInMonth := 1+((Epoch.Day-1) div 10);
+  Str := Str.Replace('$(mdekad)', DekadInMonth.ToString, [rfReplaceAll, rfIgnoreCase]);
 end;
 
 class function TPeriodicity_Dekadal.StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch;
@@ -773,6 +837,99 @@ end;
 function TdwlGridDim.World2GridY(Y: double): double;
 begin
   Result := (TopWorldY-Y)/ScaleGridToWorld;
+end;
+
+{ TPeriodicity_Pentadal }
+
+class function TPeriodicity_Pentadal.AddPeriod(Epoch: TUnixEpoch; Amount: integer): TUnixEpoch;
+begin
+  // First decode the Epoch to y,m,d and DekInYear
+  var y, m, d: word;
+  var Input := Epoch.ToDateTime;
+  DecodeDate(Input, y, m, d);
+  var PentadInYear := (m-1)*6+Min(6,((d+4) div 5));
+  // Keep the seconds offset from the start of the pentad
+  var SecsOffset := round((Input-EncodeDate(y, m,  (PentadInYear-(m-1)*6)*5-4))*SecsPerDay);
+  // do the actual increase
+  inc(PentadInYear, Amount);
+  // noermalize values
+  while PentadInYear<1 do
+  begin
+    Inc(PentadInYear, 72);
+    Dec(y);
+  end;
+  while PentadInYear>72 do
+  begin
+    Dec(PentadInYear, 72);
+    Inc(y);
+  end;
+  m := (PentadInYear+5) div 6;
+  d := (PentadInYear-(m-1)*6)*5-4;
+  // assemble the result
+  var Start := TUnixEpoch.Create(EncodeDate(y, m, d));
+  Result := Start+SecsOffset;
+  // not all pentads have the same length, maximize on the last second
+  Result := Min(Result, EndOfThePeriod(Start));
+end;
+
+class function TPeriodicity_Pentadal.EndOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch;
+begin
+  // First decode the Epoch to y,m,d and PentadInYear
+  var y, m, d: word;
+  var Input := Epoch.ToDateTime;
+  DecodeDate(Input, y, m, d);
+  var PentadInYear := (m-1)*6+Min(6,((d+4) div 5));
+  // go to next pentad
+  inc(PentadInYear);
+  // normalize
+  if PentadInYear=73 then
+  begin
+    inc(y);
+    PentadInYear:= 1;
+  end;
+  // assemble the Reusult
+  m := (PentadInYear+5) div 6;
+  d := (PentadInYear-(m-1)*6)*5-4;
+  Result := TUnixEpoch.Create(EncodeDate(y, m, d));
+  // and report back the second before the start of the next dekad
+  Result := Result-1;
+end;
+
+class function TPeriodicity_Pentadal.Name: string;
+begin
+  Result := 'pentadal';
+end;
+
+class procedure TPeriodicity_Pentadal.Resolve(Epoch: TUnixEpoch; var Str: string);
+begin
+  var PentadInMonth := 1+((Epoch.Day-1) div 5);
+  Str := Str.Replace('$(mpentad)', PentadInMonth.ToString, [rfReplaceAll, rfIgnoreCase]);
+end;
+
+class function TPeriodicity_Pentadal.StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch;
+begin
+  // First decode the Epoch to y,m,d and PentadOffSet
+  var y, m, d: word;
+  var Input := Epoch.ToDateTime;
+  DecodeDate(Input, y, m, d);
+  var PentadOffsetInMonth := Min(6,((d+4) div 5))-1;
+  // And Assemble the result
+  Result := TUnixEpoch.Create(EncodeDate(y, m, 1));
+  Result := Result+PentadOffsetInMonth*864000;
+end;
+
+{ TPeriodicity_Implementation }
+
+class function TPeriodicity_Implementation.GetPeriodicityByName(const Str: string): TPeriodicity;
+begin
+  for var i := Low(AllPeriodicities) to High(AllPeriodicities) do
+    if SameText(Str, AllPeriodicities[i].Name) then
+      Exit(AllPeriodicities[i]);
+  Result := nil;
+end;
+
+class procedure TPeriodicity_Implementation.Resolve(Epoch: TUnixEpoch; var Str: string);
+begin
 end;
 
 end.
