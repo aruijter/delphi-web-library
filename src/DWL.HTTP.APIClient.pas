@@ -7,7 +7,7 @@ uses
   System.JSON, DWL.HTTP.Types;
 
 type
-  TdwlAPIAuthorizerCallBackAction = (acaGetRefreshtoken, acaNewRefreshtoken, acaInvalidateAuthorization);
+  TdwlAPIAuthorizerCallBackAction = (acaGetRefreshtoken, acaNewAccessToken, acaNewRefreshtoken, acaInvalidateAuthorization);
   TdwlAPIAuthorizerCallBackProc = procedure(var Token: string; Action: TdwlAPIAuthorizerCallBackAction) of object;
 
   IdwlAPIAuthorizer = interface
@@ -24,16 +24,19 @@ type
   private
     function GetAccesstoken(EnforceNewOne: boolean=false): string;
     procedure InvalidateAuthorization; virtual;
+  strict protected
+    FCallBackProc: TdwlAPIAuthorizerCallBackProc;
   protected
     function AccessTokenPresent: boolean;
     procedure AcquireAccessToken; virtual; abstract;
     function AuthHeaderLeadText: string; virtual;
     procedure NewAccessToken(const NewAccessToken: string; NewAccessTokenExpireTick: UInt64);
+  public
+    constructor Create(CallbackProc: TdwlAPIAuthorizerCallBackProc);
   end;
 
   TdwlAPIAuthorizerWithRefreshToken = class(TdwlAPIAuthorizer)
   strict private
-    FCallBackProc: TdwlAPIAuthorizerCallBackProc;
     FRefreshtoken: string;
   private
   protected
@@ -41,8 +44,6 @@ type
     function GetRefreshToken: string;
     procedure InvalidateAuthorization; override;
     procedure AcquireRefreshtoken; virtual; abstract;
-  public
-    constructor Create(CallbackProc: TdwlAPIAuthorizerCallBackProc);
   end;
 
   IdwlAPIJSONArray = interface
@@ -359,12 +360,6 @@ end;
 
 { TdwlAPIAuthorizerWithRefreshToken }
 
-constructor TdwlAPIAuthorizerWithRefreshToken.Create(CallbackProc: TdwlAPIAuthorizerCallBackProc);
-begin
-  inherited Create;
-  FCallBackProc := CallbackProc;
-end;
-
 function TdwlAPIAuthorizerWithRefreshToken.GetRefreshToken: string;
 begin
   if (FRefreshtoken='') and Assigned(FCallBackProc) then
@@ -501,6 +496,12 @@ end;
 
 { TdwlAPIAuthorizer }
 
+constructor TdwlAPIAuthorizer.Create(CallbackProc: TdwlAPIAuthorizerCallBackProc);
+begin
+  inherited Create;
+  FCallBackProc := CallbackProc;
+end;
+
 function TdwlAPIAuthorizer.AccessTokenPresent: boolean;
 begin
   Result := FAccessToken<>'';
@@ -529,6 +530,8 @@ procedure TdwlAPIAuthorizer.NewAccessToken(const NewAccessToken: string; NewAcce
 begin
   FAccessToken := NewAccessToken;
   FAccessTokenExpireTick := NewAccessTokenExpireTick;
+  if Assigned(FCallBackProc) then
+    FCallBackProc(FAccessToken, acaNewAccesstoken);
 end;
 
 { TdwlAPIJSONObject }
