@@ -120,6 +120,7 @@ const
   RESPONSE_ERROR_INVALID_REQUEST = 'invalid_request';
   RESPONSE_ERROR_INVALID_CLIENT = 'invalid_client';
   RESPONSE_ERROR_INVALID_GRANT = 'invalid_grant';
+  RESPONSE_ERROR_ACCESS_DENIED = 'access_denied';
   RESPONSE_ERROR_UNSUPPORTED_GRANT_TYPE = 'unsupported_grant_type';
 
 { THandler_OAuth2 }
@@ -624,7 +625,7 @@ begin
       var Reader := Cmd.Reader;
       if not Reader.Read then
       begin
-        AuthSession.UpdateState_Error(State, RESPONSE_ERROR_INVALID_GRANT);
+        AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
         Exit;
       end;
       var Salt := Reader.GetString(1, true);
@@ -640,7 +641,7 @@ begin
           begin
             if not SameText(Cmd_Migrate.Reader.GetString(0, true), TdwlCrypt.MD5(Password)) then
             begin
-              AuthSession.UpdateState_Error(State, RESPONSE_ERROR_INVALID_GRANT);
+              AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
               Exit;
             end;
             Salt := TNetEncoding.Base64URL.EncodeBytesToString(TdwlOpenSSL.RandomBytes(32));
@@ -652,13 +653,13 @@ begin
           end
           else
           begin
-            AuthSession.UpdateState_Error(State, RESPONSE_ERROR_INVALID_GRANT);
+            AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
             Exit;
           end;
         end
         else
         begin
-          AuthSession.UpdateState_Error(State, RESPONSE_ERROR_INVALID_GRANT);
+          AuthSession.UpdateState_Error(State, RESPONSE_ERROR_ACCESS_DENIED);
           Exit;
         end;
       end;

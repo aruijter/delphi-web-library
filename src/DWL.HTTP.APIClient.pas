@@ -84,6 +84,8 @@ type
     function HTTPRequest: IdwlHTTPRequest;
     function Execute: IdwlAPIResponse;
     procedure SetOnProgress(OnProgress: TdwlHTTPProgressEvent);
+    function StatusCode: cardinal;
+    procedure SetStatusCode(NewStatusCode: cardinal);
   end;
 
   IdwlAPISession = interface
@@ -125,6 +127,7 @@ type
     FJSON: TJSonObject;
     FSession: TdwlAPISession;
     FHTTPRequest: IdwlHTTPRequest;
+    FStatusCode: cardinal;
   private
     function Execute: IdwlAPIResponse;
     function HTTPRequest: IdwlHTTPRequest;
@@ -133,6 +136,8 @@ type
     procedure SetMethod(const Value: string);
     procedure WritePostData(const PostData: string);
     procedure SetOnProgress(OnProgress: TdwlHTTPProgressEvent);
+    function StatusCode: cardinal;
+    procedure SetStatusCode(NewStatusCode: cardinal);
   public
     constructor Create(Session: TdwlAPISession; const Url: string);
     destructor Destroy; override;
@@ -350,7 +355,10 @@ begin
     begin
       var AccessToken := FAuthorizer.GetAccesstoken;
       if AccessToken='' then
+      begin
+        Result.SetStatusCode(HTTP_STATUS_DENIED);
         Exit;
+      end;
       Result.HTTPRequest.Header['Authorization'] := FAuthorizer.AuthHeaderLeadText+AccessToken;
     end;
   except
@@ -395,6 +403,7 @@ constructor TdwlAPIRequest.Create(Session: TdwlAPISession; const Url: string);
 begin
   inherited Create;
   FSession := Session;
+  FStatusCode := HTTP_STATUS_OK;
   FHTTPRequest := New_HTTPRequest(Url)
 end;
 
@@ -426,12 +435,17 @@ function TdwlAPIRequest.Execute: IdwlAPIResponse;
     end;
   end;
 begin
-  if FJSON<>nil then
+  if StatusCode<>HTTP_STATUS_OK then
+    Result := TdwlAPIResponse.Create(Get_EmptyHTTPResponse(StatusCode))
+  else
   begin
-    HTTPRequest.Header[HTTP_FIELD_CONTENT_TYPE] := MEDIA_TYPE_JSON;
-    HTTPRequest.WritePostData(FJSON.ToJSON);
+    if FJSON<>nil then
+    begin
+      HTTPRequest.Header[HTTP_FIELD_CONTENT_TYPE] := MEDIA_TYPE_JSON;
+      HTTPRequest.WritePostData(FJSON.ToJSON);
+    end;
+    Result := TdwlAPIResponse.Create(InternalExecute(false));
   end;
-  Result := TdwlAPIResponse.Create(InternalExecute(false));
 end;
 
 function TdwlAPIRequest.GetMethod: string;
@@ -454,6 +468,16 @@ end;
 procedure TdwlAPIRequest.SetOnProgress(OnProgress: TdwlHTTPProgressEvent);
 begin
   HTTPRequest.OnProgress := OnProgress;
+end;
+
+procedure TdwlAPIRequest.SetStatusCode(NewStatusCode: cardinal);
+begin
+  FStatusCode := NewStatusCode;
+end;
+
+function TdwlAPIRequest.StatusCode: cardinal;
+begin
+  Result := FStatusCode;
 end;
 
 procedure TdwlAPIRequest.SetMethod(const Value: string);
