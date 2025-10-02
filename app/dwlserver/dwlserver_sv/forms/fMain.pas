@@ -59,7 +59,7 @@ begin
     Reg.RootKey := HKEY_LOCAL_MACHINE;
     if Reg.OpenKey('\SYSTEM\CurrentControlSet\Services\'+Name, false) then
     begin
-      Reg.WriteString('Description', 'DWLServer, serving handlers residing in DLLs');
+      Reg.WriteString('Description', 'Generic API Server with flexible DLL Handlers');
       Reg.CloseKey;
     end;
   finally
