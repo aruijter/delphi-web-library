@@ -30,15 +30,22 @@ const
   MEDIA_TYPE_MULTIPART_ALTERNATIVE='multipart/alternative';
   MEDIA_TYPE_TAR_GZIP='application/tar+gzip';
   MEDIA_TYPE_TIFF_GZIP='application/tiff+gzip';
+  MEDIA_TYPE_ZIP='application/zip';
 
+  FILE_EXT_BIL = '.bil';
+  FILE_EXT_BIN = '.bin';
   FILE_EXT_CSV = '.csv';
   FILE_EXT_DDF = '.ddf';
   FILE_EXT_DOC = '.doc';
   FILE_EXT_DOCX = '.docx';
+  FILE_EXT_FLT = '.flt';
+  FILE_EXT_GRIDDATA = '.griddata';
   FILE_EXT_HTM = '.htm';
   FILE_EXT_HTML = '.html';
+  FILE_EXT_IMG = '.img';
   FILE_EXT_JPEG = '.jpeg';
   FILE_EXT_JPG = '.jpg';
+  FILE_EXT_NC = '.nc';
   FILE_EXT_PDF = '.pdf';
   FILE_EXT_PNG = '.png';
   FILE_EXT_TXT = '.txt';
@@ -49,6 +56,7 @@ const
   FILE_EXT_GZ = '.gz';
   FILE_EXT_TAR_GZ = '.tar.gz';
   FILE_EXT_TIF_GZ = '.tif.gz';
+  FILE_EXT_ZIP = '.zip';
 
 type
   TMediaTypeHelper = class abstract
@@ -128,6 +136,7 @@ begin
   FFileExtension2MediaType.Add(FILE_EXT_XLSX, MEDIA_TYPE_OPENXML_SPREADSHEET);
   FFileExtension2MediaType.Add(FILE_EXT_TAR_GZ, MEDIA_TYPE_TAR_GZIP);
   FFileExtension2MediaType.Add(FILE_EXT_TIF_GZ, MEDIA_TYPE_TIFF_GZIP);
+  FFileExtension2MediaType.Add(FILE_EXT_ZIP, MEDIA_TYPE_ZIP);
 
   FMediaType2FileExtension := TDictionary<string, string>.Create;
   FMediaType2FileExtension.Add(MEDIA_TYPE_CSV, FILE_EXT_CSV);
@@ -144,6 +153,7 @@ begin
   FMediaType2FileExtension.Add(MEDIA_TYPE_OPENXML_SPREADSHEET, FILE_EXT_XLSX);
   FMediaType2FileExtension.Add(MEDIA_TYPE_TAR_GZIP, FILE_EXT_TAR_GZ);
   FMediaType2FileExtension.Add(MEDIA_TYPE_TIFF_GZIP, FILE_EXT_TIF_GZ);
+  FMediaType2FileExtension.Add(MEDIA_TYPE_ZIP, FILE_EXT_ZIP);
 end;
 
 end.

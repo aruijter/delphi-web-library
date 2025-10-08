@@ -678,6 +678,8 @@ class procedure TPeriodicity_Dekadal.Resolve(Epoch: TUnixEpoch; var Str: string)
 begin
   var DekadInMonth := 1+((Epoch.Day-1) div 10);
   Str := Str.Replace('$(mdekad)', DekadInMonth.ToString, [rfReplaceAll, rfIgnoreCase]);
+  var DekadInYear := DekadInMonth+(Epoch.Month-1)*3;
+  Str := Str.Replace('$(yydekad)', DekadInYear.ToString.PadLeft(2, '0'), [rfReplaceAll, rfIgnoreCase]);
 end;
 
 class function TPeriodicity_Dekadal.StartOfThePeriod(Epoch: TUnixEpoch): TUnixEpoch;
