@@ -38,6 +38,7 @@ type
     FOIDC_Client: TdwlOIDC_Client;
     FDialogTitle: string;
     FForceLoginPrompt: boolean;
+    procedure InternalAcquireAccessToken(DoRetry: boolean);
   private
     function CheckJWT(JWT: IdwlJWT): TdwlResult;
   protected
@@ -71,23 +72,7 @@ end;
 
 procedure TdwlAPIOAuth2Authorizer.AcquireAccessToken;
 begin
-  var Access_Token: string;
-  var Expires_In: integer;
-  var Refresh_Token := GetRefreshToken;
-  if Refresh_Token='' then
-    Exit;
-  // maybe an access was already provided when getting a refreshtoken
-  if AccessTokenPresent then
-    Exit;
-  var Res := FOIDC_Client.GetAccessTokenFromRefreshToken(Refresh_Token, Access_Token, Expires_In);
-  NewRefreshToken(Refresh_Token); // save new (or invalidated) refreshtoken
-  if Res.Success then
-    NewAccessToken(Access_Token, GetTickCount64+UInt64(Expires_In-2)*1000)
-  else
-  begin
-    if Refresh_Token='' then  // the before non empty refreshtoken was assigned invalid while retrieving accesstoken, do a retry
-      AcquireAccessToken;
-  end;
+  InternalAcquireAccessToken(true);
 end;
 
 procedure TdwlAPIOAuth2Authorizer.AcquireRefreshtoken;
@@ -147,6 +132,27 @@ destructor TdwlAPIOAuth2Authorizer.Destroy;
 begin
   FOIDC_Client.Free;
   inherited Destroy;
+end;
+
+procedure TdwlAPIOAuth2Authorizer.InternalAcquireAccessToken(DoRetry: boolean);
+begin
+  var Access_Token: string;
+  var Expires_In: integer;
+  var Refresh_Token := GetRefreshToken;
+  if Refresh_Token='' then
+    Exit;
+  // maybe an access was already provided when getting a refreshtoken
+  if AccessTokenPresent then
+    Exit;
+  var Res := FOIDC_Client.GetAccessTokenFromRefreshToken(Refresh_Token, Access_Token, Expires_In);
+  NewRefreshToken(Refresh_Token); // save new (or invalidated) refreshtoken
+  if Res.Success then
+    NewAccessToken(Access_Token, GetTickCount64+UInt64(Expires_In-2)*1000)
+  else
+  begin
+    if DoRetry and (Refresh_Token='') then  // the before non empty refreshtoken was assigned invalid while retrieving accesstoken, do a retry
+      InternalAcquireAccessToken(false);
+  end;
 end;
 
 { TdwlAPIOAuth2SecretsFileAuthorizer }

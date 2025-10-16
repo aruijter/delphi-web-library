@@ -541,7 +541,7 @@ begin
   if EnforceNewOne or (FAccessTokenExpireTick<GetTickCount64) then
     FAccessToken := '';
   if FAccessToken='' then
-      AcquireAccessToken;
+    AcquireAccessToken;
   Result := FAccessToken;
 end;
 
