@@ -410,12 +410,16 @@ begin
                 Subject := ReplaceStr(Subject, '$(source)', Source);
                 Subject := ReplaceStr(Subject, '$(channel)', Channel);
                 Subject := ReplaceStr(Subject, '$(topic)', Topic);
-                Subject := ReplaceStr(Subject, '$(msg)', Msg.Substring(0, 100).Replace(#13, '').Replace(#10, ''));
+                var ModifiedMsg := Msg.Substring(0, 100).Replace(#13, '').Replace(#10, '');
+                Subject := ReplaceStr(Subject, '$(msg)', ModifiedMsg);
                 MailMsg.Subject := Subject;
-                if (Msg.Length>100) then
+                if Msg<>ModifiedMsg then
                 begin
-                  MailMsg.Body.Text := Msg;
-                  MailMsg.ContentType := MEDIA_TYPE_PLAIN;
+                  var Attachment := TIdAttachmentMemory.Create(MailMsg.MessageParts);
+                  Attachment.ContentType := MEDIA_TYPE_PLAIN;
+                  Attachment.FileName := 'fullmsg.txt';
+                  var AnsiMsg := ansistring(Msg);
+                  Attachment.DataStream.Write(PAnsiChar(AnsiMsg)^, Length(AnsiMsg));
                 end;
                 if SameText(Copy(trim(ContentType), 1, 5), 'text/') then
                 begin
@@ -428,6 +432,7 @@ begin
                   begin
                     var Attachment := TIdAttachmentMemory.Create(MailMsg.MessageParts);
                     Attachment.ContentType := ContentType;
+                    Attachment.FileName := 'content'+TMediaTypeHelper.GetFileExtensionByMediaType(ContentType);
                     Attachment.DataStream.WriteBuffer(Content[0], Length(Content));
                   end;
                 end;
