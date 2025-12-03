@@ -98,7 +98,7 @@ uses
   DWL.Server.Globals, DWL.Server.Utils, System.Classes,
   IdMessage, System.StrUtils, IdAttachmentMemory, DWL.Mail.Queue,
   Winapi.WinInet, Winapi.Windows, System.Math, System.Hash, DWL.Server.Consts,
-  DWL.Mail.Utils, DWL.MediaTypes, DWL.StrUtils;
+  DWL.Mail.Utils, DWL.MediaTypes, DWL.StrUtils, IdText;
 
 const
   TRIGGER_RELOAD_MSECS = 60000; // 1 minute
@@ -417,6 +417,29 @@ begin
                 var ModifiedMsg := Msg.Substring(0, 100).Replace(#13, '').Replace(#10, '');
                 Subject := ReplaceStr(Subject, '$(msg)', ModifiedMsg);
                 MailMsg.Subject := Subject;
+                MailMsg.ContentType := 'multipart/mixed';
+                var TxtAtt := TIdText.Create(MailMsg.MessageParts);
+                TxtAtt.ContentType := 'multipart/alternative';
+                if Length(Content)>0 then
+                begin
+                  var Attachment := TIdAttachmentMemory.Create(MailMsg.MessageParts);
+                  var MediaType := ContentType;
+                  var P := Pos(';', MediaType);
+                  if P>0 then
+                    MediaType := Copy(MediaType, 1, P-1);
+                  Attachment.DataStream.WriteBuffer(Content, Length(Content));
+                  if SameText(Copy(trim(ContentType), 1, 5), 'text/') then
+                  begin
+                    Attachment.ParentPart := 0;
+                    Attachment.ContentType := MediaType;
+                    Attachment.ContentDisposition := 'inline';
+                  end
+                  else
+                  begin
+                    Attachment.ContentType := ContentType;
+                    Attachment.FileName := 'content'+TMediaTypeHelper.GetFileExtensionByMediaType(MediaType);
+                  end;
+                end;
                 if Msg<>ModifiedMsg then
                 begin
                   var Attachment := TIdAttachmentMemory.Create(MailMsg.MessageParts);
@@ -424,25 +447,6 @@ begin
                   Attachment.FileName := 'fullmsg.txt';
                   var AnsiMsg := ansistring(Msg);
                   Attachment.DataStream.Write(PAnsiChar(AnsiMsg)^, Length(AnsiMsg));
-                end;
-                if SameText(Copy(trim(ContentType), 1, 5), 'text/') then
-                begin
-                  MailMsg.Body.Text := TEncoding.UTF8.GetString(Content);
-                  MailMsg.ContentType := ContentType;
-                end
-                else
-                begin
-                  if Length(Content)>0 then
-                  begin
-                    var Attachment := TIdAttachmentMemory.Create(MailMsg.MessageParts);
-                    Attachment.ContentType := ContentType;
-                    var MediaType := ContentType;
-                    var P := Pos(';', MediaType);
-                    if P>0 then
-                      MediaType := Copy(MediaType, 1, P-1);
-                    Attachment.FileName := 'content'+TMediaTypeHelper.GetFileExtensionByMediaType(MediaType);
-                    Attachment.DataStream.WriteBuffer(Content[0], Length(Content));
-                  end;
                 end;
                 TdwlMailQueue.QueueForSending(MailMsg);
               finally
