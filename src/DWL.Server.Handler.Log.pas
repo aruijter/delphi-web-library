@@ -78,6 +78,7 @@ type
     FTriggerAvoids: TDictionary<integer, TLogTriggerAvoid>;
     procedure InitializeDatabase;
     procedure CheckTriggers;
+    function GetAvoidHash(const Msg: string): integer;
     function Post_Log(const State: PdwlHTTPHandlingState): boolean;
     function Options_Log(const State: PdwlHTTPHandlingState): boolean;
     procedure ProcessTriggers(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes);
@@ -97,7 +98,7 @@ uses
   DWL.Server.Globals, DWL.Server.Utils, System.Classes,
   IdMessage, System.StrUtils, IdAttachmentMemory, DWL.Mail.Queue,
   Winapi.WinInet, Winapi.Windows, System.Math, System.Hash, DWL.Server.Consts,
-  DWL.Mail.Utils, DWL.MediaTypes;
+  DWL.Mail.Utils, DWL.MediaTypes, DWL.StrUtils;
 
 const
   TRIGGER_RELOAD_MSECS = 60000; // 1 minute
@@ -132,6 +133,13 @@ begin
   FTriggerAvoids.Free;
   FTriggerProcessing.Free;
   inherited Destroy;
+end;
+
+function TdwlHTTPHandler_Log.GetAvoidHash(const Msg: string): integer;
+begin
+  var Hash := THashBobJenkins.Create;
+  Hash.Update(TdwlStrUtils.FilterChars(Msg, ['!'..'~']));
+  Result := Hash.HashAsInteger;
 end;
 
 procedure TdwlHTTPHandler_Log.InitializeDatabase;
@@ -279,9 +287,7 @@ begin
           PreviousAvoids.Remove(AvoidId);
         Avoid.MaxAvoidCount := Cmd.Reader.GetInteger(GetTriggerAvoids_Idx_MaxAvoidCount, true, 1);
         Avoid.ClearSeconds := Cmd.Reader.GetInteger(GetTriggerAvoids_Idx_ClearSeconds, true, 1);
-        var Hash := THashBobJenkins.Create;
-        Hash.Update(Cmd.Reader.GetString(GetTriggerAvoids_Idx_Msg, true));
-        FTriggerAvoids.Add(Hash.HashAsInteger, Avoid);
+        FTriggerAvoids.Add(GetAvoidHash(Cmd.Reader.GetString(GetTriggerAvoids_Idx_Msg, true)), Avoid);
       end;
       // dispose no longer used avoids
       for var Avoid in PreviousAvoids.Values do
@@ -384,10 +390,8 @@ begin
     try
       CheckTriggers;
       // see if triggers are globally avoided
-      var Hash := THashBobJenkins.Create;
-      Hash.Update(Msg);
       var Avoid: TLogTriggerAvoid;
-      if FTriggerAvoids.TryGetValue(Hash.HashAsInteger, Avoid) and Avoid.CheckAvoided then
+      if FTriggerAvoids.TryGetValue(GetAvoidHash(Msg), Avoid) and Avoid.CheckAvoided then
         Exit;
       // execute the triggers
       for var Trig in FTriggers do
@@ -432,7 +436,11 @@ begin
                   begin
                     var Attachment := TIdAttachmentMemory.Create(MailMsg.MessageParts);
                     Attachment.ContentType := ContentType;
-                    Attachment.FileName := 'content'+TMediaTypeHelper.GetFileExtensionByMediaType(ContentType);
+                    var MediaType := ContentType;
+                    var P := Pos(';', MediaType);
+                    if P>0 then
+                      MediaType := Copy(MediaType, 1, P-1);
+                    Attachment.FileName := 'content'+TMediaTypeHelper.GetFileExtensionByMediaType(MediaType);
                     Attachment.DataStream.WriteBuffer(Content[0], Length(Content));
                   end;
                 end;

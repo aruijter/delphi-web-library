@@ -458,7 +458,7 @@ begin
     var S := Exc.StackTrace;
     if S<>'' then
     begin
-      LogItem.ContentType := 'plain/text; charset=utf-8';
+      LogItem.ContentType := 'text/plain; charset=utf-8';
       LogItem.Content := TEncoding.UTF8.GetBytes(S);
     end;
     {$ENDIF}
