@@ -88,7 +88,7 @@ type
   public
     constructor Create(AParams: IdwlParams);
     destructor Destroy; override;
-    function SubmitLog(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes; ForwardLog: boolean): boolean;
+    function SubmitLog(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Origin, Msg, ContentType: string; const Content: TBytes; ForwardLog: boolean): boolean;
   end;
 
 implementation
@@ -153,6 +153,7 @@ const
     '`Source` VARCHAR(50), '+
     '`Channel` VARCHAR(50), '+
     '`Topic` VARCHAR(50), '+
+    '`Origin` TEXT, '+
     '`Msg` VARCHAR(250), '+
     '`ContentType` VARCHAR(50),	'+
     '`Content` LONGBLOB, '+
@@ -166,6 +167,7 @@ const
     '`Source` VARCHAR(50), '+
     '`Channel` VARCHAR(50), '+
     '`Topic` VARCHAR(50), '+
+    '`Origin` TEXT, '+
     '`Msg` VARCHAR(250), '+
     '`ContentType` VARCHAR(50),	'+
     '`Content` LONGBLOB, '+
@@ -297,7 +299,7 @@ begin
     end;
   except
     on E:Exception do
-      SubmitLog('', integer(lsError), '', '', '', 'Error loading Triggers: '+E.Message, '', nil, {$IFDEF DEBUG}true{$ELSE}false{$ENDIF});
+      SubmitLog('', integer(lsError), '', '', '', TdwlLogger.GenerateOrigin, 'Error loading Triggers: '+E.Message, '', nil, {$IFDEF DEBUG}true{$ELSE}false{$ENDIF});
   end;
 end;
 
@@ -322,6 +324,7 @@ var
   Level: integer;
   Channel: string;
   Topic: string;
+  Origin: string;
   ContentType: string;
 begin
   Result := false;
@@ -336,6 +339,8 @@ begin
   var LevelStr: string;
   if not (State.TryGetRequestParamStr('level', LevelStr) and integer.TryParse(LevelStr, Level)) then
     Level := 0;
+  if not State.TryGetRequestParamStr('origin', Origin) then
+    Origin := '';
   if not State.TryGetRequestParamStr('source', Source) then
     Source := '';
   if not State.TryGetRequestParamStr('channel', Channel) then
@@ -364,7 +369,7 @@ begin
   end
   else
     ContentType := '';
-  if not SubmitLog(IpAddress, Level, Source, Channel, Topic, Msg, ContentType, Content, {$IFDEF DEBUG}true{$ELSE}false{$ENDIF}) then
+  if not SubmitLog(IpAddress, Level, Source, Channel, Topic, Origin, Msg, ContentType, Content, {$IFDEF DEBUG}true{$ELSE}false{$ENDIF}) then
     State.StatusCode := HTTP_STATUS_SERVER_ERROR;
   serverProcs.SetHeaderValueProc(State, 'Access-Control-Allow-Origin', '*');
   Result := true;
@@ -462,19 +467,19 @@ begin
       end;
     except
       on E: Exception do
-        SubmitLog('', integer(lsError), '', '', '', 'Error executing trigger: '+E.Message, '', nil, {$IFDEF DEBUG}true{$ELSE}false{$ENDIF});
+        SubmitLog('', integer(lsError), '', '', '', TdwlLogger.GenerateOrigin, 'Error executing trigger: '+E.Message, '', nil, {$IFDEF DEBUG}true{$ELSE}false{$ENDIF});
     end;
   finally
     FTriggerProcessing.Leave;
   end;
 end;
 
-function TdwlHTTPHandler_Log.SubmitLog(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Msg, ContentType: string; const Content: TBytes; ForwardLog: boolean): boolean;
+function TdwlHTTPHandler_Log.SubmitLog(const IpAddress: string; Level: Byte; const Source, Channel, Topic, Origin, Msg, ContentType: string; const Content: TBytes; ForwardLog: boolean): boolean;
 const
   SQL_Insert_Debug=
-    'INSERT INTO dwl_log_debug (IpAddress, Level, Source, Channel, Topic, Msg, ContentType, Content) values (?, ?, ?, ?, ?, ?, ?, ?)';
+    'INSERT INTO dwl_log_debug (IpAddress, Level, Source, Channel, Topic, Origin, Msg, ContentType, Content) values (?, ?, ?, ?, ?, ?, ?, ?, ?)';
   SQL_Insert_Log=
-    'INSERT INTO dwl_log_messages (IpAddress, Level, Source, Channel, Topic, Msg, ContentType, Content) values (?, ?, ?, ?, ?, ?, ?, ?)';
+    'INSERT INTO dwl_log_messages (IpAddress, Level, Source, Channel, Topic, Origin, Msg, ContentType, Content) values (?, ?, ?, ?, ?, ?, ?, ?, ?)';
 begin
   Result := false;
   try
@@ -491,8 +496,9 @@ begin
     Cmd.Parameters.SetTextDataBinding(2, Source);
     Cmd.Parameters.SetTextDataBinding(3, Channel);
     Cmd.Parameters.SetTextDataBinding(4, Topic);
-    Cmd.Parameters.SetTextDataBinding(5, Msg.Substring(0, 250));
-    Cmd.Parameters.SetTextDataBinding(6, ContentType);
+    Cmd.Parameters.SetTextDataBinding(5, Origin);
+    Cmd.Parameters.SetTextDataBinding(6, Msg.Substring(0, 250));
+    Cmd.Parameters.SetTextDataBinding(7, ContentType);
     if Content=nil then
       Cmd.Parameters.SetNullDataBinding(7)
     else
@@ -506,6 +512,7 @@ begin
       LogItem.Source := Source;
       LogItem.Channel := Channel;
       LogItem.Topic := Topic;
+      LogItem.Origin := Origin;
       LogItem.ContentType := ContentType;
       LogItem.Content := Content;
       LogItem.Destination := logdestinationServerConsole;

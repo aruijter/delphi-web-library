@@ -88,6 +88,10 @@ type
     /// </summary>
     Topic: string;
     /// <summary>
+    ///   The Origin (in JSON format) that describes from whicht context the item originates fromd
+    /// </summary>
+    Origin: string;
+    /// <summary>
     ///   The MIME contenttype of the additional information
     /// </summary>
     ContentType: string;
@@ -131,6 +135,7 @@ type
     class var FIgnoredExceptions: TStringList;
   public
     class destructor Destroy;
+    class function GenerateOrigin: string; static;
     /// <summary>
     ///   Default Source to use when LogItem source is not provided, defaults
     ///   to BareModuleName
@@ -210,7 +215,8 @@ implementation
 uses
   System.Generics.Collections, DWL.SyncObjs, System.NetEncoding,
   {$IFOPT D+}JclDebug,{$ENDIF}
-  DWL.Logging.EventLog, System.Hash, DWL.IOUtils, DWL.Application;
+  DWL.Logging.EventLog, System.Hash, DWL.IOUtils, DWL.Application, System.JSON,
+  DWL.OS;
 
 type
   TLogDispatchThread = class(TThread)
@@ -294,6 +300,8 @@ end;
 
 class procedure TLogEngine.PostLog(const LogItem: PdwlLogItem);
 begin
+  if LogItem.Origin='' then
+    LogItem.Origin := TdwlLogger.GenerateOrigin;
   if LogItem.Source='' then
     LogItem.Source := FDefaultSource;
   if LogItem.Channel='' then
@@ -373,6 +381,19 @@ end;
 class procedure TdwlLogger.FinalizeDispatching;
 begin
   TLogEngine.FinalizeDispatching;
+end;
+
+class function TdwlLogger.GenerateOrigin: string;
+begin
+  var JSON := TJSONObject.Create;
+  try
+    JSON.AddPair('windows_username', TdwlOs.GetWindowsUserName);
+    JSON.AddPair('windows_computername', TdwlOs.GetWindowsComputerName);
+    JSON.AddPair('ipaddress', TdwlOs.GetIPAddress);
+    Result := JSON.ToString;
+  finally
+    JSON.Free;
+  end;
 end;
 
 class function TdwlLogger.GetSeverityLevelAsString(

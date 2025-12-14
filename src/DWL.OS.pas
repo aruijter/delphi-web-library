@@ -87,6 +87,12 @@ type
     ///   FileName := TdwlOSUtils.FindExecutableByProgID('Word.Document.8');
     /// </example>
     class function FindExecutableByProgID(const ProgID: string): string; static;
+    class function GetIPAddress: string; static;
+    class function GetWindowsComputerName: string; static;
+    /// <summary>
+    ///   get the UserName of the currently logged in user
+    /// </summary>
+    class function GetWindowsUserName: string; static;
     /// <summary>
     ///   get the full SID of the currently logged in user
     /// </summary>
@@ -110,7 +116,7 @@ implementation
 
 uses
   System.SysUtils, Winapi.ShellAPI, Winapi.ShLwApi,
-  Winapi.ActiveX, Winapi.PsAPI, System.StrUtils;
+  Winapi.ActiveX, Winapi.PsAPI, System.StrUtils, Winapi.WinSock;
 
 { TdwlOS }
 
@@ -247,6 +253,31 @@ begin
     Result := '';
 end;
 
+class function TdwlOS.GetIPAddress: string;
+begin
+  var WSAData: TWSAData;
+  var WSAResult := WSAStartup(MakeWord(1, 1), WSAData);
+  if WSAResult <> 0 then
+    Exit('');
+  try
+    var Host: ansistring;
+    SetLength(Host, MAX_PATH);
+    if GetHostName(PAnsiChar(Host), MAX_PATH)<>0 then
+      Exit('');
+    var HostEnt := GetHostByName(PAnsiChar(Host));
+    if HostEnt <> nil then
+    begin
+      var SockAddr: TSockAddrIn;
+      SockAddr.sin_addr.S_addr := Longint(PLongint(HostEnt^.h_addr_list^)^);
+      Result := string(inet_ntoa(SockAddr.sin_addr));
+    end
+    else
+      Result := '';
+  finally
+    WSACleanup;
+  end;
+end;
+
 class function TdwlOS.GetMemoryManagerSize: UInt64;
 begin
   var St: TMemoryManagerState;
@@ -262,6 +293,26 @@ begin
   MemCounters.cb := SizeOf(MemCounters);
   GetProcessMemoryInfo(GetCurrentProcess, @MemCounters, SizeOf(MemCounters));
   Result := MemCounters.WorkingSetSize;
+end;
+
+class function TdwlOS.GetWindowsComputerName: string;
+Begin
+  SetLength(Result, 255);
+  var nSize: DWORD := 255;
+  if GetComputerName(PWideChar(Result), nSize) then
+    SetLength(Result, nSize)
+  else
+    Result := '';
+end;
+
+class function TdwlOS.GetWindowsUserName: string;
+begin
+  SetLength(Result, 255);
+  var nSize: DWORD := 255;
+  if GetUserName(PWideChar(Result), nSize) then
+    SetLength(Result, nSize-1)
+  else
+    Result := '';
 end;
 
 class function TdwlOS.GetWindowsUserSid: string;
