@@ -500,9 +500,9 @@ begin
     Cmd.Parameters.SetTextDataBinding(6, Msg.Substring(0, 250));
     Cmd.Parameters.SetTextDataBinding(7, ContentType);
     if Content=nil then
-      Cmd.Parameters.SetNullDataBinding(7)
+      Cmd.Parameters.SetNullDataBinding(8)
     else
-      Cmd.Parameters.SetBinaryRefDataBinding(7, @Content[0], Length(Content));
+      Cmd.Parameters.SetBinaryRefDataBinding(8, @Content[0], Length(Content));
     Cmd.Execute;
     if ForwardLog then
     begin
