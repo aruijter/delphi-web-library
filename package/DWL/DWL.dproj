@@ -210,7 +210,7 @@
         <DCCReference Include="..\..\src\DWL.Server.Globals.pas"/>
         <DCCReference Include="..\..\src\DWL.Server.Handler.DLL.Classes.pas"/>
         <DCCReference Include="..\..\src\DWL.TCP.Consts.pas"/>
-        <DCCReference Include="..\..\src\DWl.Logging.DWLServer.pas"/>
+        <DCCReference Include="..\..\src\DWL.Logging.DWLServer.pas"/>
         <DCCReference Include="..\..\src\DWL.MediaTypes.pas"/>
         <DCCReference Include="..\..\src\DWL.Application.pas"/>
         <BuildConfiguration Include="Base">

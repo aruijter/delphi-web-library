@@ -453,6 +453,11 @@ begin
                   var AnsiMsg := ansistring(Msg);
                   Attachment.DataStream.Write(PAnsiChar(AnsiMsg)^, Length(AnsiMsg));
                 end;
+                if MailMsg.MessageParts.Count=0 then
+                begin
+                  var Attachment := TIdAttachmentMemory.Create(MailMsg.MessageParts);
+                  Attachment.ContentType := MEDIA_TYPE_PLAIN;
+                end;
                 TdwlMailQueue.QueueForSending(MailMsg);
               finally
                 MailMsg.Free;
