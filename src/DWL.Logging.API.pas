@@ -56,6 +56,7 @@ begin
     '&level='+integer(LogItem.SeverityLevel).ToString+
     '&source='+TNetEncoding.URL.Encode(LogItem.Source)+
     '&channel='+TNetEncoding.URL.Encode(LogItem.Channel)+
+    '&origin='+TNetEncoding.URL.Encode(LogItem.Origin)+
     '&topic='+TNetEncoding.URL.Encode(LogItem.Topic));
   if Length(LogItem.Content)>0 then
   begin
