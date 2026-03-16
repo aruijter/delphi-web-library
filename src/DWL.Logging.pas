@@ -131,7 +131,6 @@ type
   /// </summary>
   TdwlLogger = record
   private
-    class var FHookedRaiseExceptObjProc: TRaiseExceptObjProc;
     class var FIgnoredExceptions: TStringList;
   public
     class destructor Destroy;
@@ -153,7 +152,9 @@ type
     ///   When EnableExceptionLogging is called, literally all Exceptions in
     ///   the application will be logged with stack frames.
     /// </summary>
+    {$IFOPT D+}
     class procedure EnableExceptionLogging; static;
+    {$ENDIF}
     /// <summary>
     ///   Ignore exceptions while doing exception logging
     /// </summary>
@@ -214,7 +215,7 @@ implementation
 
 uses
   System.Generics.Collections, DWL.SyncObjs, System.NetEncoding,
-  {$IFOPT D+}JclDebug,{$ENDIF}
+  {$IFOPT D+}JclDebug, JclHookExcept,{$ENDIF}
   DWL.Logging.EventLog, System.Hash, DWL.IOUtils, DWL.Application, System.JSON,
   DWL.OS;
 
@@ -337,17 +338,6 @@ begin
   Dispatcher := nil; // to remove reference
 end;
 
-procedure LoggedRaiseExceptObjProc(P: System.PExceptionRecord);
-const
-  cDelphiException = $0EEDFADE;
-  excIsBeingReRaised    = $00000002;
-begin
-  if Assigned(TdwlLogger.FHookedRaiseExceptObjProc) then
-    TdwlLogger.FHookedRaiseExceptObjProc(P);
-  if (P.ExceptionCode = cDelphiException) and (P.ExceptObject <> nil) then
-    TdwlLogger.Log(Exception(P.ExceptObject), lsError);
-end;
-
 class procedure TdwlLogger.AddIgnoredException(const Msg: string);
 begin
   if FIgnoredExceptions=nil then
@@ -369,15 +359,18 @@ begin
   FIgnoredExceptions.Free;
   inherited;
 end;
+{$IFOPT D+}
+procedure DoExceptNotify(ExceptObj: TObject; ExceptAddr: Pointer; OSException: Boolean; StackPointer: Pointer);
+begin
+  TdwlLogger.Log(Exception(ExceptObj), lsError);
+end;
 
 class procedure TdwlLogger.EnableExceptionLogging;
 begin
-  if Assigned(FHookedRaiseExceptObjProc) then // Exception Logging is already activated, dont create recursive loop here!
-    Exit;
-  FHookedRaiseExceptObjProc := RaiseExceptObjProc;
-  RaiseExceptObjProc := @LoggedRaiseExceptObjProc;
+  JclHookExceptions;
+  JclAddExceptNotifier(DoExceptNotify, npFirstChain);
 end;
-
+{$ENDIF}
 class procedure TdwlLogger.FinalizeDispatching;
 begin
   TLogEngine.FinalizeDispatching;
