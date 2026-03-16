@@ -297,7 +297,7 @@ begin
     // Set internet connection timeout
     if FTimeOut>0 then
     begin
-      if not WinHttpSetOption(hSession, WINHTTP_OPTION_CONNECT_TIMEOUT, @FTimeout, 4) then
+      if not WinHttpSetTimeouts(hSession, FTimeOut, FTimeOut, FTimeOut, FTimeOut) then
       begin
         Response.FStatusCode := HTTP_STATUS_SERVICE_UNAVAIL;
         Response.FErrorMsg := 'WinHttpSetOption failed when setting timeout ('+GetLastError.ToString+')';
