@@ -12,16 +12,16 @@ type
 
   IdwlDDFPage = interface(IdwlMetaDataObject)
     function GridDataType: TdwlGridDataType;
-    function GetDim(TileCol, TileRow: cardinal): TdwlGridDim;
+    function GetDim(TileCol: cardinal=0; TileRow: cardinal=0): TdwlGridDim;
     function GetGridData(TileCol, TileRow: cardinal; var AllocateAndFillPtr: PByte; var AllocateAndFillSize: cardinal): boolean; overload;
-    function GetGridData(TileCol, TileRow: cardinal): IdwlGridData; overload;
-    procedure SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: cardinal; CopyFromThisSourcePtr: PByte); overload;
+    function GetGridData(TileCol: cardinal=0; TileRow: cardinal=0): IdwlGridData; overload;
+    procedure SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: UInt64; CopyFromThisSourcePtr: PByte); overload;
     procedure SetGridData(TileCol, TileRow: cardinal; GridCur: IdwlGridCursor); overload;
   end;
 
   IdwlDDF = interface(IdwlMetaDataObject)
     function AddPage(const GridDataType: TdwlGridDataType; const OuterBounds: TdwlBounds; TilePixelCountX, TilePixelCountY: cardinal; WidthInTiles: cardinal=1; HeightInTiles: cardinal=1): IdwlDDFPage;
-    function Page(PageNumber: cardinal): IdwlDDFPage;
+    function Page(PageNumber: cardinal=0): IdwlDDFPage;
   end;
 
 function New_DDF(const FileName: string; Options: TdwlFileOptions=[]): IdwlDDF; overload;
@@ -200,11 +200,11 @@ type
     function DDF: TDDF3;
     function TileByteSize: cardinal;
   private
-    function GetDim(TileCol, TileRow: cardinal): TdwlGridDim;
+    function GetDim(TileCol: cardinal=0; TileRow: cardinal=0): TdwlGridDim;
     function GridDataType: TdwlGridDataType;
     function GetGridData(TileCol, TileRow: cardinal; var AllocateAndFillPtr: PByte; var AllocateAndFillSize: cardinal): boolean; overload;
-    function GetGridData(TileCol, TileRow: cardinal): IdwlGridData; overload;
-    procedure SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: cardinal; CopyFromThisSourcePtr: PByte); overload;
+    function GetGridData(TileCol: cardinal=0; TileRow: cardinal=0): IdwlGridData; overload;
+    procedure SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: UInt64; CopyFromThisSourcePtr: PByte); overload;
     procedure SetGridData(TileCol, TileRow: cardinal; GridCur: IdwlGridCursor); overload;
   public
     constructor Create(ADDF: IdwlDDF);
@@ -219,10 +219,10 @@ type
     function TileByteSize: cardinal;
   private
     function GridDataType: TdwlGridDataType;
-    function GetDim(TileCol, TileRow: cardinal): TdwlGridDim;
+    function GetDim(TileCol: cardinal=0; TileRow: cardinal=0): TdwlGridDim;
     function GetGridData(TileCol, TileRow: cardinal; var AllocateAndFillPtr: PByte; var AllocateAndFillSize: cardinal): boolean; overload;
-    function GetGridData(TileCol, TileRow: cardinal): IdwlGridData; overload;
-    procedure SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: cardinal; CopyFromThisSourcePtr: PByte); overload;
+    function GetGridData(TileCol: cardinal=0; TileRow: cardinal=0): IdwlGridData; overload;
+    procedure SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: UInt64; CopyFromThisSourcePtr: PByte); overload;
     procedure SetGridData(TileCol, TileRow: cardinal; GridCur: IdwlGridCursor); overload;
   public
     constructor Create(ADDF: IdwlDDF);
@@ -349,7 +349,7 @@ begin
   Result.DataTypeFlags := Flags;
 end;
 
-procedure TDDFPage3.SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: cardinal; CopyFromThisSourcePtr: PByte);
+procedure TDDFPage3.SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: UInt64; CopyFromThisSourcePtr: PByte);
 begin
   DDF.RaiseWritingError;
 end;
@@ -359,7 +359,7 @@ begin
   Result := TDDF3(FDDF);
 end;
 
-function TDDFPage3.GetDim(TileCol, TileRow: cardinal): TdwlGridDim;
+function TDDFPage3.GetDim(TileCol: cardinal=0; TileRow: cardinal=0): TdwlGridDim;
 begin
   Result.WidthInPixels := FPageHeader.TileWidthX;
   Result.HeightInPixels := FPageHeader.TileHeightY;
@@ -403,7 +403,7 @@ begin
   Result := true;
 end;
 
-function TDDFPage3.GetGridData(TileCol, TileRow: cardinal): IdwlGridData;
+function TDDFPage3.GetGridData(TileCol: cardinal=0; TileRow: cardinal=0): IdwlGridData;
 begin
   var DataSize: cardinal;
   var Data: PByte;
@@ -560,7 +560,7 @@ begin
   inherited Destroy;
 end;
 
-function TDDFPage4.GetDim(TileCol, TileRow: cardinal): TdwlGridDim;
+function TDDFPage4.GetDim(TileCol: cardinal=0; TileRow: cardinal=0): TdwlGridDim;
 begin
   FCursor.Seek(PageItemPtr(TileCol, TileRow)^);
   Result := PDDFGridDataHeader(FCursor.CursorPtr).Dim;
@@ -598,7 +598,7 @@ begin
   Result := true;
 end;
 
-function TDDFPage4.GetGridData(TileCol, TileRow: cardinal): IdwlGridData;
+function TDDFPage4.GetGridData(TileCol: cardinal=0; TileRow: cardinal=0): IdwlGridData;
 begin
   var DataSize: cardinal;
   var Data: PByte;
@@ -612,7 +612,7 @@ begin
   Result := PUInt64(PByte(FPageHeader)+SizeOf(TDDFPageHeader4)+(TileRow*FPageHeader.WidthInTiles+TileCol)*SizeOf(UInt64));
 end;
 
-procedure TDDFPage4.SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: cardinal; CopyFromThisSourcePtr: PByte);
+procedure TDDFPage4.SetGridData(TileCol, TileRow: cardinal; Dim: TdwlGridDim; CopyFromThisSourceSize: UInt64; CopyFromThisSourcePtr: PByte);
 begin
   if TileByteSize<>CopyFromThisSourceSize then
     raise Exception.Create('Inconstistent Source Data Size in SetGridData');
@@ -635,7 +635,7 @@ end;
 procedure TDDFPage4.SetGridData(TileCol, TileRow: cardinal; GridCur: IdwlGridCursor);
 begin
   var Data: PByte;
-  var DataSize: UInt32;
+  var DataSize: UInt64;
   GridCur.GetDataRef(Data, DataSize);
   SetGridData(TileCol, TileRow, GridCur.Dim, DataSize, Data);
 end;

@@ -20,7 +20,10 @@ type
     function ReadBoolean: boolean;
     function ReadBytes(const Size: UInt32): TBytes;
     function ReadDouble: double;
+    function ReadSingle: single;
     function ReadInt8: shortint;
+    function ReadInt16: SmallInt;
+    function ReadInt32: Int32;
     function ReadInt64: Int64;
     function ReadString_LenByte: string;
     function ReadString_LenWord: string;
@@ -135,7 +138,10 @@ type
     function ReadBoolean: boolean;
     function ReadBytes(const Size: UInt32): TBytes;
     function ReadDouble: double;
+    function ReadSingle: single;
     function ReadInt8: shortint;
+    function ReadInt16: SmallInt;
+    function ReadInt32: Integer;
     function ReadInt64: Int64;
     function ReadString_LenByte: string;
     function ReadString_LenWord: string;
@@ -382,6 +388,18 @@ begin
   inc(FCursor, SizeOf(double));
 end;
 
+function TdwlCursor.ReadInt16: SmallInt;
+begin
+  Result := PSmallInt(FCursor)^;
+  inc(FCursor, SizeOf(SmallInt));
+end;
+
+function TdwlCursor.ReadInt32: Integer;
+begin
+  Result := PInteger(FCursor)^;
+  inc(FCursor, SizeOf(Integer));
+end;
+
 function TdwlCursor.ReadInt64: Int64;
 begin
   Result := PInt64(FCursor)^;
@@ -392,6 +410,12 @@ function TdwlCursor.ReadInt8: shortint;
 begin
   Result := PShortInt(FCursor)^;
   inc(FCursor, SizeOf(shortint));
+end;
+
+function TdwlCursor.ReadSingle: single;
+begin
+  Result := PSingle(FCursor)^;
+  inc(FCursor, SizeOf(single));
 end;
 
 function TdwlCursor.ReadString_LenByte: string;

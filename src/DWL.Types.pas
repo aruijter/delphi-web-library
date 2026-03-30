@@ -205,6 +205,8 @@ type
     function XExtent: double;
     function YExtent: double;
     procedure Update(BoundsToInclude: TdwlBounds);
+    procedure RoundByExpanding(RoundVal: double);
+    class function Create(AXMin, AXMax, AYMin, AYMax: double): TdwlBounds; static;
   end;
 
   PdwlGridDataType = ^TdwlGridDataType;
@@ -220,22 +222,31 @@ type
       ValueOffset: double;
       DataTypeFlags: byte;
     class function Create(DataType: word; Flags: byte=0; NoDataValue: Int64=0; ValueScale: double=1; ValueOffset: double=0): TdwlGridDataType; static;
+    class operator Equal(GridDataTypeA, GridDataTypeB: TdwlGridDataType): boolean;
     function HighestValue: Int64;
     function Size: byte;
   end;
 
+  TdwlGridDimAlignmentType = (gdaExpand);
+
   TdwlGridDim = packed record // do not change this, is f.e. used in DDF version 4 Files
-    WidthInPixels: word;
-    HeightInPixels: word;
+    WidthInPixels: UInt64;
+    HeightInPixels: UInt64;
     LeftWorldX: double;
     TopWorldY: double;
     ScaleGridToWorld: double;
+    procedure AlignWithDim(AlignDim: TdwlGridDim; AligmentType: TdwlGridDimAlignmentType=gdaExpand);
+    function CheckAlignment(OtherDim: TdwlGridDim): boolean;
     function Grid2WorldX(X: double): double;
     function Grid2WorldY(Y: double): double;
     function World2GridX(X: double): double;
     function World2GridY(Y: double): double;
-    function OuterWorldBounds: TdwlBounds;
-    class function Create(AWidthInPixels, AHeightInPixels: word; ALeftWorldX, ATopWorldY, AScaleGridToWorld: double): TdwlGridDim; static;
+    function AreaWorldBounds: TdwlBounds;
+    function PointWorldBounds: TdwlBounds;
+    class operator Equal(GridDimA, GridDimB: TdwlGridDim): boolean;
+    class operator NotEqual(GridDimA, GridDimB: TdwlGridDim): boolean;
+    procedure SetPointWorldBounds(WorldBounds: TdwlBounds; AScaleGridToWorld: double; RoundBoundsToScaleFactor: boolean=true);
+    class function Create(AWidthInPixels, AHeightInPixels: UInt64; ALeftWorldX, ATopWorldY, AScaleGridToWorld: double): TdwlGridDim; static;
   end;
 
   PPbyte = ^PByte;
@@ -270,7 +281,7 @@ implementation
 
 uses
   System.DateUtils, System.SysUtils, Winapi.Windows, System.UIConsts,
-  System.Math;
+  System.Math, DWL.Math;
 
 const
   AllPeriodicities: array[0..2] of TPeriodicity = (TPeriodicity_Daily, TPeriodicity_Pentadal, TPeriodicity_Dekadal);
@@ -740,9 +751,29 @@ end;
 
 { TdwlBounds }
 
+class function TdwlBounds.Create(AXMin, AXMax, AYMin, AYMax: double): TdwlBounds;
+begin
+  Result.XMin := AXMin;
+  Result.XMax := AXMax;
+  Result.YMin := AYMin;
+  Result.YMax := AYMax;
+end;
+
 function TdwlBounds.IsEmpty: boolean;
 begin
   Result := (XMin>XMax) or (YMin>YMax);
+end;
+
+procedure TdwlBounds.RoundByExpanding(RoundVal: double);
+begin
+  if not TdwlMathUtils.FuzzyEqual(XMin/RoundVal, round(XMin/RoundVal)) then
+    XMin := floor(XMin/RoundVal)*RoundVal;
+  if not TdwlMathUtils.FuzzyEqual(YMin/RoundVal, round(YMin/RoundVal)) then
+    YMin := floor(YMin/RoundVal)*RoundVal;
+  if not TdwlMathUtils.FuzzyEqual(XMax/RoundVal, round(XMax/RoundVal)) then
+    XMax := ceil(XMax/RoundVal)*RoundVal;
+  if not TdwlMathUtils.FuzzyEqual(YMax/RoundVal, round(YMax/RoundVal)) then
+    YMax := ceil(YMax/RoundVal)*RoundVal;
 end;
 
 procedure TdwlBounds.Update(BoundsToInclude: TdwlBounds);
@@ -788,6 +819,17 @@ begin
   Result.DataTypeFlags := Flags;
 end;
 
+class operator TdwlGridDataType.Equal(GridDataTypeA, GridDataTypeB: TdwlGridDataType): boolean;
+begin
+  Result :=
+    (GridDataTypeA.DataType=GridDataTypeB.DataType) and
+    (GridDataTypeA.DataTypeFlags=GridDataTypeB.DataTypeFlags) and
+    TdwlMathUtils.FuzzyEqual(GridDataTypeA.ValueScale, GridDataTypeB.ValueScale) and
+    TdwlMathUtils.FuzzyEqual(GridDataTypeA.ValueOffset, GridDataTypeB.ValueOffset);
+  if Result and ((GridDataTypeA.DataTypeFlags and flagNoDataValueUsed)>0) then
+    Result := GridDataTypeA.NoDataValue=GridDataTypeB.NoDataValue;
+end;
+
 function TdwlGridDataType.HighestValue: Int64;
 begin
   case DataType of
@@ -804,13 +846,43 @@ end;
 
 { TdwlGridDim }
 
-class function TdwlGridDim.Create(AWidthInPixels, AHeightInPixels: word; ALeftWorldX, ATopWorldY, AScaleGridToWorld: double): TdwlGridDim;
+procedure TdwlGridDim.AlignWithDim(AlignDim: TdwlGridDim; AligmentType: TdwlGridDimAlignmentType=gdaExpand);
+begin
+  // AlignmentType is prepared, but for now only gdaExpand is implemented
+  if CheckAlignment(AlignDim) then
+    Exit;
+  var Bnds := PointWorldBounds;
+  Bnds.XMin := AlignDim.Grid2WorldX(trunc(AlignDim.World2GridX(Bnds.XMin+AlignDim.ScaleGridToWorld/2)));
+  Bnds.XMax := AlignDim.Grid2WorldX(ceil(AlignDim.World2GridX(Bnds.XMax-AlignDim.ScaleGridToWorld/2)));
+  Bnds.YMin := AlignDim.Grid2WorldY(ceil(AlignDim.World2GridY(Bnds.YMin+AlignDim.ScaleGridToWorld/2)));
+  Bnds.YMax := AlignDim.Grid2WorldY(trunc(AlignDim.World2GridY(Bnds.YMax-AlignDim.ScaleGridToWorld/2)));
+  SetPointWorldBounds(Bnds, AlignDim.ScaleGridToWorld, false);
+end;
+
+function TdwlGridDim.CheckAlignment(OtherDim: TdwlGridDim): boolean;
+begin
+  Result :=
+    TdwlMathUtils.FuzzyEqual(ScaleGridToWorld, OtherDim.ScaleGridToWorld) and
+    TdwlMathUtils.FuzzyEqual((LeftWorldX-OtherDim.LeftWorldX)/ScaleGridToWorld, round((LeftWorldX-OtherDim.LeftWorldX)/ScaleGridToWorld), 1e-5) and
+    TdwlMathUtils.FuzzyEqual((TopWorldY-OtherDim.TopWorldY)/ScaleGridToWorld, round((TopWorldY-OtherDim.TopWorldY)/ScaleGridToWorld), 1e-5);
+end;
+
+class function TdwlGridDim.Create(AWidthInPixels, AHeightInPixels: UInt64; ALeftWorldX, ATopWorldY, AScaleGridToWorld: double): TdwlGridDim;
 begin
   Result.WidthInPixels := AWidthInPixels;
   Result.HeightInPixels := AHeightInPixels;
   Result.LeftWorldX := ALeftWorldX;
   Result.TopWorldY := ATopWorldY;
   Result.ScaleGridToWorld := AScaleGridToWorld;
+end;
+
+class operator TdwlGridDim.Equal(GridDimA, GridDimB: TdwlGridDim): boolean;
+begin
+  Result := (GridDimA.WidthInPixels=GridDimB.WidthInPixels)
+    and (GridDimA.HeightInPixels=GridDimB.HeightInPixels)
+    and TdwlMathUtils.FuzzyEqual(GridDimA.LeftWorldX, GridDimB.LeftWorldX)
+    and TdwlMathUtils.FuzzyEqual(GridDimA.TopWorldY, GridDimB.TopWorldY)
+    and TdwlMathUtils.FuzzyEqual(GridDimA.ScaleGridToWorld, GridDimB.ScaleGridToWorld);
 end;
 
 function TdwlGridDim.Grid2WorldX(X: double): double;
@@ -823,12 +895,40 @@ begin
   Result := TopWorldY-Y*ScaleGridToWorld;
 end;
 
-function TdwlGridDim.OuterWorldBounds: TdwlBounds;
+class operator TdwlGridDim.NotEqual(GridDimA, GridDimB: TdwlGridDim): boolean;
+begin
+  Result := (GridDimA.WidthInPixels<>GridDimB.WidthInPixels)
+    or (GridDimA.HeightInPixels<>GridDimB.HeightInPixels)
+    or (not TdwlMathUtils.FuzzyEqual(GridDimA.LeftWorldX, GridDimB.LeftWorldX))
+    or (not TdwlMathUtils.FuzzyEqual(GridDimA.TopWorldY, GridDimB.TopWorldY))
+    or (not TdwlMathUtils.FuzzyEqual(GridDimA.ScaleGridToWorld, GridDimB.ScaleGridToWorld));
+end;
+
+function TdwlGridDim.PointWorldBounds: TdwlBounds;
+begin
+  Result.XMin := Grid2WorldX(0);
+  Result.XMax := Grid2WorldX(WidthInPixels-1);
+  Result.YMin := Grid2WorldY(HeightInPixels-1);
+  Result.YMax := Grid2WorldY(0);
+end;
+
+function TdwlGridDim.AreaWorldBounds: TdwlBounds;
 begin
   Result.XMin := Grid2WorldX(-0.5);
   Result.XMax := Grid2WorldX(WidthInPixels-0.5);
   Result.YMin := Grid2WorldY(HeightInPixels-0.5);
   Result.YMax := Grid2WorldY(-0.5);
+end;
+
+procedure TdwlGridDim.SetPointWorldBounds(WorldBounds: TdwlBounds; AScaleGridToWorld: double; RoundBoundsToScaleFactor: boolean);
+begin
+  ScaleGridToWorld := AScaleGridToWorld;
+  if RoundBoundsToScaleFactor then
+    WorldBounds.RoundByExpanding(ScaleGridToWorld);
+  LeftWorldX := WorldBounds.XMin;
+  TopWorldY := WorldBounds.YMax;
+  WidthInPixels := round((WorldBounds.XMax-LeftWorldX)/ScaleGridToWorld)+1;
+  HeightInPixels := round((TopworldY-WorldBounds.YMin)/ScaleGridToWorld)+1;
 end;
 
 function TdwlGridDim.World2GridX(X: double): double;
