@@ -251,6 +251,7 @@ end;
 
 procedure TdwlHTTPSocket.ReadProcessURI;
 begin
+  FUri := IOHandler.GetHostName_EndPoint(Self)+FUri;
   var P := Pos('?', FUri);
   if P>0 then
   begin

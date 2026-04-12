@@ -36,6 +36,8 @@ const
 
   IdwlTCPIoHandler = interface
     ['{B4B4EB8D-4905-4E1F-BD64-DC28995E85FF}']
+    function GetHostName_EndPoint(Socket: TdwlSocket): string;
+    function GetHostName(Socket: TdwlSocket): string;
     function Service: TdwlTCPService;
     procedure SocketAfterConstruction(Socket: TdwlSocket);
     procedure SocketBeforeDestruction(Socket: TdwlSocket);
@@ -54,7 +56,6 @@ const
     FWritePos: PByte;
     FWriteBufLeft: cardinal;
     FCloseConnection: boolean;
-    FContext_HostName: string;
     FWritesInProgress: cardinal;
     procedure CreateRecvRequest;
     procedure HandleCurrentWriteBuffer;
@@ -82,7 +83,6 @@ const
     property Service: TdwlTCPService read FService;
     property SocketHandle: TSocket read FSocketHandle;
     property SocketVars: pointer read FSocketVars write FSocketVars;
-    property Context_HostName: string read FContext_HostName write FContext_HostName;
     property IOHandler: IdwlTCPIoHandler read FIoHandler;
     class constructor Create;
     constructor Create(IOHandler: IdwlTcpIOHandler); virtual;
@@ -136,6 +136,8 @@ const
 
   TdwlPlainIoHandler = class(TdwlBaseIoHandler, IdwlTCPIoHandler)
   strict private
+    function GetHostName_EndPoint(Socket: TdwlSocket): string;
+    function GetHostName(Socket: TdwlSocket): string;
     procedure SocketAfterConstruction(Socket: TdwlSocket);
     procedure SocketBeforeDestruction(Socket: TdwlSocket);
     procedure SocketOnAccept(Socket: TdwlSocket);
@@ -618,6 +620,16 @@ begin
 end;
 
 { TdwlPlainIoHandler }
+
+function TdwlPlainIoHandler.GetHostName(Socket: TdwlSocket): string;
+begin
+  Result := '';
+end;
+
+function TdwlPlainIoHandler.GetHostName_EndPoint(Socket: TdwlSocket): string;
+begin
+  Result := '';
+end;
 
 procedure TdwlPlainIoHandler.SocketAfterConstruction(Socket: TdwlSocket);
 begin

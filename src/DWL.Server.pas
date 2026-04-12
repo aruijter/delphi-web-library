@@ -514,7 +514,8 @@ begin
       FoundStr := TdwlHTTPHandler(PServerStructure(State._InternalServerStructure).Handler).FServer.GlobalIssuer;
       if FoundStr='' then
       begin
-        var HostName := PServerStructure(State._InternalServerStructure).Request.Context_HostName;
+        var Socket := PServerStructure(State._InternalServerStructure).Request;
+        var HostName := Socket.IOHandler.GetHostName(Socket);
         if HostName='' then // This is a non-ssl localhost connection, for SSl a Context_HosName is altijd non-empty
           FoundStr := 'http://localhost'+EndpointURI_OAuth2
         else

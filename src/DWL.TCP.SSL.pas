@@ -10,6 +10,7 @@ type
   TdwlSslEnvironment=class;
 
   IdwlSslContext = interface
+    function EndPoint: string;
     function Environment: TdwlSslEnvironment;
     function HostName: string;
     function opSSL_CTX: pSSL_CTX;
@@ -20,15 +21,17 @@ type
   strict private
     FHostName: string;
     FEnvironment: TdwlSslEnvironment;
+    FEndPoint: string;
     FopSSL_CTX: pSSL_CTX;
   private
     FProtocolAccepted: string;
+    function EndPoint: string;
     function Environment: TdwlSslEnvironment;
     function HostName: string;
     function opSSL_CTX: pSSL_CTX;
     function ProtocolAccepted: string;
   public
-    constructor Create(AEnvironment: TdwlSslEnvironment; const AHostName, Cert, Key, ProtocolAccepted: string);
+    constructor Create(AEnvironment: TdwlSslEnvironment; const AHostName, Cert, Key, AProtocolAccepted, AEndPoint: string);
     destructor Destroy; override;
   end;
 
@@ -42,7 +45,7 @@ type
     property MainContext: IdwlSslContext read FMainContext;
     constructor Create;
     destructor Destroy; override;
-    procedure AddContext(const HostName, Cert, Key, ProtocolAccepted: string);
+    procedure AddContext(const HostName, Cert, Key, ProtocolAccepted, EndPoint: string);
     function ContextCount: cardinal;
     function GetContext(const HostName, ProtocolAccepted: string): IdwlSslContext;
     procedure RemoveContext(const HostName, ProtocolAccepted: string);
@@ -56,6 +59,8 @@ type
   TdwlSslIoHandler = class(TdwlBaseIoHandler, IdwlTcpIoHandler, IdwlSslIoHandler)
   strict private
     FEnvironment: TdwlSslEnvironment;
+    function GetHostName_EndPoint(Socket: TdwlSocket): string;
+    function GetHostName(Socket: TdwlSocket): string;
     function Process(Socket: TdwlSocket): boolean;
     procedure SocketAfterConstruction(Socket: TdwlSocket);
     procedure SocketBeforeDestruction(Socket: TdwlSocket);
@@ -162,7 +167,7 @@ end;
 
 { TdwlSslContext }
 
-constructor TdwlSslContext.Create(AEnvironment: TdwlSslEnvironment; const AHostName, Cert, Key, ProtocolAccepted: string);
+constructor TdwlSslContext.Create(AEnvironment: TdwlSslEnvironment; const AHostName, Cert, Key, AProtocolAccepted, AEndPoint: string);
 const
   HDR_BEGIN = '-----BEGIN ';
   HDR_END = '-----END ';
@@ -170,7 +175,8 @@ begin
   inherited Create;
   FEnvironment := AEnvironment;
   FHostName := AHostName;
-  FProtocolAccepted := ProtocolAccepted;
+  FProtocolAccepted := AProtocolAccepted;
+  FEndPoint := AEndPoint;
   FopSSL_CTX := SSL_CTX_new(TLS_method);
   if Cert<>'' then
   begin
@@ -220,6 +226,11 @@ begin
   inherited Destroy
 end;
 
+function TdwlSslContext.EndPoint: string;
+begin
+  Result := FEndPoint;
+end;
+
 function TdwlSslContext.Environment: TdwlSslEnvironment;
 begin
   Result := FEnvironment;
@@ -242,11 +253,11 @@ end;
 
 { TdwlSSLEnvironment }
 
-procedure TdwlSslEnvironment.AddContext(const HostName, Cert, Key, ProtocolAccepted: string);
+procedure TdwlSslEnvironment.AddContext(const HostName, Cert, Key, ProtocolAccepted, EndPoint: string);
 begin
   FMREW.BeginWrite;
   try
-    var NewCtx: IdwlSslContext := TdwlSslContext.Create(Self, HostName, Cert, Key, ProtocolAccepted);
+    var NewCtx: IdwlSslContext := TdwlSslContext.Create(Self, HostName, Cert, Key, ProtocolAccepted, EndPoint);
     var DeprCtx := InternalGetContext(HostName, ProtocolAccepted);
     if DeprCtx<>nil then
       FContexts.Remove(DeprCtx);
@@ -272,7 +283,7 @@ constructor TdwlSslEnvironment.Create;
 begin
   inherited Create;
   FContexts := TList<IdwlSslContext>.Create;
-  FMainContext := TdwlSslContext.Create(Self, '', '', '', ALPN_HTTP_1_1);
+  FMainContext := TdwlSslContext.Create(Self, '', '', '', ALPN_HTTP_1_1, '');
 end;
 
 destructor TdwlSslEnvironment.Destroy;
@@ -318,7 +329,7 @@ begin
           if FContexts.Count>0 then
             FMainContext := FContexts[0]
           else
-            FMainContext := TdwlSslContext.Create(Self, '', '', '', ALPN_HTTP_1_1);
+            FMainContext := TdwlSslContext.Create(Self, '', '', '', ALPN_HTTP_1_1, '');
         end;
         Exit;
       end;
@@ -345,6 +356,16 @@ end;
 function TdwlSslIoHandler.Environment: TdwlSSlEnvironment;
 begin
   Result := FEnvironment;
+end;
+
+function TdwlSslIoHandler.GetHostName(Socket: TdwlSocket): string;
+begin
+  Result := PsslSocketVars(Socket.SocketVars).Context.HostName;
+end;
+
+function TdwlSslIoHandler.GetHostName_EndPoint(Socket: TdwlSocket): string;
+begin
+  Result := PsslSocketVars(Socket.SocketVars).Context.EndPoint;;
 end;
 
 function TdwlSslIoHandler.Process(Socket: TdwlSocket): boolean;
@@ -468,7 +489,6 @@ begin
   begin
     _Context := TdwlSslContext(AContext);
     AContext._AddRef;
-    SendBuf.Socket.Context_HostName := AContext.HostName;
   end;
 end;
 
