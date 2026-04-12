@@ -37,7 +37,6 @@ const
   IdwlTCPIoHandler = interface
     ['{B4B4EB8D-4905-4E1F-BD64-DC28995E85FF}']
     function Service: TdwlTCPService;
-    function SizeOfSocketIoVars: cardinal;
     procedure SocketAfterConstruction(Socket: TdwlSocket);
     procedure SocketBeforeDestruction(Socket: TdwlSocket);
     procedure SocketOnAccept(Socket: TdwlSocket);
@@ -49,7 +48,7 @@ const
   TdwlSocket = class
   strict private
     FIoHandler: IdwlTCPIoHandler;
-    FSocketVars: pointer;
+    FSocketVars: pointer; // for use in descendents
     FSocketHandle: TSocket;
     FWriteBuffer: PdwlHandlingBuffer;
     FWritePos: PByte;
@@ -82,7 +81,7 @@ const
     property Port_Remote: word read FPort_Remote;
     property Service: TdwlTCPService read FService;
     property SocketHandle: TSocket read FSocketHandle;
-    property SocketVars: pointer read FSocketVars;
+    property SocketVars: pointer read FSocketVars write FSocketVars;
     property Context_HostName: string read FContext_HostName write FContext_HostName;
     property IOHandler: IdwlTCPIoHandler read FIoHandler;
     class constructor Create;
@@ -137,7 +136,6 @@ const
 
   TdwlPlainIoHandler = class(TdwlBaseIoHandler, IdwlTCPIoHandler)
   strict private
-    function SizeOfSocketIoVars: cardinal;
     procedure SocketAfterConstruction(Socket: TdwlSocket);
     procedure SocketBeforeDestruction(Socket: TdwlSocket);
     procedure SocketOnAccept(Socket: TdwlSocket);
@@ -318,9 +316,6 @@ begin
   FService := FIoHandler.Service;
   FSocketCS := TCriticalSection.Create;
   FSocketHandle := WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
-  var SocketVarsSize := FIOHandler.SizeOfSocketIoVars;
-  if SocketVarsSize>0 then
-    GetMem(FSocketVars, SocketVarsSize);
   FIOHandler.SocketAfterConstruction(Self);
   TdwlSocketStorage(FService.FSocketStorage).RegisterNewSocket(Self);
   //and attach to IoCompletionPort
@@ -358,8 +353,6 @@ end;
 destructor TdwlSocket.Destroy;
 begin
   FIOHandler.SocketBeforeDestruction(Self);
-  if FSocketVars<>nil then
-    FreeMem(FSocketVars);
   closesocket(FSocketHandle);
   // release buffers never sent to or returned from IoCompletion
   while FTransmitBuffers.Count>0 do
@@ -625,11 +618,6 @@ begin
 end;
 
 { TdwlPlainIoHandler }
-
-function TdwlPlainIoHandler.SizeOfSocketIoVars: cardinal;
-begin
-  Result := 0;
-end;
 
 procedure TdwlPlainIoHandler.SocketAfterConstruction(Socket: TdwlSocket);
 begin

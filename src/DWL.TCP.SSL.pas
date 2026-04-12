@@ -57,7 +57,6 @@ type
   strict private
     FEnvironment: TdwlSslEnvironment;
     function Process(Socket: TdwlSocket): boolean;
-    function SizeOfSocketIoVars: cardinal;
     procedure SocketAfterConstruction(Socket: TdwlSocket);
     procedure SocketBeforeDestruction(Socket: TdwlSocket);
     procedure SocketOnAccept(Socket: TdwlSocket);
@@ -88,6 +87,8 @@ type
     ReadBuf: PdwlHandlingBuffer;
     _Context: TdwlSslContext;
     opSSL: pSSL;
+    Protocol: ansistring;
+    HostName: ansistring;
     function Context: IdwlSslContext;
     procedure SetContext(AContext: IdwlSslContext; Propogate: boolean=true);
   end;
@@ -117,12 +118,10 @@ begin
       if (ExtDataLen>2) and (ExtData[0]=0) and (ExtData[1]=(ExtDataLen-2)) then
       begin
         var Len := ExtData[4];
-        var AnsiHostName: ansistring;
-        SetLength(AnsiHostName, Len);
-        Move(ExtData[5], AnsiHostName[1], Len);
-        var HostName := string(AnsiHostName);
+        SetLength(SocketVars.HostName, Len);
+        Move(ExtData[5], SocketVars.HostName[1], Len);
         // eventually switch context
-        var NewContext := SocketVars.Context.Environment.GetContext(HostName, Context2Use.ProtocolAccepted);
+        var NewContext := SocketVars.Context.Environment.GetContext(string(SocketVars.HostName), string(SocketVars.Protocol));
         if (NewContext<>nil) then
           Context2Use := NewContext;
       end;
@@ -143,13 +142,12 @@ begin
   var LenLeft: integer := inlen;
   while LenLeft>1 do
   begin
-    var Protocol: ansistring;
     var Len := Ptr^;
     LenLeft := LenLeft-Len-1;
     inc(Ptr);
-    SetLength(Protocol, Len);
-    Move(Ptr^, Protocol[1], Len);
-    var NewContext := SocketVars.Context.Environment.GetContext(SocketVars.Context.HostName, string(Protocol));
+    SetLength(SocketVars.Protocol, Len);
+    Move(Ptr^, SocketVars.Protocol[1], Len);
+    var NewContext := SocketVars.Context.Environment.GetContext(string(SocketVars.HostName), string(SocketVars.Protocol));
     if (NewContext<>nil) then
     begin
       SocketVars.SetContext(NewContext);
@@ -381,31 +379,30 @@ begin
   until BytesRead<=0;
 end;
 
-function TdwlSslIoHandler.SizeOfSocketIoVars: cardinal;
-begin
-  Result := SizeOf(TsslSocketVars)
-end;
-
 procedure TdwlSslIoHandler.SocketAfterConstruction(Socket: TdwlSocket);
 begin
-  PsslSocketVars(Socket.SocketVars).SendBuf := Socket.Service.AcquireTransmitBuffer(Socket, COMPLETIONINDICATOR_WRITE);
-  PsslSocketVars(Socket.SocketVars).ReadBuf := Socket.Service.AcquireHandlingBuffer(Socket);
+  var SocketVars: PsslSocketVars;
+  New(SocketVars);
+  SocketVars.Protocol := ALPN_HTTP_1_1;
+  Socket.SocketVars := SocketVars;
+  SocketVars.SendBuf := Socket.Service.AcquireTransmitBuffer(Socket, COMPLETIONINDICATOR_WRITE);
+  SocketVars.ReadBuf := Socket.Service.AcquireHandlingBuffer(Socket);
   // We need to best guess a context to bind to this socket,
   // That's why we link the MainContext.\
   // Depending on client_hello and alpn protocol
   // the context will be changed in a later stage
-  PsslSocketVars(Socket.SocketVars)._Context := nil;
-  PsslSocketVars(Socket.SocketVars).SetContext(FEnvironment.MainContext, false);
-  PsslSocketVars(Socket.SocketVars).opSSL := SSL_new(PsslSocketVars(Socket.SocketVars).Context.opSSL_CTX);
-  if PsslSocketVars(Socket.SocketVars).opSSL=nil then
+  SocketVars._Context := nil;
+  SocketVars.SetContext(FEnvironment.MainContext, false);
+  SocketVars.opSSL := SSL_new(SocketVars.Context.opSSL_CTX);
+  if SocketVars.opSSL=nil then
     raise Exception.Create('Error creating OpenSSL Object');
   // add pointer to myself: needed in callback situations
-  if SSL_set_ex_data(PsslSocketVars(Socket.SocketVars).opSSL, SSL_EX_DATA_SELF_INDEX, Socket.SocketVars)=0 then
+  if SSL_set_ex_data(SocketVars.opSSL, SSL_EX_DATA_SELF_INDEX, Socket.SocketVars)=0 then
     raise Exception.Create('Error in SSL_set_ex_data');
   // for noW we do server based, maybe later we make diff between server and client
-  PsslSocketVars(Socket.SocketVars).bioRecv := BIO_new(BIO_s_mem());
-  PsslSocketVars(Socket.SocketVars).bioSend := BIO_new(BIO_s_mem());
-  SSL_set_bio(PsslSocketVars(Socket.SocketVars).opSSL, PsslSocketVars(Socket.SocketVars).bioRecv, PsslSocketVars(Socket.SocketVars).bioSend);
+  SocketVars.bioRecv := BIO_new(BIO_s_mem());
+  SocketVars.bioSend := BIO_new(BIO_s_mem());
+  SSL_set_bio(SocketVars.opSSL, SocketVars.bioRecv, SocketVars.bioSend);
 end;
 
 procedure TdwlSslIoHandler.SocketBeforeDestruction(Socket: TdwlSocket);
@@ -414,6 +411,7 @@ begin
   Socket.Service.ReleaseHandlingBuffer(PsslSocketVars(Socket.SocketVars).ReadBuf);
   PsslSocketVars(Socket.SocketVars).SetContext(nil, false);
   SSL_free(PsslSocketVars(Socket.SocketVars).opSSL);
+  Dispose(PsslSocketVars(Socket.SocketVars));
 end;
 
 procedure TdwlSslIoHandler.SocketOnAccept(Socket: TdwlSocket);

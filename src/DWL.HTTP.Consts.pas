@@ -50,7 +50,7 @@ const
   dwlhttpOPTIONS = 7;
 
   ALPN_HTTP_1_1 = 'http/1.1';
-  ALPN_ACME_tls_1 = 'acme-tls/1';
+  ALPN_ACME_TLS_1 = 'acme-tls/1';
 
   dwlhttpMethodToString: array[dwlhttpUNKNOWN..dwlhttpOPTIONS] of string = (HTTP_METHOD_UNKNOWN,
     HTTP_METHOD_HEAD,HTTP_METHOD_GET, HTTP_METHOD_POST, HTTP_METHOD_DELETE, HTTP_METHOD_PUT, HTTP_METHOD_TRACE, HTTP_METHOD_OPTIONS);
