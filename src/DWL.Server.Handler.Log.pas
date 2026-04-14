@@ -305,11 +305,11 @@ end;
 
 function TdwlHTTPHandler_Log.Options_Log(const State: PdwlHTTPHandlingState): boolean;
 begin
-  serverProcs.SetHeaderValueProc(State, 'Access-Control-Allow-Origin', '*');
-  serverProcs.SetHeaderValueProc(State, 'Access-Control-Allow-Methods', 'OPTIONS, POST');
+  serverProcs.SetHeaderValueProc(State, HTTP_FIELD_ACCESS_CONTROL_ALLOW_ORIGIN, '*');
+  serverProcs.SetHeaderValueProc(State, HTTP_FIELD_ACCESS_CONTROL_ALLOW_METHODS, 'OPTIONS, POST');
   var Hdrs: string;
-  if State.TryGetHeaderValue('Access-Control-Request-Headers', Hdrs) then
-    serverProcs.SetHeaderValueProc(State, 'Access-Control-Allow-Headers', PWideChar(Hdrs));
+  if State.TryGetHeaderValue(HTTP_FIELD_ACCESS_CONTROL_REQUEST_HEADERS, Hdrs) then
+    serverProcs.SetHeaderValueProc(State, HTTP_FIELD_ACCESS_CONTROL_ALLOW_HEADERS, PWideChar(Hdrs));
   Result := true;
 end;
 
@@ -364,14 +364,14 @@ begin
   end;
   if Content<>nil then
   begin
-    if not State.TryGetHeaderValue('Content-Type', ContentType) then
+    if not State.TryGetHeaderValue(HTTP_FIELD_CONTENT_TYPE, ContentType) then
       ContentType := 'application/octet-stream';
   end
   else
     ContentType := '';
   if not SubmitLog(IpAddress, Level, Source, Channel, Topic, Origin, Msg, ContentType, Content, {$IFDEF DEBUG}true{$ELSE}false{$ENDIF}) then
     State.StatusCode := HTTP_STATUS_SERVER_ERROR;
-  serverProcs.SetHeaderValueProc(State, 'Access-Control-Allow-Origin', '*');
+  serverProcs.SetHeaderValueProc(State, HTTP_FIELD_ACCESS_CONTROL_ALLOW_ORIGIN, '*');
   Result := true;
 end;
 

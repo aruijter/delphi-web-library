@@ -581,12 +581,16 @@ begin
       KeepAlive := (FState<>hcsError) and (FProtocol<>HTTP10) and (IsWebSocket or SameText(RequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE));
       if FResponseDataStream=nil then
         FResponseDataStream := TMemoryStream.Create;
-      // check websocket requirements
-      var WebSockKey := FRequestHeaders.StrValue(HTTP_FIELD_SEC_WEBSOCKET_KEY);
-      if WebSockKey.IsEmpty then
-        ReadError('Expected Sec-Websocket-Key');
-      if FRequestHeaders.StrValue(HTTP_FIELD_SEC_WEBSOCKET_VERSION)<>'13' then
-        ReadError('Expected Sec-Websocket-Version=13');
+      var WebSockKey := '';
+      if IsWebsocket then
+      begin
+        // check websocket requirements
+        WebSockKey := FRequestHeaders.StrValue(HTTP_FIELD_SEC_WEBSOCKET_KEY);
+        if WebSockKey.IsEmpty then
+          ReadError('Expected Sec-Websocket-Key');
+        if FRequestHeaders.StrValue(HTTP_FIELD_SEC_WEBSOCKET_VERSION)<>'13' then
+          ReadError('Expected Sec-Websocket-Version=13');
+      end;
       // extract request parameters
       if FState<>hcsError then
         ReadProcessURI;

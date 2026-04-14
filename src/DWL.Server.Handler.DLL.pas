@@ -36,7 +36,7 @@ implementation
 
 uses
   Winapi.Windows, System.SysUtils, DWL.Server.Globals,
-  DWL.Server.Utils;
+  DWL.Server.Utils, DWL.HTTP.Consts;
 
 const
   Param_AllowOrigin = 'AllowOrigin';
@@ -108,7 +108,7 @@ begin
       if State.TryGetHeaderValue('Origin', Origin) then
       begin
         if FAllowAllOrigins or (FAllowOrigins.IndexOf(Origin)>=0) then
-          State.SetHeaderValue('Access-Control-Allow-Origin', Origin);
+          State.SetHeaderValue(HTTP_FIELD_ACCESS_CONTROL_ALLOW_ORIGIN, Origin);
       end;
     end;
   end

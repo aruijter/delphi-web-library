@@ -45,11 +45,11 @@ end;
 
 function TdwlHTTPHandler_Mail.Options_Mail(const State: PdwlHTTPHandlingState): boolean;
 begin
-  serverProcs.SetHeaderValueProc(State, 'Access-Control-Allow-Origin', '*');
-  serverProcs.SetHeaderValueProc(State, 'Access-Control-Allow-Methods', 'OPTIONS, POST');
+  serverProcs.SetHeaderValueProc(State, HTTP_FIELD_ACCESS_CONTROL_ALLOW_ORIGIN, '*');
+  serverProcs.SetHeaderValueProc(State, HTTP_FIELD_ACCESS_CONTROL_ALLOW_METHODS, 'OPTIONS, POST');
   var Hdrs: string;
-  if State.TryGetHeaderValue('Access-Control-Request-Headers', Hdrs) then
-    serverProcs.SetHeaderValueProc(State, 'Access-Control-Allow-Headers', PWideChar(Hdrs));
+  if State.TryGetHeaderValue(HTTP_FIELD_ACCESS_CONTROL_REQUEST_HEADERS, Hdrs) then
+    serverProcs.SetHeaderValueProc(State, HTTP_FIELD_ACCESS_CONTROL_ALLOW_HEADERS, PWideChar(Hdrs));
   Result := true;
 end;
 

@@ -227,9 +227,9 @@ begin
     Enum.Free;
   end;
   var Hdrs: string;
-  State.SetHeaderValue('Access-Control-Allow-Methods', Val);
-  if State.TryGetHeaderValue('Access-Control-Request-Headers', Hdrs) then
-    State.SetHeaderValue('Access-Control-Allow-Headers', Hdrs);
+  State.SetHeaderValue(HTTP_FIELD_ACCESS_CONTROL_ALLOW_METHODS, Val);
+  if State.TryGetHeaderValue(HTTP_FIELD_ACCESS_CONTROL_REQUEST_HEADERS, Hdrs) then
+    State.SetHeaderValue(HTTP_FIELD_ACCESS_CONTROL_ALLOW_HEADERS, Hdrs);
   Success := true;
 end;
 
