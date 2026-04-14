@@ -102,6 +102,8 @@ type
 
   ppem_password_cb = pointer;
 
+  PECDSA_SIG = Pointer;
+
   ppX509 = ^pX509;
   pX509 = pointer;
   pX509_REQ = pointer;
@@ -115,6 +117,7 @@ type
   pSSL = pointer;
 
   ppInteger = ^PInteger;
+  ppByte = ^PByte;
 
 function ASN1_INTEGER_set_int64(a: pASN1_INTEGER; r: int64): int; cdecl;
 function ASN1_STRING_get0_data(const x: pASN1_STRING): PAnsiChar; cdecl;
@@ -134,6 +137,7 @@ function BIO_write(b: pBIO; data: pointer; dlen: int): int; cdecl;
 
 function BN_bin2bn(s: PAnsiChar; len: int; ret: pBIGNUM): pBIGNUM cdecl;
 function BN_bn2bin(const a: pBIGNUM; _to: PAnsiChar): int cdecl;
+function BN_bn2binpad(a: PBIGNUM; to_: PByte; tolen: Integer): int; cdecl;
 function BN_bn2hex(const a: pBIGNUM): PAnsiChar cdecl;
 procedure BN_free(a: pBIGNUM) cdecl;
 function BN_new: pBIGNUM cdecl;
@@ -145,6 +149,10 @@ procedure CheckOpenSSL(Res: int);
 procedure CRYPTO_free(ptr: pointer; const _file: PAnsiChar; line: int); cdecl;
 
 function d2i_X509_bio(bp: pBIO; x: ppX509): pX509; cdecl;
+function d2i_ECDSA_SIG(sig: PECDSA_SIG; pp: ppByte; len: LongInt): PECDSA_SIG; cdecl;
+
+procedure ECDSA_SIG_free(sig: PECDSA_SIG); cdecl;
+procedure ECDSA_SIG_get0(sig: PECDSA_SIG; pr: pBIGNUM; ps: pBIGNUM); cdecl;
 
 function ERR_error_string(e: ulong32; buf: PAnsiChar): PAnsiChar; cdecl;
 function ERR_get_error: long; cdecl;
@@ -286,12 +294,16 @@ function BIO_test_flags; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$
 function BIO_write; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function BN_bin2bn; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function BN_bn2bin; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
+function BN_bn2binpad; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function BN_bn2hex; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 procedure BN_free; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function BN_new; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function BN_num_bits; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 procedure CRYPTO_free; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function d2i_X509_bio; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
+function d2i_ECDSA_SIG; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
+procedure ECDSA_SIG_free; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
+procedure ECDSA_SIG_get0; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function ERR_error_string; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function ERR_get_error; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}
 function EVP_DigestSignFinal; external LIBCRYPTO_DLL_NAME {$IFDEF DELAYED} delayed;{$ENDIF}

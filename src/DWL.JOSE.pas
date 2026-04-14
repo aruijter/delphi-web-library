@@ -34,7 +34,7 @@ const
   jwtclaimISSUED_AT = 'iat';
   jwtclaimJWT_ID = 'jti';
   // my own defined header key names
-  joseheader_type_JSONWEBTOKEN = 'jwt';
+  joseheader_type_JSONWEBTOKEN = 'JWT';
   // my own defined payload key names
   jwt_key_NONCE = 'nonce';
   jwt_key_GRanT = 'grt';
@@ -46,6 +46,7 @@ const
 
   // known values for keys
   algorithm_RS256 = 'RS256';
+  algorithm_ES256 = 'ES256';
   algorithmfamily_RSA = 'RSA';
   usage_SIGnature = 'sig';
   algoparam_modulusN ='n';
@@ -232,7 +233,8 @@ begin
   var EncodedPayload := TNetEncoding.Base64URL.EncodeBytesToString(GetPayload);
   var EncodedProtectedHeader := FProtectedHeader.ToEncodedJSON;
   var ValueToSign := EncodedProtectedHeader+'.'+EncodedPayload;
-  var Signature := TNetEncoding.Base64URL.EncodeBytesToString(TdwlOpenSSL.CalculateSignature(ansistring(ValueToSign), PrivateKey));
+  var Signature := TNetEncoding.Base64URL.EncodeBytesToString(TdwlOpenSSL.CalculateSignature(ansistring(ValueToSign), PrivateKey,
+    SameText(ProtectedHeader[joseheaderALGORITHM], algorithm_ES256)));
   case SerializationKind of
   jskCompact: Result := ValueToSign+'.'+Signature;
   jskFlattened:
