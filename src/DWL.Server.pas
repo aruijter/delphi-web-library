@@ -16,6 +16,7 @@ type
   IdwlHTTPHandler = interface
     function Authorize(const State: PdwlHTTPHandlingState): boolean;
     function ProcessRequest(const State: PdwlHTTPHandlingState): boolean;
+    function ProcessWebSocketMessage(Request: TdwlHTTPSocket; WebSockMsg: PWebSockMsg): boolean;
   end;
 
   /// <summary>
@@ -28,7 +29,6 @@ type
     FURICutIndex: cardinal;
     procedure SetUri(Value: string);
   private
-    function RemoveLeadUri(const URI: string): string;
   protected
     /// <summary>
     ///   If the variable FWrapupProc is assigned, it will be called everytime a request has finished
@@ -50,6 +50,8 @@ type
     ///   this function
     /// </summary>
     function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; virtual;
+    function ProcessWebSocketMessage(Request: TdwlHTTPSocket; WebSockMsg: PWebSockMsg): boolean; virtual;
+    function RemoveLeadUri(const URI: string): string;
   public
     property URI: string read FURI write SetUri;
     property WrapupProc: TdwlWrapupProc read FWrapupProc;
@@ -68,6 +70,7 @@ type
     function GetIsRunning: boolean;
   protected
     function HandleRequest(Request: TdwlHTTPSocket): boolean; override;
+    function HandleWebSocketMessage(Request: TdwlHTTPSocket; WebSockMsg: PWebSockMsg): boolean; override;
     procedure InternalDeActivate; override;
   public
     property GlobalIssuer: string read FGlobalIssuer write FGlobalIssuer;
@@ -142,7 +145,6 @@ type
   TServerStructure = record
     State_URI: string;
     Handler: IdwlHTTPHandler;
-    WebSocketsReceiveProc: TdwlHTTPWebSocket_OnData;
     ContentBuffer: pointer;
     ContentLength: cardinal;
     ContentOwned: boolean;
@@ -273,6 +275,14 @@ begin
       WriteServerError;
     end;
   end;
+end;
+
+function TDWLServer.HandleWebSocketMessage(Request: TdwlHTTPSocket; WebSockMsg: PWebSockMsg): boolean;
+begin
+  var Handler := FindHandler(Request.Uri);
+  if Handler=nil then
+    Exit(false);
+  Result := Handler.ProcessWebSocketMessage(Request, WebSockMsg);
 end;
 
 procedure TDWLServer.InternalDeActivate;
@@ -441,6 +451,11 @@ begin
 end;
 
 function TdwlHTTPHandler.ProcessRequest(const State: PdwlHTTPHandlingState): boolean;
+begin
+  Result := false;
+end;
+
+function TdwlHTTPHandler.ProcessWebSocketMessage(Request: TdwlHTTPSocket; WebSockMsg: PWebSockMsg): boolean;
 begin
   Result := false;
 end;

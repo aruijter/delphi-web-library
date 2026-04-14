@@ -7,6 +7,9 @@ const
 
   CONNECTION_CLOSE = 'Close';
   CONNECTION_KEEP_ALIVE = 'Keep-Alive';
+  CONNECTION_UPGRADE = 'Upgrade';
+
+  UPGRADE_WEBSOCKET = 'websocket';
 
   EXPECT_100_CONTINUE = '100-continue';
 
@@ -22,6 +25,10 @@ const
   HTTP_FIELD_REPLAY_NONCE = 'Replay-Nonce';
   HTTP_FIELD_RETRY_AFTER = 'Retry-After';
   HTTP_FIELD_TRANSFER_ENCODING = 'Transfer-Encoding';
+  HTTP_FIELD_UPGRADE = 'Upgrade';
+  HTTP_FIELD_SEC_WEBSOCKET_ACCEPT = 'Sec-WebSocket-Accept';
+  HTTP_FIELD_SEC_WEBSOCKET_KEY = 'Sec-WebSocket-Key';
+  HTTP_FIELD_SEC_WEBSOCKET_VERSION = 'Sec-WebSocket-Version';
 
   HTTP_METHOD_DELETE = 'DELETE';
   HTTP_METHOD_GET ='GET';

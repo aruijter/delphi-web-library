@@ -6,16 +6,17 @@ unit DWL.Server.Types;
 
 interface
 
+uses
+  DWL.TCP.HTTP;
+
 type
   PdwlHTTPHandlingState = ^TdwlHTTPHandlingState;
 
-  TdwlHTTPWebSocket_OnData = procedure(State: PdwlHTTPHandlingState; const Data: pointer; DataSize: cardinal; DataIsText: boolean); stdcall;
   TdwlArrangeContentBufferProc =procedure(const State: PdwlHTTPHandlingState; var ContentBuffer: pointer; const ContentLength: cardinal); stdcall;
   TdwlGetRequestParamProc = function(const State: PdwlHTTPHandlingState; const Key: PWideChar; const Value: PWideChar; var ValueCharCnt: integer): integer; stdcall;
   TdwlGetHeaderValueProc = function(const State: PdwlHTTPHandlingState; const Key: PWideChar; const Value: PWideChar; var ValueCharCnt: integer): integer; stdcall;
   TdwlGetPayloadPtrProc = function(State: PdwlHTTPHandlingState; out Data: pointer; out DataSize: Int64): boolean; stdcall;
   TdwlSetHeaderValueProc = procedure(const State: PdwlHTTPHandlingState; const HeaderKey, Value: PWideChar); stdcall;
-  TdwlActivateWebSocketProc = function(const State: PdwlHTTPHandlingState; ReceiveProc: TdwlHTTPWebSocket_OnData): TdwlHTTPWebSocket_OnData; stdcall;
   TdwlCallServiceProc = function(const State: PdwlHTTPHandlingState; ServiceID: cardinal; const Data: PWideChar): integer; stdcall;
 
   /// <summary>
@@ -59,6 +60,11 @@ type
     StatusCode: word;
   end;
 
+  PdwlWebSocketHandlingState = ^TdwlWebSocketHandlingState;
+  TdwlWebSocketHandlingState = record
+    URI: PWideChar;
+  end;
+
   PdwlCallBackProcs = ^TdwlCallBackProcs;
   TdwlCallBackProcs = record
     /// <summary>
@@ -86,11 +92,6 @@ type
     ///   a callback function to set a header in the response
     /// </summary>
     SetHeaderValueProc: TdwlSetHeaderValueProc;
-    /// <summary>
-    ///   a callback function to create a websocket, if nil returned request
-    ///   did not succeed
-    /// </summary>
-    ActivateWebSocketproc: TdwlActivateWebSocketProc;
     /// <summary>
     ///   a callback function that can be used to get a Header Value from
     ///   response
@@ -122,6 +123,8 @@ type
   ///   The processrequest function implemented in the DLL processes the actual request
   /// </summary>
   TDLL_ProcessRequestProc = function(const State: PdwlHTTPHandlingState): boolean; stdcall;
+
+  TDLL_WebSocketMsgProc = function(const State: PdwlWebSocketHandlingState; const WebSockMsg: PWebSockMsg): boolean; stdcall;
 
 implementation
 

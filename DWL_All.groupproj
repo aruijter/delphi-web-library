@@ -33,6 +33,9 @@
         <Projects Include="app\tools\DisCoAgent\DisCoAgent.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="app\dll\ServeFiles\ServeFiles.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -131,14 +134,23 @@
     <Target Name="DisCoAgent:Make">
         <MSBuild Projects="app\tools\DisCoAgent\DisCoAgent.dproj" Targets="Make"/>
     </Target>
+    <Target Name="ServeFiles">
+        <MSBuild Projects="app\dll\ServeFiles\ServeFiles.dproj"/>
+    </Target>
+    <Target Name="ServeFiles:Clean">
+        <MSBuild Projects="app\dll\ServeFiles\ServeFiles.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="ServeFiles:Make">
+        <MSBuild Projects="app\dll\ServeFiles\ServeFiles.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="DWL;DisCoIde;dwlserver_sv;dwlserver_debug;HelloWorld;OAuth2;DisCo;DaJson;CoCon;DisCoAgent"/>
+        <CallTarget Targets="DWL;DisCoIde;dwlserver_sv;dwlserver_debug;HelloWorld;OAuth2;DisCo;DaJson;CoCon;DisCoAgent;ServeFiles"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="DWL:Clean;DisCoIde:Clean;dwlserver_sv:Clean;dwlserver_debug:Clean;HelloWorld:Clean;OAuth2:Clean;DisCo:Clean;DaJson:Clean;CoCon:Clean;DisCoAgent:Clean"/>
+        <CallTarget Targets="DWL:Clean;DisCoIde:Clean;dwlserver_sv:Clean;dwlserver_debug:Clean;HelloWorld:Clean;OAuth2:Clean;DisCo:Clean;DaJson:Clean;CoCon:Clean;DisCoAgent:Clean;ServeFiles:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="DWL:Make;DisCoIde:Make;dwlserver_sv:Make;dwlserver_debug:Make;HelloWorld:Make;OAuth2:Make;DisCo:Make;DaJson:Make;CoCon:Make;DisCoAgent:Make"/>
+        <CallTarget Targets="DWL:Make;DisCoIde:Make;dwlserver_sv:Make;dwlserver_debug:Make;HelloWorld:Make;OAuth2:Make;DisCo:Make;DaJson:Make;CoCon:Make;DisCoAgent:Make;ServeFiles:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

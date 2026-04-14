@@ -10,7 +10,8 @@ interface
 
 uses
   DWL.Server.Types, DWL.Params, System.Generics.Collections,
-  System.Classes, System.JSON, DWL.MySQL, Winapi.WinInet, DWL.OpenID, IdMessage;
+  System.Classes, System.JSON, DWL.MySQL, Winapi.WinInet, DWL.OpenID, IdMessage,
+  DWL.TCP.HTTP;
 
 type
   TEndpoint_HandleProc = function(const State: PdwlHTTPHandlingState): boolean of object;
@@ -135,6 +136,7 @@ type
     class function Authorize(const State: PdwlHTTPHandlingState): boolean; virtual;
     class procedure Configure(const Params: string); virtual;
     class procedure ProcessRequest(const State: PdwlHTTPHandlingState; var Success: boolean); virtual;
+    class procedure ProcessWebSockMsg(const State: PdwlWebSocketHandlingState; const WebSockMsg: PWebSockMsg; var Success: boolean); virtual;
     class procedure WrapUp(const State: PdwlHTTPHandlingState); virtual;
   end;
 
@@ -283,6 +285,11 @@ begin
     end;
     FreeMem(State._InternalHandlingStructure);
   end;
+end;
+
+class procedure TdwlDLLHandling.ProcessWebSockMsg(const State: PdwlWebSocketHandlingState; const WebSockMsg: PWebSockMsg; var Success: boolean);
+begin
+  Success := false;
 end;
 
 class procedure TdwlDLLHandling.RegisterHandling(const Method: byte; const URI: string; const HandleProc: TEndpoint_HandleProc; const AllowedScopes: TArray<string>; Params: IdwlParams=nil);

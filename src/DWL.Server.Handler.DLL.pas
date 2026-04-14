@@ -9,13 +9,14 @@ unit DWL.Server.Handler.DLL;
 interface
 
 uses
-  System.Classes, DWL.Server.Types, DWL.Params, DWL.Server;
+  System.Classes, DWL.Server.Types, DWL.Params, DWL.Server, DWL.TCP.HTTP;
 
 type
   TdwlHTTPHandler_DLL = class(TdwlHTTPHandler)
   strict private
     FEndPoint: string;
     FDLLHandle: HModule;
+    FWebSocketProc: TDLL_WebSocketMsgProc;
     FProcessProc: TDLL_ProcessRequestProc;
     FAuthorizeProc: TDLL_AuthorizeProc;
     FAllowOrigins: TStringList;
@@ -25,6 +26,7 @@ type
     function LogDescription: string; override;
     function Authorize(const State: PdwlHTTPHandlingState): boolean; override;
     function ProcessRequest(const State: PdwlHTTPHandlingState): boolean; override;
+    function ProcessWebSocketMessage(Request: TdwlHTTPSocket; WebSockMsg: PWebSockMsg): boolean; override;
   public
     constructor Create(DLLHandle: HModule; ProcessProc: TDLL_ProcessRequestProc; AuthorizeProc: TDLL_AuthorizeProc; const Endpoint: string; Params: IdwlParams);
     destructor Destroy; override;
@@ -67,6 +69,7 @@ begin
   FDoAllowOrigins := FAllowOrigins.Count>0;
   FAllowAllOrigins := FAllowOrigins.IndexOf('*')>=0;
   ConfigureProc := GetProcAddress(FDLLHandle, 'Configure');
+  FWebSocketProc := GetProcAddress(FDLLHandle, 'ProcessWebSockMsg');
   if Assigned(ConfigureProc) then
   try
     ConfigureProc(@serverProcs, PWideChar(Params.GetAsNameValueText));
@@ -107,6 +110,28 @@ begin
         if FAllowAllOrigins or (FAllowOrigins.IndexOf(Origin)>=0) then
           State.SetHeaderValue('Access-Control-Allow-Origin', Origin);
       end;
+    end;
+  end
+  else
+    Result := false;
+end;
+
+function TdwlHTTPHandler_DLL.ProcessWebSocketMessage(Request: TdwlHTTPSocket; WebSockMsg: PWebSockMsg): boolean;
+begin
+  if Assigned(FWebSocketProc) then
+  begin
+    try
+      var State: PdwlWebSocketHandlingState := AllocMem(SizeOf(TdwlWebSocketHandlingState));
+      try
+        var URI := RemoveLeadURI(Request.URI); // keep it here locally
+        State.URI := PWideChar(URI);
+        Result := FWebSocketProc(State, WebSockMsg);
+      finally
+        FreeMem(State);
+      end;
+    except
+      // just protect DLL function, an exception should never be returned, but you never know
+      Result := false;
     end;
   end
   else

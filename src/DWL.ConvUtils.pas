@@ -31,6 +31,9 @@ type
     class function FloatToDotStr(Value: double): string; static;
     class function BytestoLowerHex(Bytes: TBytes): string; static;
     class function HexToBytes(const Hex: string): TBytes; static;
+    class function SwapEndian(Value: word): word; overload; static; inline;
+    class function SwapEndian(Value: cardinal): cardinal; overload; static; inline;
+    class function SwapEndian(Value: UInt64): UInt64; overload; static; inline;
     class constructor Create;
   end;
 
@@ -115,6 +118,35 @@ begin
     Result[i] :=
       (H2BConvert[Hex[i*2+1]] shl 4) or
        H2BConvert[Hex[i*2+2]];
+end;
+
+class function TdwlConvUtils.SwapEndian(Value: word): word;
+begin
+  Result :=
+    ((Value and $00FF) shl 8) or
+    ((Value and $FF00) shr 8);
+end;
+
+class function TdwlConvUtils.SwapEndian(Value: UInt64): UInt64;
+begin
+  Result :=
+    ((Value and $00000000000000FF) shl 56) or
+    ((Value and $000000000000FF00) shl 40) or
+    ((Value and $0000000000FF0000) shl 24) or
+    ((Value and $00000000FF000000) shl 8)  or
+    ((Value and $000000FF00000000) shr 8)  or
+    ((Value and $0000FF0000000000) shr 24) or
+    ((Value and $00FF000000000000) shr 40) or
+    ((Value and $FF00000000000000) shr 56);
+end;
+
+class function TdwlConvUtils.SwapEndian(Value: cardinal): cardinal;
+begin
+  Result :=
+    ((Value and $000000FF) shl 24) or
+    ((Value and $0000FF00) shl 8)  or
+    ((Value and $00FF0000) shr 8)  or
+    ((Value and $FF000000) shr 24);
 end;
 
 end.

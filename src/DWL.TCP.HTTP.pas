@@ -7,7 +7,7 @@ uses
   System.Classes, DWL.TCP, Winapi.WinInet, System.Diagnostics, DWL.SyncObjs;
 
 type
-  TdwlHTTPServerConnectionState = (hcsReadRequest, hcsReadHeader, hcsReadRequestBody, hcsProcessing, hcsClosing, hcsError);
+  TdwlHTTPServerConnectionState = (hcsReadRequest, hcsReadHeader, hcsReadRequestBody, hcsProcessing, hcsWebSocket, hcsClosing, hcsError);
   TdwlHTTPProtocol = (HTTP10, HTTP11);
 
 type
@@ -26,6 +26,19 @@ type
   TdwlHTTPSocket=class;
   TdwlHTTPServer_OnLog=procedure(RequestLog: TdwlRequestLogItem) of object;
 
+  PWebSockMsg = ^TWebSockMsg;
+  TWebSockMsg = packed record
+    Byte1: byte;
+    Byte2: byte;
+    function Opcode: byte;
+    function Fin: boolean;
+    function Masked: boolean;
+    function PayLoadSize: UInt64;
+    function PayloadPtr: PByte;
+    function TotalSize: UInt64;
+    procedure UnMask;
+  end;
+
   TdwlCustomHTTPServer = class(TdwlTCPServer)
   strict private
     FRequestLogDispatchThread: TdwlThread;
@@ -34,6 +47,7 @@ type
     procedure LogRequest(Socket: TdwlHTTPSocket);
   protected
     function HandleRequest(Request: TdwlHTTPSocket): boolean; virtual;
+    function HandleWebSocketMessage(Request: TdwlHTTPSocket; WebSockMsg: PWebSockMsg): boolean; virtual;
   public
     property OnLog: TdwlHTTPServer_Onlog write SetOnLog;
     constructor Create;
@@ -42,6 +56,8 @@ type
 
   TdwlHTTPSocket = class(TdwlSocket)
   strict private
+    FPendingMessage: PWebSockMsg;
+    FPendingMessageSize: UInt64;
     FRequestMethod: byte;
     FUri: string;
     FFlags: cardinal;
@@ -61,12 +77,15 @@ type
     FReadError: string;
     procedure ClearCurrentRequest;
     function GetRequestDuration: Int64;
+    procedure CloseWebSocket;
+    procedure ProcessWebSocket_Data(Data: PByte; Count: cardinal);
     procedure ReadAddToPendingLine(First, Last: PByte);
     procedure ReadFinishHeader;
     procedure ReadPendingLine;
     procedure ReadProcessRequest;
     procedure ReadProcessURI;
     procedure ReadError(const ErrorText: string; NewStatusCode: integer = HTTP_STATUS_BAD_REQUEST);
+    procedure Write_Header;
   public
     property Flags: cardinal read FFlags write FFlags;
     property RequestMethod: byte read FRequestMethod;
@@ -88,7 +107,8 @@ implementation
 uses
   Winapi.Windows, System.SysUtils, System.NetEncoding,
   System.StrUtils, DWL.HTTP.Utils, DWL.HTTP.Consts, DWL.Logging,
-  System.Threading, DWL.MediaTypes, DWL.TCP.Consts;
+  System.Threading, DWL.MediaTypes, DWL.TCP.Consts, System.Hash, System.Math,
+  DWL.ConvUtils;
 
 type
   TRequestLogDispatchThread = class(TdwlThread)
@@ -120,6 +140,11 @@ begin
 end;
 
 function TdwlCustomHTTPServer.HandleRequest(Request: TdwlHTTPSocket): boolean;
+begin
+  Result := false;
+end;
+
+function TdwlCustomHTTPServer.HandleWebSocketMessage(Request: TdwlHTTPSocket; WebSockMsg: PWebSockMsg): boolean;
 begin
   Result := false;
 end;
@@ -224,6 +249,11 @@ begin
   // No need to clear other variables, they're always overwritten during evaluation of next request
 end;
 
+procedure TdwlHTTPSocket.CloseWebSocket;
+begin
+  FState := hcsClosing;
+end;
+
 constructor TdwlHTTPSocket.Create(AIOHandler: IdwlTcpIOHandler);
 begin
   inherited Create(AIOHandler);
@@ -241,12 +271,100 @@ begin
   FRequestBodyStream.Free;
   FResponseDataStream.Free;
   FRequestParams.Free;
+  if FPendingMessageSize>0 then
+    FreeMem(FPendingMessage);
   inherited Destroy;
 end;
 
 function TdwlHTTPSocket.GetRequestDuration: Int64;
 begin
   Result := FStopWatch.ElapsedMilliseconds;
+end;
+
+procedure TdwlHTTPSocket.ProcessWebSocket_Data(Data: PByte; Count: cardinal);
+begin
+  // First Try completing pending message from data
+  if FPendingMessageSize>0 then
+  begin
+    // We need at least two bytes for meta-info, rare case but must be implemented
+    if (FPendingMessageSize=1) and (Count>0) then
+    begin
+      ReAllocMem(FPendingMessage, 2);
+      FPendingMessage.Byte2 := Data^;
+      FPendingMessageSize := 2;
+      inc(Data);
+      dec(Count)
+    end;
+    if FPendingMessageSize<10 then
+    begin
+      var NeededBytesForPayLoadLength: Byte := 2;
+      case (FPendingMessage.Byte2 and %01111111) of
+        126: NeededBytesForPayLoadLength := 4;
+        127: NeededBytesForPayLoadLength := 10;
+      end;
+      if FPendingMessageSize<NeededBytesForPayLoadLength then
+      begin
+        var CopySize := Min(NeededBytesForPayLoadLength-FPendingMessageSize, Count);
+        ReAllocMem(FPendingMessage, FPendingMessageSize+CopySize);
+        Move(Data^, (PByte(FPendingMessage)+FPendingMessageSize)^, CopySize);
+        FPendingMessageSize := NeededBytesForPayLoadLength;
+        dec(Count, CopySize);
+        inc(Data, CopySize);
+      end;
+    end;
+    var MsgTotalSize := FPendingMessage.TotalSize;
+    var CopySize := Min(MsgTotalSize-FPendingMessageSize, Count);
+    ReAllocMem(FPendingMessage, FPendingMessageSize+CopySize);
+    Move(Data^, (PByte(FPendingMessage)+FPendingMessageSize)^, CopySize);
+    inc(FPendingMessageSize, CopySize);
+    dec(Count, CopySize);
+    inc(Data, CopySize);
+    if FPendingMessageSize=MsgTotalSize then
+    begin
+      FPendingMessage.UnMask;
+      if not TdwlCustomHTTPServer(Service).HandleWebSocketMessage(Self, FPendingMessage) then
+        CloseWebSocket;
+      FreeMem(FPendingMessage);
+      FPendingMessageSize := 0;
+    end
+    else
+      Exit;
+  end;
+  while (Count>0) do
+  begin
+    FPendingMessage := PWebSockMsg(Data);
+    var Full := Count>=2;
+    if Full and (Count<10) then
+    begin
+      var NeededBytesForPayLoadLength: Byte := 2;
+      case ((FPendingMessage.Byte2) and %01111111) of
+        126: NeededBytesForPayLoadLength := 4;
+        127: NeededBytesForPayLoadLength := 10;
+      end;
+      Full := Count>=NeededBytesForPayLoadLength;
+    end;
+    if Full then
+    begin
+      var MsgTotalSize := FPendingMessage.TotalSize;
+      Full := Count>=MsgTotalSize;
+      if Full then
+      begin
+        FPendingMessage.UnMask;
+        if not TdwlCustomHTTPServer(Service).HandleWebSocketMessage(Self, FPendingMessage) then
+          CloseWebSocket;
+        dec(Count, MsgTotalSize);
+        inc(Data, MsgTotalSize);
+      end
+      else
+      begin
+        // Keep the current data until next time
+        FPendingMessageSize := Count;
+        GetMem(FPendingMessage, FPendingMessageSize);
+        Move(Data^, FPendingMessage^, Count);
+        Exit;
+      end;
+    end;
+  end;
 end;
 
 procedure TdwlHTTPSocket.ReadProcessURI;
@@ -296,6 +414,25 @@ begin
   end;
 end;
 
+procedure TdwlHTTPSocket.Write_Header;
+begin
+  // Write HTTP protocol line
+  WriteStr('HTTP/1.');
+  case FProtocol of
+    HTTP10: WriteStr('0');
+    HTTP11: WriteStr('1');
+  end;
+  WriteStr(' ');
+  WriteStr(FStatusCode.ToString);
+  WriteStr(' ');
+  WriteLine(TdwlHTTPUtils.StatusCodeDescription(FStatusCode));
+  // write headers
+  var HeaderENum := FResponseHeaders.GetEnumerator;
+  while HeaderEnum.MoveNext do
+    WriteLine(HeaderENum.CurrentKey+': '+HeaderENum.CurrentValue.ToString);
+  WriteLine; // end of headers
+end;
+
 procedure TdwlHTTPSocket.ReadHandlingBuffer(HandlingBuffer: PdwlHandlingBuffer);
 begin
   var Curr: PByte := HandlingBuffer.Buf;
@@ -334,6 +471,11 @@ begin
         Curr := Eof;
       end;
     hcsProcessing: ReadProcessRequest;
+    hcsWebSocket:
+      begin
+        ProcessWebSocket_Data(Curr, Eof-Curr);
+        Curr := Eof;
+      end;
     hcsError,
     hcsClosing: Exit;
     end;
@@ -435,11 +577,16 @@ begin
     try
       FStopWatch.Reset;
       FStopWatch.Start;
-      KeepAlive := (FState<>hcsError) and (FProtocol<>HTTP10) and SameText(RequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE);
-      if FProtocol<>HTTP10 then
-        FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));
+      var IsWebsocket := SameText(RequestHeaders.StrValue(HTTP_FIELD_UPGRADE), UPGRADE_WEBSOCKET);
+      KeepAlive := (FState<>hcsError) and (FProtocol<>HTTP10) and (IsWebSocket or SameText(RequestHeaders.StrValue(HTTP_FIELD_CONNECTION), CONNECTION_KEEP_ALIVE));
       if FResponseDataStream=nil then
         FResponseDataStream := TMemoryStream.Create;
+      // check websocket requirements
+      var WebSockKey := FRequestHeaders.StrValue(HTTP_FIELD_SEC_WEBSOCKET_KEY);
+      if WebSockKey.IsEmpty then
+        ReadError('Expected Sec-Websocket-Key');
+      if FRequestHeaders.StrValue(HTTP_FIELD_SEC_WEBSOCKET_VERSION)<>'13' then
+        ReadError('Expected Sec-Websocket-Version=13');
       // extract request parameters
       if FState<>hcsError then
         ReadProcessURI;
@@ -458,23 +605,27 @@ begin
         if not TdwlCustomHTTPServer(Service).HandleRequest(Self) then
           StatusCode := HTTP_STATUS_NOT_FOUND;
       end;
-      // Remember to not write Content-Length when method CONNECT is added later
-      FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_LENGTH, FResponseDataStream.Size.ToString);
-      // Write HTTP protocol line
-      WriteStr('HTTP/1.');
-      case FProtocol of
-        HTTP10: WriteStr('0');
-        HTTP11: WriteStr('1');
+
+      // Set 'System' Headers
+      if not IsWebsocket then
+      begin
+        // Remember to not write Content-Length when method CONNECT is added later
+        FResponseHeaders.WriteValue(HTTP_FIELD_CONTENT_LENGTH, FResponseDataStream.Size.ToString);
+        if FProtocol<>HTTP10 then
+          FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, IfThen(KeepAlive, CONNECTION_KEEP_ALIVE, CONNECTION_CLOSE));
+      end
+      else
+      begin
+        if StatusCode=HTTP_STATUS_OK then
+        begin
+          FResponseHeaders.WriteValue(HTTP_FIELD_CONNECTION, CONNECTION_UPGRADE);
+          FResponseHeaders.WriteValue(HTTP_FIELD_UPGRADE, UPGRADE_WEBSOCKET);
+          StatusCode := HTTP_STATUS_SWITCH_PROTOCOLS;
+          FResponseHeaders.WriteValue(HTTP_FIELD_SEC_WEBSOCKET_ACCEPT, TNetEncoding.Base64.EncodeBytesToString(THashSHA1.GetHashBytes(WebSockKey + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
+          FState := hcsWebSocket;
+        end;
       end;
-      WriteStr(' ');
-      WriteStr(FStatusCode.ToString);
-      WriteStr(' ');
-      WriteLine(TdwlHTTPUtils.StatusCodeDescription(FStatusCode));
-      // write headers
-      var HeaderENum := FResponseHeaders.GetEnumerator;
-      while HeaderEnum.MoveNext do
-        WriteLine(HeaderENum.CurrentKey+': '+HeaderENum.CurrentValue.ToString);
-      WriteLine; // end of headers
+      Write_Header;
       // write body
       if FResponseDataStream.Size>0 then
         WriteBuf(PByte(FResponseDataStream.Memory), FResponseDataStream.Size);
@@ -492,7 +643,10 @@ begin
     end;
   end;
   if KeepAlive then
-    ClearCurrentRequest
+  begin
+    if FState<>hcsWebSocket then
+      ClearCurrentRequest;
+  end
   else
     FState := hcsClosing;
 end;
@@ -532,6 +686,67 @@ procedure TRequestLogDispatchThread.LogRequest(LogRequest: TdwlRequestLogItem);
 begin
   FRequestLogs.Push(LogRequest);
   SetEvent(FWorkToDoEventHandle);
+end;
+
+{ TWebSockMsg }
+
+function TWebSockMsg.Fin: boolean;
+begin
+  Result := (Byte1 and %1) <> 0;
+end;
+
+function TWebSockMsg.Masked: boolean;
+begin
+  Result := (Byte2 and %10000000) <> 0;
+end;
+
+function TWebSockMsg.Opcode: byte;
+begin
+  Result := Byte1 and $11110000;
+end;
+
+function TWebSockMsg.PayloadPtr: PByte;
+begin
+  Result := PByte(@Byte2);
+  case Result^ and  %01111111 of
+  126: inc(Result, 2);
+  127: inc(Result, 8);
+  end;
+  inc(Result);
+  if Masked then
+    inc(Result, 4);
+end;
+
+function TWebSockMsg.PayLoadSize: UInt64;
+begin
+  Result := Byte2 and %01111111;
+  case Result of
+  126: Result := TdwlConvUtils.SwapEndian(PWord(PByte(@Byte2)+1)^);
+  127: Result := TdwlConvUtils.SwapEndian(PUInt64(PByte(@Byte2)+1)^);
+  end;
+end;
+
+function TWebSockMsg.TotalSize: UInt64;
+begin
+  Result := PayLoadSize+UInt64((PayLoadPtr-PByte(@Self)));
+end;
+
+procedure TWebSockMsg.UnMask;
+begin
+  if not Masked then
+    Exit;
+  var P := PayLoadPtr;
+  var FirstMaskP := P-4;
+  var M_Eof := P;
+  var M := FirstMaskP;
+  for var i := 1 to PayloadSize do
+  begin
+    P^ := P^ xor M^;
+    inc(P);
+    inc(M);
+    if M=M_Eof then
+      M := FirstMaskP;
+  end;
 end;
 
 end.
