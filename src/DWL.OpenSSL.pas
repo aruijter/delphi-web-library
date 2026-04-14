@@ -34,7 +34,7 @@ type
     class function Calculate_SHA256(const Data: ansistring): TBytes; overload; static;
     class function Calculate_SHA256(const Data: PByte; DataSize: NativeUInt): TBytes; overload; static;
     class function Calculate_SHA512(const Data: ansistring): TBytes; static;
-    class function CalculateSignature(const Data: ansistring; PrivateKey: IdwlOpenSSLKey): TBytes; static;
+    class function CalculateSignature(const Data: ansistring; PrivateKey: IdwlOpenSSLKey; Raw: boolean=false): TBytes; static;
     class function VerifySignature(const Data: ansistring; const Signature: TBytes; PublicKey: IdwlOpenSSLKey): boolean; static;
     /// <summary>
     ///   Generates <Amount> random bytes using a cryptographically secure pseudo random generator (CSPRNG)
@@ -136,7 +136,7 @@ begin
     Result := EncodeDateTime(Y, M, D, h , n, s, 0);
 end;
 
-class function TdwlOpenSSL.CalculateSignature(const Data: ansistring; PrivateKey: IdwlOpenSSLKey): TBytes;
+class function TdwlOpenSSL.CalculateSignature(const Data: ansistring; PrivateKey: IdwlOpenSSLKey; Raw: boolean=false): TBytes;
 begin
   var mdctx := EVP_MD_CTX_new;
   try
@@ -146,8 +146,30 @@ begin
     SetLength(Result, ResultSize);
     if EVP_DigestSignFinal(mdctx, PAnsiChar(@Result[0]), ResultSize)<>1 then
       raise Exception.Create('Error Message');
-    SetLength(Result, ResultSize);
-    EVP_DigestSignFinal(mdctx, PAnsiChar(@Result[0]), ResultSize);
+    if Raw then
+    begin
+      var P: PByte := @Result[0];
+      var sig := d2i_ECDSA_SIG(nil, @p, ResultSize);
+      if sig = nil then
+        raise Exception.Create('Invalid DER signature');
+      try
+
+        var r: pBIGNUM;
+        var s: pBIGNUM;
+        ECDSA_SIG_get0(sig, @r, @s);
+
+        SetLength(Result, 64);
+        if BN_bn2binpad(r, @Result[0], 32) <> 32 then
+          raise Exception.Create('r size error');
+
+        if BN_bn2binpad(s, @Result[32], 32) <> 32 then
+          raise Exception.Create('s size error');
+      finally
+        ECDSA_SIG_free(sig);
+      end;
+    end
+    else
+      SetLength(Result, ResultSize);
   finally
     EVP_MD_CTX_free(mdctx);
   end;
