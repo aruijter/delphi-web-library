@@ -79,6 +79,7 @@ type
     function GetRequestDuration: Int64;
     procedure CloseWebSocket;
     procedure ProcessWebSocket_Data(Data: PByte; Count: cardinal);
+    procedure ProcessWebSocketMessage( WebSockMsg: PWebSockMsg);
     procedure ReadAddToPendingLine(First, Last: PByte);
     procedure ReadFinishHeader;
     procedure ReadPendingLine;
@@ -281,6 +282,12 @@ begin
   Result := FStopWatch.ElapsedMilliseconds;
 end;
 
+procedure TdwlHTTPSocket.ProcessWebSocketMessage(WebSockMsg: PWebSockMsg);
+begin
+  if not TdwlCustomHTTPServer(Service).HandleWebSocketMessage(Self, WebSockMsg) then
+    CloseWebSocket;
+end;
+
 procedure TdwlHTTPSocket.ProcessWebSocket_Data(Data: PByte; Count: cardinal);
 begin
   // First Try completing pending message from data
@@ -322,8 +329,7 @@ begin
     if FPendingMessageSize=MsgTotalSize then
     begin
       FPendingMessage.UnMask;
-      if not TdwlCustomHTTPServer(Service).HandleWebSocketMessage(Self, FPendingMessage) then
-        CloseWebSocket;
+      ProcessWebSocketMessage(FPendingMessage);
       FreeMem(FPendingMessage);
       FPendingMessageSize := 0;
     end
@@ -350,8 +356,7 @@ begin
       if Full then
       begin
         FPendingMessage.UnMask;
-        if not TdwlCustomHTTPServer(Service).HandleWebSocketMessage(Self, FPendingMessage) then
-          CloseWebSocket;
+        ProcessWebSocketMessage(FPendingMessage);
         dec(Count, MsgTotalSize);
         inc(Data, MsgTotalSize);
       end

@@ -67,7 +67,8 @@ type
     function GetWriteCursor: IdwlCursor_Write;
   end;
 
-function New_CursoredIO(const FileName: string; Options: TdwlFileOptions=[]; CodePage: UINT=CP_UTF8; GrowSize: cardinal=524288): IdwlCursoredIO;
+function New_CursoredIO(const FileName: string; Options: TdwlFileOptions=[]; CodePage: UINT=CP_UTF8; GrowSize: cardinal=524288): IdwlCursoredIO; overload;
+function New_CursoredIO(Buf: PByte; BufSize: UInt64; CodePage: UINT=CP_UTF8): IdwlCursoredIO; overload;
 
 implementation
 
@@ -114,6 +115,13 @@ type
   public
     constructor Create(const FileName: string; Options: TdwlFileOptions; CodePage: UINT; GrowSize: cardinal);
     destructor Destroy; override;
+  end;
+
+  TdwlCursoredMemory = class(TdwlCursoredIO)
+  protected
+    function ExtendMemoryToAtLeastActuallyUsed: Int64; override;
+  public
+    constructor Create(Buf: PByte; BufSize: UInt64; CodePage: UINT=CP_UTF8);
   end;
 
   TdwlCursor = class(TInterfacedObject, IdwlCursor_Read, IdwlCursor_Write)
@@ -175,6 +183,11 @@ type
 function New_CursoredIO(const FileName: string; Options: TdwlFileOptions=[]; CodePage: UINT=CP_UTF8; GrowSize: cardinal=524288): IdwlCursoredIO;
 begin
   Result := TdwlCursoredFile.Create(FileName, Options, CodePage, GrowSize);
+end;
+
+function New_CursoredIO(Buf: PByte; BufSize: UInt64; CodePage: UINT=CP_UTF8): IdwlCursoredIO; overload;
+begin
+  Result := TdwlCursoredMemory.Create(Buf, BufSize, CodePage);
 end;
 
 { TdwlCursoredFile }
@@ -631,6 +644,21 @@ end;
 procedure TdwlCursoredIO.UnRegisterCursor(Cursor: TdwlCursor);
 begin
   FCursors.Remove(Cursor);
+end;
+
+{ TdwlCursoredMemory }
+
+constructor TdwlCursoredMemory.Create(Buf: PByte; BufSize: UInt64; CodePage: UINT=CP_UTF8);
+begin
+  inherited Create(CodePage);
+  FMemory := Buf;
+  FAllocatedMemorySize.QuadPart := BufSize;
+  FActuallyUsedMemorySize := FAllocatedMemorySize;
+end;
+
+function TdwlCursoredMemory.ExtendMemoryToAtLeastActuallyUsed: Int64;
+begin
+  raise Exception.Create('Writing is not yet implemented');
 end;
 
 end.

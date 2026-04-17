@@ -30,6 +30,7 @@ type
     class function DotStrToFloatDef(const TextToConvert: string; Default: double=0): double; static;
     class function FloatToDotStr(Value: double): string; static;
     class function BytestoLowerHex(Bytes: TBytes): string; static;
+    class function BuffertoLowerHex(Buf: PByte; BufSize: cardinal): string; static;
     class function HexToBytes(const Hex: string): TBytes; static;
     class function SwapEndian(Value: word): word; overload; static; inline;
     class function SwapEndian(Value: cardinal): cardinal; overload; static; inline;
@@ -62,6 +63,19 @@ begin
     Result := DWL.ConvUtils.TextToFloat(TextToConvert, Value, FDotFormatSettings);
   except
     Result := false;
+  end;
+end;
+
+class function TdwlConvUtils.BuffertoLowerHex(Buf: PByte; BufSize: cardinal): string;
+const
+  Convert: array[0..15] of WideChar = '0123456789abcdef';
+begin
+  SetLength(Result, BufSize*2);
+  for var i := 0 to BufSize-1 do
+  begin
+    Result[i*2+1] := Convert[Buf^ shr 4];
+    Result[i*2+2] := Convert[Buf^ and $F];
+    inc(Buf);
   end;
 end;
 
