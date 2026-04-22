@@ -245,7 +245,7 @@ begin
       State.SetHeaderValue(HTTP_FIELD_CACHE_CONTROL, 'no-cache');
       State.StatusCode := HTTP_STATUS_OK;
       if not Handler.Authorize(State) then
-        State.StatusCode := HTTP_STATUS_DENIED
+        Request.StatusCode := HTTP_STATUS_DENIED
       else
       begin
         if Handler.ProcessRequest(State) then
