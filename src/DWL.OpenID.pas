@@ -168,7 +168,7 @@ begin
     begin
       var JSON := TJSONObject.ParseJSONValue(Response.AsString);
       try
-        var ErrorString := JSON.GetValue<string>('error');
+        var ErrorString := JSON.GetValue<string>('error', '');
         if ErrorString='invalid_grant' then
           Refresh_Token := ''; // we need to re-authenticate
       finally
