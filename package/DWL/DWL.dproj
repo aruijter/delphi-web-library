@@ -213,6 +213,7 @@
         <DCCReference Include="..\..\src\DWl.Logging.DWLServer.pas"/>
         <DCCReference Include="..\..\src\DWL.MediaTypes.pas"/>
         <DCCReference Include="..\..\src\DWL.Application.pas"/>
+        <DCCReference Include="..\..\src\DWL.Math.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
