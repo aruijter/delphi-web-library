@@ -233,7 +233,7 @@ begin
          Result := TdwlAPIJSONArray.Create(Self, TJSONArray(JSON))
       else
       begin
-        if JSOn is TJSONObject then
+        if JSON is TJSONObject then
           Result := TdwlAPIJSONObject.Create(Self, TJSONObject(JSON))
         else
           Result := TdwlAPIJSONObject.Create(Self, nil);

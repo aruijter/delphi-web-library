@@ -1316,6 +1316,9 @@ begin
       if Val is TJSONBool then
         WriteValue(Key, TJSONBool(Val).AsBoolean)
       else
+      if Val is TJSONNull then
+        WriteValue(Key, nil)
+      else
          raise Exception.Create('Unexpected JsonValue in pair');
     end;
   finally
