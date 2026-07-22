@@ -81,7 +81,7 @@ type
 implementation
 
 uses
-  System.SysUtils, System.StrUtils, DWL.Types;
+  System.SysUtils, System.StrUtils, DWL.Types, System.Masks;
 
 type
   TdwlDirectoryEnumerator = class(TInterfacedObject, IdwlDirectoryEnumerator)
@@ -444,9 +444,9 @@ end;
 
 function TdwlDirectoryEnumerator.UnfilteredMoveNext: boolean;
 begin
-if FDirEnum.hFind=0 then  // not initialized, initialize and find first file
+  if FDirEnum.hFind=0 then  // not initialized, initialize and find first file
   begin
-    var hFind := FindFirstFile(PChar(FDirEnum.Directory+'\'+FFileMask), FDirEnum.FindData);
+    var hFind := FindFirstFile(PChar(FDirEnum.Directory+'\*.*'), FDirEnum.FindData);
     if hFind=INVALID_HANDLE_VALUE  then
     begin
       var Err := GetLastError;
@@ -512,7 +512,8 @@ begin
     // do filtering
     if (((FILE_ATTRIBUTE_DIRECTORY and FDirEnum.FindData.dwFileAttributes)<>0) and (not (ioIncludeDirectories in FOptions))) or
       (((FILE_ATTRIBUTE_DIRECTORY and FDirEnum.FindData.dwFileAttributes)=0) and (not (ioIncludeFiles in FOptions))) or
-      ((((FILE_ATTRIBUTE_HIDDEN+FILE_ATTRIBUTE_SYSTEM) and FDirEnum.FindData.dwFileAttributes)>0) and (not (ioIncludeHidden in FOptions))) then
+      ((((FILE_ATTRIBUTE_HIDDEN+FILE_ATTRIBUTE_SYSTEM) and FDirEnum.FindData.dwFileAttributes)>0) and (not (ioIncludeHidden in FOptions))) or
+      (not MatchesMask(FDirEnum.Name, FFileMask)) then
       Result := UnfilteredMoveNext
     else
       Break;
